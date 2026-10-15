@@ -1,7 +1,7 @@
 export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { text: string; start: number; end: number; number: number }
 export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string }
-export interface Thread { id: string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Thread { id: string; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
@@ -63,7 +63,7 @@ export function exportReading(path: string, data: Reading, vault: string): strin
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }
   for (const t of data.threads) {
-    md += `## 阅读对话\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
+    md += `## 阅读对话${t.label?' · '+t.label:''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
   }
   return md;

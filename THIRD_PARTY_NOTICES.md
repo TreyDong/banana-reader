@@ -9,6 +9,7 @@ Adapted parts:
 - `components/reader/Reader.tsx`, `TopBar.tsx`, `Composer.tsx`: page geometry, reading header and floating composer.
 - `components/reader/Lens.tsx`: selection toolbar, local ask/note editor, palette expansion and positioning.
 - `components/reader/Margin.tsx`: active-note-priority collision layout.
+- `components/reader/Notebook.tsx`, `GlossCard.tsx`, `Answer.tsx`: reading-order notebook filters/counts, entry metadata, Q/A layout, five-line answer clamps, and action-labelled margin card hierarchy.
 - `components/reader/Block.tsx`, `lib/anchor.ts`: segmented overlapping marks and range reconstruction.
 - `components/reader/Rail.tsx`: document-scale minimap geometry and travel behavior.
 
