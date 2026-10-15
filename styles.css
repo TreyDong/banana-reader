@@ -159,3 +159,11 @@
 .gloss-root .gloss-brief-head:hover,.gloss-root .gloss-brief-map-row:hover{background:transparent}
 .gloss-root .gloss-brief-points .gloss-citation{background:var(--bg-sunk);color:var(--ink-3);padding:1px 4px;border-radius:5px;font:11.5px/1.1 var(--font-sans);box-shadow:none}
 .gloss-root .gloss-brief-points .gloss-citation:hover:not(:disabled){background:var(--rule);color:var(--ink-2)}
+
+/* The active margin annotation leads back to its source line (upstream Margin.tsx). */
+.gloss-margin-leader{position:absolute;top:0;overflow:visible;pointer-events:none;z-index:0;fill:none;color:var(--rubric-line)}
+.gloss-margin-leader path{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.gloss-margin-leader circle{fill:var(--rubric);stroke:none}
+@media(prefers-reduced-motion:reduce){.gloss-margin-card{transition:none}}
+
+.gloss-margin-column .gloss-thread-card.is-collapsed{cursor:pointer}
