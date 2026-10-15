@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as https from 'node:https';
 import * as http from 'node:http';
 import type { Message } from './core';
-export interface AgentSettings { provider: string; codexPath: string; codexModel: string; apiBase: string; apiModel: string; apiKey: string; claudePath?:string; claudeModel?:string; apiProtocol?:ApiProtocol }
+export interface AgentSettings { provider: string; codexPath: string; codexModel: string; apiBase: string; apiModel: string; apiKey: string; serviceId?:string; serviceName?:string; piPath?:string; piModel?:string; claudePath?:string; claudeModel?:string; apiProtocol?:ApiProtocol }
 export type ApiProtocol="openai"|"responses"|"anthropic"|"gemini";
 export const API_DEFAULTS:Record<ApiProtocol,string>={openai:"https://api.openai.com/v1",responses:"https://api.openai.com/v1",anthropic:"https://api.anthropic.com/v1",gemini:"https://generativelanguage.googleapis.com/v1beta"};
 export interface AskRequest { settings: AgentSettings; context: string; quote?: string; messages: Message[]; signal: AbortSignal; onText: (text: string) => void }
@@ -34,9 +34,10 @@ function payload(r: AskRequest): Message[] {
 }
 export async function askAgent(r: AskRequest): Promise<string> {
   if (r.signal.aborted) throw new Error('已停止');
-  if(['codex','claude'].includes(r.settings.provider))return askCLI(r);if(r.settings.provider==='api')return askAPI(r);throw new Error('请选择有效的模型服务。');
+  if(['codex','claude','pi'].includes(r.settings.provider))return askCLI(r);if(r.settings.provider==='api')return askAPI(r);throw new Error('请选择有效的模型服务。');
 }
 export function cliConfig(settings:AgentSettings):{bin:string;args:string[];name:string}{
+  if(settings.provider==='pi'){const args=['--print','--mode','json',...PI_FLAGS];if(settings.piModel)args.push('--model',settings.piModel);return{bin:findPi(settings.piPath||''),args,name:'Pi'};}
   if(settings.provider==='claude'){
     const configured=settings.claudePath||'',bin=configured||[join(homedir(),'.local/bin/claude'),'/opt/homebrew/bin/claude','/usr/local/bin/claude'].find(existsSync);
     if(!bin||!existsSync(bin))throw new Error('未找到 Claude CLI，请安装并登录，或填写可执行文件路径。');
@@ -55,13 +56,13 @@ async function askCLI(r:AskRequest):Promise<string>{
   const {bin,args,name}=cliConfig(r.settings),cwd=await fs.mkdtemp(join(tmpdir(),'gloss-reading-'));
   try{return await new Promise<string>((resolve,reject)=>{
     const env={...process.env,PATH:`${join(homedir(),'.local/bin')}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH||''}`};delete env['CLAUDECODE'];
-    const child=spawn(bin,args,{cwd,env,stdio:['pipe','pipe','pipe']});let pending='',answer='',failed=false,login=false,done=false;
-    const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);r.signal.removeEventListener('abort',abort);if(error){child.kill('SIGTERM');const killer=setTimeout(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');},1500);killer.unref();reject(error);}else resolve(answer);};
+    const child=spawn(bin,args,{cwd,env,stdio:['pipe','pipe','pipe']});let pending='',answer='',failed=false,login=false,status=0,done=false;
+    const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);r.signal.removeEventListener('abort',abort);if(error){child.kill('SIGTERM');const killer=setTimeout(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');},1500);(killer as any).unref?.();reject(error);}else resolve(answer);};
     const abort=()=>finish(new Error('已停止')),timer=setTimeout(()=>finish(new Error(name+' 等待超时，请检查登录与模型。')),180000);
-    const consume=(line:string)=>{if(done)return;if(r.settings.provider==='claude'){const e=parseClaudeLine(line);if(e.error)failed=true;if(e.login)login=true;if(e.delta){answer+=e.delta;r.onText(answer);}else if(e.final!==undefined&&e.final!==answer){answer=e.final;r.onText(answer);}}else{const e=parseCodexLine(line);if(e.error)failed=true;if(e.text){answer+=(answer?'\n\n':'')+e.text;r.onText(answer);}}};
+    const consume=(line:string)=>{if(done)return;if(r.settings.provider==='claude'||r.settings.provider==='pi'){const e=r.settings.provider==='pi'?parsePiLine(line):parseClaudeLine(line);if(e.error)failed=true;if(e.login)login=true;if('status'in e&&typeof e.status==='number')status=e.status;if(e.delta){answer+=e.delta;r.onText(answer);}else if(e.final!==undefined&&e.final!==answer){answer=e.final;r.onText(answer);}}else{const e=parseCodexLine(line);if(e.error)failed=true;if(e.text){answer+=(answer?'\n\n':'')+e.text;r.onText(answer);}}};
     child.stdout.on('data',b=>{pending+=b.toString();let i;while((i=pending.indexOf('\n'))>=0){consume(pending.slice(0,i));pending=pending.slice(i+1);}if(pending.length>2000000||answer.length>4000000)finish(new Error('回答超出长度限制'));});
     child.stderr.on('data',()=>{});child.stdin.on('error',()=>{});child.on('error',()=>finish(new Error(name+' 无法启动，请检查路径。')));
-    child.on('close',code=>{if(pending)consume(pending);if(!done)finish(code!==0||failed||!answer.trim()?new Error(login?'Claude 未登录或登录已失效，请先运行 claude auth login。':name+' 未完成回答，请检查登录、模型与网络。'):undefined);});
+    child.on('close',code=>{if(pending)consume(pending);if(!done)finish(code!==0||failed||!answer.trim()?new Error(status?name+' 服务返回 HTTP '+status+'，请检查该服务的权限与模型配置。':login?'Claude 未登录或登录已失效，请先运行 claude auth login。':name+' 未完成回答，请检查登录、模型与网络。'):undefined);});
     r.signal.addEventListener('abort',abort,{once:true});if(r.signal.aborted){abort();return;}
     child.stdin.end(payload(r).map(m=>`${m.role==='user'?'用户':'助手'}：\n${m.content}`).join('\n\n'));
   });}finally{void fs.rm(cwd,{recursive:true,force:true}).catch(()=>{});}
@@ -125,4 +126,18 @@ export async function discoverApiModels(settings:AgentSettings,signal:AbortSigna
     const req=(url.protocol==='https:'?https:http).request(url,{method:'GET',headers},res=>{if(!res.statusCode||res.statusCode>=300){res.resume();finish(new Error('无法获取模型列表（HTTP '+res.statusCode+'），可手动添加模型 ID。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk;if(body.length>2000000)finish(new Error('模型列表过大，请手动添加。'));});res.on('error',()=>finish(new Error('模型列表连接中断。')));res.on('aborted',()=>finish(new Error('模型列表连接中断。')));res.on('end',()=>{if(done)return;try{const value=JSON.parse(body);let items=protocol==='gemini'?(value.models||[]).filter((m:any)=>!m.supportedGenerationMethods||m.supportedGenerationMethods.includes('generateContent')).map((m:any)=>({id:String(m.name||'').replace(/^models\//,''),name:m.displayName||m.name})):value.data||[];const models=normalizeModels(items);if(!models.length)finish(new Error('服务未提供可用模型，可手动添加模型 ID。'));else finish(undefined,models);}catch{finish(new Error('模型列表格式无法识别，可手动添加模型 ID。'));}});});
     const timer=setTimeout(()=>finish(new Error('获取模型列表超时。')),15000);req.on('error',()=>finish(new Error('无法连接模型服务。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end();
   });
+}
+
+const PI_FLAGS=['--no-session','--no-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-themes','--no-context-files'];
+export function findPi(configured:string){const bin=configured||[join(homedir(),'.local/bin/pi'),'/opt/homebrew/bin/pi','/usr/local/bin/pi'].find(existsSync);if(!bin||!existsSync(bin))throw new Error('未找到 Pi，请安装并登录，或填写可执行文件路径。');return bin;}
+export function parsePiLine(line:string):{delta?:string;final?:string;error?:boolean;login?:boolean;status?:number}{try{const e=JSON.parse(line);if(e.type==='message_update'&&e.assistantMessageEvent?.type==='text_delta')return{delta:e.assistantMessageEvent.delta};if(e.type==='message_end'&&e.message?.role==='assistant'){if(['error','aborted'].includes(e.message.stopReason)){const status=String(e.message.errorMessage||'').match(/\b([45]\d\d)\b/);return{error:true,...(status?{status:Number(status[1])}:{})};}return{final:(e.message.content||[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('')};}if(e.type==='error')return{error:true};}catch{}return{};}
+export async function discoverPiModels(path:string,signal:AbortSignal):Promise<ModelOption[]>{
+  if(signal.aborted)throw new Error('已停止');const bin=findPi(path),cwd=await fs.mkdtemp(join(tmpdir(),'reader-models-'));
+  try{return await new Promise<ModelOption[]>((resolve,reject)=>{
+    const child=spawn(bin,['--mode','rpc',...PI_FLAGS],{cwd,env:{...process.env,PATH:`${join(homedir(),'.local/bin')}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH||''}`},stdio:['pipe','pipe','pipe']});let done=false,buffer='';
+    const finish=(error?:Error,models:ModelOption[]=[])=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);child.kill('SIGTERM');const killer=setTimeout(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');},1500);(killer as any).unref?.();if(error)reject(error);else resolve(models);};
+    const abort=()=>finish(new Error('已停止')),timer=setTimeout(()=>finish(new Error('Pi 模型读取超时。')),20000);
+    child.stdout.on('data',chunk=>{buffer+=chunk;let i;while((i=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,i);buffer=buffer.slice(i+1);try{const e=JSON.parse(line);if(e.type==='response'&&e.command==='get_available_models'){if(!e.success)finish(new Error('Pi 无法读取模型，请检查登录与配置。'));else finish(undefined,normalizeModels((e.data?.models||[]).map((m:any)=>({id:m.provider+'/'+m.id,name:m.name||m.id}))));}}catch{}}if(buffer.length>2000000)finish(new Error('Pi 模型列表过大。'));});
+    child.stderr.on('data',()=>{});child.stdin.on('error',()=>{});child.on('error',()=>finish(new Error('Pi 无法启动，请检查路径。')));child.on('close',()=>{if(!done)finish(new Error('Pi 未返回模型，请检查版本与配置。'));});signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}child.stdin.write(JSON.stringify({type:'get_available_models'})+'\n');
+  });}finally{void fs.rm(cwd,{recursive:true,force:true}).catch(()=>{});}
 }
