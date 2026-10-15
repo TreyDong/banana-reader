@@ -1,7 +1,8 @@
 export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { text: string; start: number; end: number; number: number }
-export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string }
-export interface Thread { id: string; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
+export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
+export interface Thread { id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
@@ -62,7 +63,7 @@ export function exportReading(path: string, data: Reading, vault: string): strin
   for (const h of data.highlights.filter(h => !h.removed)) {
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }
-  for (const t of data.threads) {
+  for (const t of data.threads.filter(t=>!t.removed)) {
     md += `## 阅读对话${t.label?' · '+t.label:''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
   }
@@ -76,3 +77,7 @@ export function referenceTokens(text:string):{start:number;end:number;ids:string
     if(ids.length)tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});
   }return tokens;
 }
+
+export function regenerationHistory(thread:Thread):Message[]{let index=thread.messages.length-1;while(index>=0&&thread.messages[index].role!=='user')index--;if(index<0)throw new Error('没有可重新生成的问题。');return thread.messages.slice(0,index+1).map(m=>({...m}));}
+export function tokenReceipt(usage?:TokenUsage){if(!usage)return'用量未返回';const n=(value:number)=>value.toLocaleString('zh-CN');const parts=[usage.input!==undefined?n(usage.input)+' 输入':'',usage.output!==undefined?n(usage.output)+' 输出':''].filter(Boolean);return parts.join(' · ')||(usage.total!==undefined?n(usage.total)+' tokens':'用量未返回');}
+export function tokenDetails(usage?:TokenUsage){if(!usage)return'该回答未保存服务返回的 token 用量';return[usage.input!==undefined?'输入 '+usage.input+' tokens（包含缓存）':'',usage.output!==undefined?'输出 '+usage.output+' tokens':'',usage.cacheRead!==undefined?'缓存读取 '+usage.cacheRead+' tokens':'',usage.cacheWrite!==undefined?'缓存写入 '+usage.cacheWrite+' tokens':'',usage.total!==undefined?'总计 '+usage.total+' tokens':''].filter(Boolean).join(' · ');}
