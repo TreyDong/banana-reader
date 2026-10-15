@@ -48,4 +48,13 @@ Date: 2026-10-15. Target: a faithful native Obsidian adaptation of the Gloss rea
 - [x] Attribution and font licenses included with distribution.
 - [x] No unresolved P0/P1/P2 findings in the adapted Markdown reading scope.
 
+## 0.3.0 follow-up: settings and opt-in entry
+
+- New visual reference: installed Banana Design0.10.0 settings, inspected in the native Obsidian settings window. Header18px, 13px icon tabs with bottom rule, restrained field rows, service cards and black primary action are adapted to the reader's own settings classes and Obsidian theme tokens.
+- Native visual checks: models/Codex, models/compatible API, reading preferences and data/about. Provider cards update selection and fields correctly; controls use labels/selected state and settings persist. No Gloss logo or replacement brand mark in the reader/header/settings. Attribution remains in third-party notices.
+- Actual UI flow: native Markdown open (no focus overlay), ribbon click (one focus overlay, no brand element), return button (native Markdown and zero reader tabs/overlays). Existing saved highlight retained.
+- On plugin reload after an open reader session, workspace restoration converts former reader tabs to native files. No default-view/file-open interception is registered.
+- Reading settings affect only the immersive view. Runtime plugin name is 沉浸阅读, version0.3.0; plugin ID/data path retained for compatibility.
+- Build and retained18 tests pass; lifecycle/UI checks above cover the changed entry and settings behavior. The settings connection test was started with the public test sentence; clicking Stop immediately displayed 已停止测试 and re-enabled the button. Provider connectivity success is not inferred from this cancellation test.
+
 final result: passed

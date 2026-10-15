@@ -72,3 +72,55 @@
 
 /* Keep the original one-line composer and avoid cutting a quoted line in half. */
 .gloss-root .gloss-compose-context{display:none}.gloss-root .gloss-note-quote{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-height:none;overflow:hidden}.gloss-root .gloss-rail-gloss{box-shadow:0 0 0 1px var(--bg)}
+
+/* Settings follow Banana Design typography, tabs and restrained rows. */
+.gr-settings { --gr-ink:var(--text-normal); --gr-muted:var(--text-muted); --gr-paper:var(--background-primary); --gr-line:color-mix(in srgb,var(--text-normal) 12%,transparent); --gr-surface:color-mix(in srgb,var(--text-normal) 4%,var(--background-primary)); color:var(--gr-ink); font-family:var(--font-interface); font-size:13px; }
+.gr-settings.vertical-tab-content { padding-top:14px; }
+.gr-settings-head,.gr-settings-body { max-width:780px; }
+.gr-settings-head { padding:4px 0 0; }
+.gr-settings-identity { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+.gr-settings-identity .gr-icon svg { width:20px; height:20px; color:var(--gr-muted); }
+.gr-settings-name { font-size:18px; font-weight:600; letter-spacing:-.02em; }
+.gr-settings-version { color:var(--gr-muted); font-size:12px; }
+.gr-settings-tabs { display:flex; gap:22px; flex-wrap:wrap; border-bottom:1px solid var(--gr-line); }
+.gr-settings .gr-settings-tab { display:inline-flex; align-items:center; gap:7px; padding:0 2px 9px; min-height:36px; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--gr-muted); background:transparent; box-shadow:none; cursor:pointer; font:inherit; font-size:13px; }
+.gr-settings .gr-settings-tab:hover { color:var(--gr-ink); background:transparent; }
+.gr-settings .gr-settings-tab.is-active { color:var(--gr-ink); border-bottom-color:var(--gr-ink); font-weight:600; }
+.gr-settings-body { margin-top:12px; }
+.gr-settings .gr-settings-section { margin:24px 0 2px; font-size:13px; font-weight:600; }
+.gr-settings .gr-settings-section:first-child { margin-top:20px; }
+.gr-settings-row { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:14px 0; border-bottom:1px solid var(--gr-line); }
+.gr-settings-info { flex:1; min-width:0; }
+.gr-settings-label { font-weight:500; font-size:13px; line-height:1.6; }
+.gr-settings-description { margin:5px 0 0; color:var(--gr-muted); font-size:12px; line-height:1.65; }
+.gr-settings-controls { display:flex; align-items:center; gap:8px; width:55%; max-width:420px; min-width:0; }
+.gr-settings-controls > :is(input,select) { flex:1; min-width:0; }
+.gr-settings-row.is-stack { align-items:stretch; flex-direction:column; gap:10px; }
+.gr-settings-row.is-stack .gr-settings-controls { width:100%; max-width:none; }
+.gr-settings :is(.gr-settings-input,.gr-settings-preset) { box-sizing:border-box; background:var(--gr-paper); color:var(--gr-ink); border:1px solid var(--gr-line); border-radius:6px; padding:7px 9px; height:34px; min-width:0; width:100%; font:inherit; font-size:12.5px; box-shadow:none; }
+.gr-settings-input.is-mono { font-family:var(--font-monospace); font-size:12px; }
+.gr-settings .gr-settings-preset { flex:0 0 142px; width:142px; }
+.gr-settings .gr-settings-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0; min-height:32px; padding:6px 10px; border:1px solid var(--gr-line); border-radius:6px; background:transparent; color:var(--gr-ink); font:inherit; font-size:12px; cursor:pointer; box-shadow:none; }
+.gr-settings .gr-settings-button:hover:not(:disabled) { background:var(--gr-surface); }
+.gr-settings .gr-settings-button.is-primary { background:var(--gr-ink); color:var(--gr-paper); border-color:var(--gr-ink); }
+.gr-settings .gr-settings-button:disabled { opacity:.4; cursor:default; }
+.gr-settings :is(input,select,button):focus-visible { outline:2px solid var(--gr-ink); outline-offset:2px; }
+.gr-settings-variable-help,.gr-settings-advanced { margin-top:14px; }
+.gr-settings :is(.gr-settings-variable-help,.gr-settings-advanced) > summary { color:var(--gr-muted); font-size:12px; padding:5px 0; cursor:pointer; }
+.gr-settings-variables { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; padding:12px 0; }
+.gr-settings-variables > div { display:flex; align-items:center; gap:9px; min-width:0; }
+.gr-settings-variables code { background:var(--gr-surface); border-radius:4px; padding:3px 5px; font-size:11px; }
+.gr-settings-variables span { font-size:11px; color:var(--gr-muted); line-height:1.6; }
+.gr-settings-preview { display:flex; flex-direction:column; gap:8px; padding:15px 16px; margin-top:16px; background:var(--gr-surface); border:1px solid var(--gr-line); border-radius:8px; }
+.gr-settings-preview-label { color:var(--gr-muted); font-size:11px; }
+.gr-settings .gr-settings-preview-path { padding:0; background:transparent; font-family:var(--font-monospace); font-size:12px; line-height:1.75; white-space:normal; overflow-wrap:anywhere; }
+.gr-settings-preview.is-error .gr-settings-preview-path,.gr-settings-message.is-error { color:var(--text-error); }
+.gr-settings-footer { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding-top:16px; }
+.gr-settings-message { flex:1; min-width:0; color:var(--gr-muted); font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.gr-settings-connection { display:flex; align-items:center; gap:8px; margin-top:16px; font-size:13px; }
+.gr-settings-connection-dot { width:6px; height:6px; flex-shrink:0; background:var(--text-muted); border-radius:50%; }
+.gr-settings-connection-dot.is-ready { background:var(--text-success,#70a581); }
+.gr-settings-detected-path { color:var(--gr-muted); font-family:var(--font-monospace); font-size:11px; line-height:1.7; margin-top:8px; overflow-wrap:anywhere; }
+@media (max-width:700px) { .gr-settings-tabs { gap:14px; }.gr-settings-row { align-items:stretch; flex-direction:column; gap:10px; }.gr-settings-controls { width:100%; max-width:none; }.gr-settings-variables { grid-template-columns:1fr; } }
+.gr-settings{container-type:inline-size}.gr-settings-tab svg{width:16px;height:16px}.gr-settings-tab span{display:flex;align-items:center}.gr-settings-name{font-family:var(--font-interface)}.gr-service-hint{margin:7px 0 14px}.gr-service-list{display:flex;flex-direction:column;gap:8px}.gr-settings .gr-service-card{display:flex;align-items:center;gap:12px;width:100%;height:auto;padding:14px;border:1px solid var(--gr-line);border-radius:9px;background:var(--gr-paper);color:var(--gr-ink);text-align:left;box-shadow:none}.gr-settings .gr-service-card.is-active{border-color:color-mix(in srgb,var(--interactive-accent) 50%,var(--gr-line));background:color-mix(in srgb,var(--interactive-accent) 4%,var(--gr-paper))}.gr-service-radio{display:flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;border:1px solid var(--gr-line);border-radius:50%}.gr-service-radio svg{width:12px;height:12px}.is-active>.gr-service-radio{background:var(--interactive-accent);color:var(--text-on-accent);border-color:var(--interactive-accent)}.gr-service-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.gr-service-title{font-size:13px;font-weight:550;line-height:1.6}.gr-service-detail,.gr-service-badge{font-size:11.5px;color:var(--gr-muted);line-height:1.7}.gr-service-badge{font-size:10px;color:var(--interactive-accent)}.gr-service-note{margin-top:14px}.gr-about-text{line-height:1.9}.gr-settings kbd{font-size:11px;margin-left:auto}.gr-settings [hidden]{display:none!important}.gloss-toolbar .gloss-top-title{opacity:1;pointer-events:auto}.gloss-document-picker svg{color:var(--ink-3)}
+@container(max-width:560px){.gr-settings-row{align-items:stretch;flex-direction:column;gap:10px}.gr-settings-controls{width:100%;max-width:none}.gr-settings-tabs{gap:14px}.gr-service-badge{display:none}}

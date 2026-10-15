@@ -1,4 +1,4 @@
-import { Plugin, ItemView, WorkspaceLeaf, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, Setting, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, setIcon } from 'obsidian';
+import { Plugin, ItemView, WorkspaceLeaf, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, setIcon } from 'obsidian';
 import { type Anchor, type Thread, type Reading, type Passage, type Highlight, freshReading, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading } from './core';
 import { type AgentSettings, askAgent } from './agent';
 
@@ -32,17 +32,19 @@ export default class GlossPlugin extends Plugin {
     }
     this.registerView(VIEW, leaf => new GlossView(leaf, this));
     this.addSettingTab(new GlossSettings(this.app, this));
-    this.addRibbonIcon('book-open-text', 'Gloss · 阅读与思考', () => {void this.openCurrent().catch(showError);});
-    this.addCommand({id: 'open-reader', name: '在 Gloss 中阅读当前文档', callback: () => {void this.openCurrent().catch(showError);}});
+    // Reader tabs are opt-in sessions; restored workspaces return to native files.
+    this.app.workspace.onLayoutReady(()=>{requestAnimationFrame(()=>{if(this.unloading)return;for(const leaf of this.app.workspace.getLeavesOfType(VIEW)){const path=leaf.getViewState().state?.path;if(typeof path==='string'&&this.app.vault.getAbstractFileByPath(path) instanceof TFile)void leaf.setViewState({type:'markdown',state:{file:path}}).catch(showError);}});});
+    this.addRibbonIcon('book-open-text', '进入沉浸阅读', () => {void this.openCurrent().catch(showError);});
+    this.addCommand({id: 'open-reader', name: '进入沉浸阅读', callback: () => {void this.openCurrent().catch(showError);}});
     this.addCommand({id: 'choose-document', name: '选择文档开始阅读', callback: () => this.choose()});
-    this.addCommand({id: 'toggle-focus', name: '切换沉浸式阅读', checkCallback: checking => {const v = this.app.workspace.getActiveViewOfType(GlossView); if (!v) return false; if (!checking) v.toggleFocus(); return true;}});
-    this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && file.extension === 'md' && !blockedPath(file.path)) menu.addItem(i => i.setTitle('在 Gloss 中阅读').setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
+    this.addCommand({id: 'toggle-focus', name: '切换沉浸式阅读', checkCallback: checking => {const v = this.app.workspace.getActiveViewOfType(GlossView); if (!v) return false; if (!checking) void v.exitReader().catch(showError); return true;}});
+    this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && file.extension === 'md' && !blockedPath(file.path)) menu.addItem(i => i.setTitle('进入沉浸阅读').setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
       // A rename moves the same document state; do not silently overwrite an existing record.
       for (const key of Object.keys(this.store.documents)) {
         if (key !== oldPath && !key.startsWith(oldPath + '/')) continue;
         const next = file.path + key.slice(oldPath.length);
-        if (this.store.documents[next]) {new Notice('Gloss：新路径已有批注，已保留两份记录。'); continue;}
+        if (this.store.documents[next]) {new Notice('新路径已有批注，已保留两份记录。'); continue;}
         this.store.documents[next] = this.store.documents[key]; delete this.store.documents[key];
         for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) if ((leaf.view as GlossView).path === key) (leaf.view as GlossView).path = next;
       }
@@ -64,12 +66,12 @@ export default class GlossPlugin extends Plugin {
   }
   choose() {new DocumentPicker(this.app, file => {void this.openFile(file).catch(showError);}).open();}
   async openCurrent() {
-    const file = this.app.workspace.getActiveFile();
-    if (file && file.extension === 'md' && !blockedPath(file.path)) await this.openFile(file);
+    const current=this.app.workspace.getActiveViewOfType(GlossView);if(current?.root?.classList.contains('gloss-focus')){await current.exitReader();return;}
+    const file = current?.path ? this.app.vault.getAbstractFileByPath(current.path) : this.app.workspace.getActiveFile();
+    if (file instanceof TFile && file.extension === 'md' && !blockedPath(file.path)) await this.openFile(file);
     else this.choose();
   }
   async openFile(file: TFile): Promise<GlossView> {
-    const immersive = this.app.workspace.getLeavesOfType(VIEW).some(l => (l.view as GlossView).root?.classList.contains('gloss-focus'));
     for (const l of this.app.workspace.getLeavesOfType(VIEW)) if ((l.view as GlossView).path !== file.path && (l.view as GlossView).root?.classList.contains('gloss-focus')) (l.view as GlossView).toggleFocus(false);
     if (file.extension !== 'md') throw new Error('这一版支持 Markdown 文档。');
     if (blockedPath(file.path)) throw new Error('此目录受隐私边界保护，请使用原生阅读视图。');
@@ -78,7 +80,7 @@ export default class GlossPlugin extends Plugin {
     await leaf.loadIfDeferred();
     if (!(leaf.view instanceof GlossView)) await leaf.open(new GlossView(leaf, this));
     await this.app.workspace.revealLeaf(leaf);
-    const v = leaf.view as GlossView; if (v.path !== file.path || !v.article) await v.loadDocument(file.path); if (immersive) v.toggleFocus(true); return v;
+    const v = leaf.view as GlossView; if (v.path !== file.path || !v.article) await v.loadDocument(file.path); v.toggleFocus(true); return v;
   }
   onunload() {this.unloading=true;for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) if (leaf.view instanceof GlossView) leaf.view.stop();}
 }
@@ -149,7 +151,7 @@ class GlossView extends ItemView {
   private frame = 0;
   constructor(leaf: WorkspaceLeaf, readonly plugin: GlossPlugin) {super(leaf);}
   getViewType() {return VIEW;}
-  getDisplayText() {return this.path ? `Gloss · ${this.path.split('/').pop()?.replace(/\.md$/, '')}` : 'Gloss';}
+  getDisplayText() {return this.path ? `阅读 · ${this.path.split('/').pop()?.replace(/\.md$/, '')}` : '沉浸阅读';}
   getIcon() {return 'book-open-text';}
   getState() {return {path:this.path};}
   async setState(state:{path?:string}, result:any) {if(state?.path)await this.loadDocument(state.path);await super.setState(state,result);}
@@ -163,12 +165,12 @@ class GlossView extends ItemView {
         if(this.lens&&!this.lens.hidden){e.preventDefault();this.closeLens();return;}
         if(this.notebookOpen){this.toggleNotebook(false);return;}
         if(this.appearance&&!this.appearance.hidden){this.appearance.hidden=true;return;}
-        if(this.focus)this.toggleFocus(false);return;
+        if(this.focus)void this.exitReader().catch(showError);return;
       }
       if(target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
       if(e.metaKey||e.ctrlKey||e.altKey)return;
       if(this.selected&&this.lens&&!this.lens.hidden&&e.key.length===1){e.preventDefault();this.showLens('ask',e.key);return;}
-      if(e.key.toLowerCase()==='f'){e.preventDefault();this.toggleFocus();}
+      if(e.key.toLowerCase()==='f'){e.preventDefault();if(this.focus)void this.exitReader().catch(showError);else this.toggleFocus(true);}
       if(e.key==='/'){e.preventDefault();this.selected=undefined;this.activeThread=undefined;this.updateContext();this.composer.focus();}
     });
     this.registerEvent(this.app.vault.on('modify',f=>{if(f.path!==this.path)return;clearTimeout(this.reloadTimer);this.reloadTimer=setTimeout(()=>void this.loadDocument(this.path,true).catch(showError),500);}));
@@ -190,13 +192,12 @@ class GlossView extends ItemView {
     this.root?.remove();this.contentEl.empty();
     this.root=this.contentEl.createDiv({cls:'gloss-root'});this.applyAppearance();
     const top=this.root.createEl('header',{cls:'gloss-toolbar'});
-    const brand=button(top,'',()=>this.plugin.choose(),'gloss-brand');setIcon(brand,'list-filter');brand.createSpan({text:'Gloss'});brand.setAttribute('aria-label','Gloss · 选择阅读文档');
-    top.createSpan({cls:'gloss-brand-divider'});top.createSpan({cls:'gloss-vault-label',text:'OBSIDIAN'});
+    this.iconButton(top,'folder-open','选择阅读文档',()=>this.plugin.choose(),'gloss-document-picker');
     const titleBtn=button(top,file.basename,()=>this.scroller.scrollTo({top:0,behavior:'smooth'}),'gloss-top-title');titleBtn.title=file.path;
     const tools=top.createEl('nav',{cls:'gloss-tools',attr:{'aria-label':'阅读工具'}});
     this.iconButton(tools,'list','文档目录',()=>this.showContents());
     button(tools,'Aa',()=>this.toggleAppearance(),'gloss-aa').setAttribute('aria-label','阅读外观');
-    this.focusButton=this.iconButton(tools,'maximize','沉浸阅读',()=>this.toggleFocus());
+    this.focusButton=this.iconButton(tools,'arrow-left','返回文档',()=>this.exitReader());
     const notebook=button(tools,'',()=>this.toggleNotebook(),'gloss-notebook-button');setIcon(notebook,'notebook-pen');notebook.createSpan({text:'笔记本'});notebook.setAttribute('aria-label','阅读笔记本');
     this.iconButton(tools,'settings-2','Agent 服务设置',()=>{(this.app as any).setting.open();(this.app as any).setting.openTabById(this.plugin.manifest.id);});
     this.scroller=this.root.createDiv({cls:'gloss-scroll'});
@@ -264,7 +265,8 @@ class GlossView extends ItemView {
   }
   applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.scheduleLayout();}
   refreshSettings(){this.applyAppearance();if(!this.root)return;const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.plugin.store.settings.context==='whole'?'全文':(this.selected?'选文':'全文');this.updateContext();}
-  toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);}if(this.focusButton){setIcon(this.focusButton,next?'minimize':'maximize');this.focusButton.setAttribute('aria-label',next?'退出沉浸阅读':'沉浸阅读');this.focusButton.title=next?'退出沉浸 · Esc':'沉浸阅读 · F';}if(changing)requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.scheduleLayout();});}
+  async exitReader(){this.captureProgress();await this.flushDraft();this.toggleFocus(false);const existing=this.app.workspace.getLeavesOfType('markdown').find(l=>l.getViewState().state?.file===this.path);if(existing){await this.app.workspace.revealLeaf(existing);this.leaf.detach();}else await this.leaf.setViewState({type:'markdown',state:{file:this.path},active:true});}
+  toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);}if(this.focusButton){setIcon(this.focusButton,'arrow-left');this.focusButton.setAttribute('aria-label','返回普通文档');this.focusButton.title='返回文档 · Esc';}if(changing)requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.scheduleLayout();});}
   private toggleNotebook(next=!this.notebookOpen){this.notebookOpen=next;this.drawer.hidden=!next;this.root.toggleClass('gloss-notebook-open',next);if(next)void this.renderMargin();}
   private showContents(){const modal=new Modal(this.app);modal.setTitle('文档目录');let count=0;this.blocks.forEach(el=>{if(/^H[1-6]$/.test(el.tagName)){button(modal.contentEl,el.textContent||'',()=>{modal.close();el.scrollIntoView({behavior:'smooth',block:'start'});},'gloss-contents-item');count++;}});if(!count)modal.contentEl.createEl('p',{text:'这篇文档没有分节标题。'});modal.open();}
   private toggleAppearance(){if(!this.appearance.hidden){this.appearance.hidden=true;return;}this.appearance.empty();const s=this.plugin.store.settings;this.appearance.createDiv({cls:'gloss-pop-title',text:'阅读外观'});const themes=this.appearance.createDiv({cls:'gloss-theme-swatches'});for(const [key,label] of [['auto','跟随系统'],['paper','纸张'],['sepia','暖黄'],['snow','雪白'],['night','夜读'],['ink','墨蓝']]){const b=button(themes,label,()=>{s.theme=key;this.applyAppearance();void this.plugin.persist().catch(showError);this.appearance.hidden=true;},'gloss-theme-swatch');b.dataset.theme=key;b.classList.toggle('is-selected',s.theme===key);}
@@ -376,27 +378,63 @@ class GlossView extends ItemView {
 }
 
 class GlossSettings extends PluginSettingTab {
-  constructor(app: App, private plugin: GlossPlugin) {super(app, plugin);}
-  display() {
-    const el = this.containerEl; el.empty(); el.createEl('h2', {text: 'Gloss · 阅读伴侣'});
-    el.createEl('p', {text: '阅读、高亮与批注在本地完成。只有主动发送时，选定的正文范围才会交给所选模型。'});
-    const s = this.plugin.store.settings;
-    const save = async () => {try {await this.plugin.persist(); for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) (leaf.view as GlossView).refreshSettings();} catch(e) {showError(e);}};
-    new Setting(el).setName('Agent 服务').addDropdown(d => d.addOptions({codex: '本机 Codex CLI', api: 'OpenAI 兼容 API'}).setValue(s.provider).onChange(async v => {s.provider = v; await save(); this.display();}));
-    if (s.provider === 'codex') {
-      el.createEl('p', {text: '沿用本机 ChatGPT 登录；不会加载用户 CLI 的 MCP、hooks 或项目配置。只读模式运行于临时空目录，每轮独立发送阅读上下文。'});
-      new Setting(el).setName('Codex 可执行文件').setDesc('留空自动查找；需要先在终端完成 codex login。').addText(t => t.setPlaceholder('/Users/你的用户名/.local/bin/codex').setValue(s.codexPath).onChange(async v => {s.codexPath = v.trim(); await save();}));
-      new Setting(el).setName('Codex 模型').setDesc('留空使用 CLI 默认模型；也可填写你账号可用的模型 ID。').addText(t => t.setValue(s.codexModel).onChange(async v => {s.codexModel = v.trim(); await save();}));
-    } else {
-      new Setting(el).setName('API 基础地址').setDesc('填写到 /v1，例如 https://api.openai.com/v1。支持本机 HTTP 服务。').addText(t => t.setValue(s.apiBase).onChange(async v => {s.apiBase = v.trim(); await save();}));
-      new Setting(el).setName('模型 ID').addText(t => t.setPlaceholder('填写服务商提供的模型 ID').setValue(s.apiModel).onChange(async v => {s.apiModel = v.trim(); await save();}));
-      new Setting(el).setName('API Key').setDesc('仅保存在当前运行会话中，不写入插件文件；重启后需重新输入。').addText(t => {t.inputEl.type = 'password'; t.setValue(s.apiKey).onChange(v => {s.apiKey = v;});});
+  private tab='models';
+  private test?:AbortController;
+  constructor(app:App,private plugin:GlossPlugin){super(app,plugin);}
+  hide(){this.test?.abort();this.test=undefined;}
+  private async save(){await this.plugin.persist();for(const l of this.app.workspace.getLeavesOfType(VIEW))if(l.view instanceof GlossView)l.view.refreshSettings();}
+  display(){
+    const el=this.containerEl;el.empty();el.addClass('gr-settings');const s=this.plugin.store.settings;
+    const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
+    identity.createSpan({cls:'gr-settings-name',text:'沉浸阅读'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
+    const tabs=head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':'沉浸阅读设置'}});
+    for(const[key,label,icon]of [['models','模型与连接','sliders-horizontal'],['reading','阅读偏好','book-open'],['about','数据与关于','info']]){
+      const b=button(tabs,'',()=>{this.tab=key;this.display();},'gr-settings-tab');const mark=b.createSpan();setIcon(mark,icon);b.createSpan({text:label});b.classList.toggle('is-active',this.tab===key);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(this.tab===key));b.id='gr-tab-'+key;b.setAttribute('aria-controls','gr-settings-panel');
     }
-    new Setting(el).setName('测试 Agent 连接').setDesc('只发送一条公开测试句，不读取笔记。').addButton(b => b.setButtonText('测试连接').onClick(async () => {b.setDisabled(true); const controller = new AbortController(); try {const answer = await askAgent({settings: {...s}, context: '[¶1] 阅读帮助人理解文字。', messages: [{role: 'user', content: '请用一句中文解释这句话，并引用段落编号。'}], signal: controller.signal, onText: () => {}}); new Notice('连接成功：' + answer.slice(0, 120), 10000);} catch(e) {showError(e);} finally {b.setDisabled(false);}}));
-    new Setting(el).setName('新问题默认范围').addDropdown(d => d.addOptions({nearby: '选文及相邻段落', whole: '当前文档全文'}).setValue(s.context).onChange(async v => {s.context = v; await save();}));
-    new Setting(el).setName('上下文字符上限').setDesc('超出时提示缩小范围，不静默截断文档。').addText(t => t.setValue(String(s.maxContext)).onChange(async v => {const n = Number(v); if (Number.isFinite(n) && n >= 1000 && n <= 300000) {s.maxContext = Math.round(n); await save();}}));
-    el.createEl('h3', {text: '存储与边界'});
-    el.createEl('p', {text: '批注、对话、草稿与进度保存在插件 data.json 中。导出会在收集箱新建 Markdown 笔记，原文不改写。私密日记与受保护目录不进入本阅读器。嵌入的其他笔记不会自动展开给模型。'});
-    el.createEl('p', {text: '当前支持 Markdown；PDF、EPUB、网页导入和朗读尚未实现。快捷键：F 沉浸，Esc 退出，/ 询问全文，选文后直接输入提问，Enter 发送。'});
+    const body=el.createDiv({cls:'gr-settings-body',attr:{id:'gr-settings-panel',role:'tabpanel','aria-labelledby':'gr-tab-'+this.tab}});
+    const section=(title:string)=>body.createEl('h3',{cls:'gr-settings-section',text:title});
+    const row=(label:string,description='')=>{const r=body.createDiv({cls:'gr-settings-row'}),info=r.createDiv({cls:'gr-settings-info'});info.createDiv({cls:'gr-settings-label',text:label});if(description)info.createDiv({cls:'gr-settings-description',text:description});return r.createDiv({cls:'gr-settings-controls'});};
+    const select=(label:string,description:string,value:string,options:Record<string,string>,change:(v:string)=>void)=>{const d=row(label,description).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':label}});for(const[k,t]of Object.entries(options))d.createEl('option',{value:k,text:t});d.value=value;d.onchange=()=>{change(d.value);void this.save().catch(showError);};};
+    const input=(label:string,desc:string,value:string,placeholder:string,change:(v:string)=>void,type='text')=>{const t=row(label,desc).createEl('input',{cls:'gr-settings-input',attr:{'aria-label':label,type,placeholder}});t.value=value;t.autocomplete='off';t.spellcheck=false;t.onchange=()=>{change(t.value.trim());void this.save().catch(showError);};return t;};
+    if(this.tab==='models'){
+      section('阅读 Agent');body.createDiv({cls:'gr-settings-description gr-service-hint',text:'选择问答服务。只有你发送问题时，当前阅读范围才会交给模型。'});
+      const list=body.createDiv({cls:'gr-service-list',attr:{role:'group','aria-label':'问答服务'}});
+      for(const[key,title,desc]of [['codex','Codex CLI','使用本机 ChatGPT 登录，无需填写 API Key'],['api','OpenAI 兼容 API','连接你自己的模型服务或本地接口']]){
+        const card=button(list,'',async()=>{s.provider=key as Settings['provider'];await this.save();this.display();},'gr-service-card');card.classList.toggle('is-active',s.provider===key);card.setAttribute('aria-pressed',String(s.provider===key));
+        const radio=card.createSpan({cls:'gr-service-radio'});if(s.provider===key)setIcon(radio,'check');const copy=card.createSpan({cls:'gr-service-copy'});copy.createSpan({cls:'gr-service-title',text:title});copy.createSpan({cls:'gr-service-detail',text:desc});if(s.provider===key)card.createSpan({cls:'gr-service-badge',text:'使用中'});
+      }
+      section('连接配置');
+      if(s.provider==='codex'){
+        input('可执行文件','留空自动查找本机 Codex。',s.codexPath,'自动查找',v=>s.codexPath=v);
+        input('模型','留空沿用 Codex 默认模型。',s.codexModel,'Codex 默认模型',v=>s.codexModel=v);
+      }else{
+        input('API 地址','基础地址填写到 /v1。',s.apiBase,'https://api.openai.com/v1',v=>s.apiBase=v);
+        input('模型 ID','填写模型服务提供的名称。',s.apiModel,'模型 ID',v=>s.apiModel=v);
+        const key=input('API Key','仅保留在当前会话，重启后需重新输入。',s.apiKey,'输入 API Key',v=>s.apiKey=v,'password');key.oninput=()=>{s.apiKey=key.value;};
+      }
+      const footer=body.createDiv({cls:'gr-settings-footer'}),status=footer.createDiv({cls:'gr-settings-message',text:'配置更改后自动保存',attr:{role:'status','aria-live':'polite'}});
+      const stop=button(footer,'停止',()=>this.test?.abort(),'gr-settings-button');stop.hidden=true;
+      const test=button(footer,'测试连接',async()=>{const controller=new AbortController();this.test=controller;test.disabled=true;stop.hidden=false;status.textContent='正在连接…';status.classList.remove('is-error');
+        const cancelled=new Promise<never>((_,reject)=>controller.signal.addEventListener('abort',()=>reject(new Error('已停止')),{once:true}));
+        try{await Promise.race([cancelled,askAgent({settings:{...s},context:'[¶1] 阅读帮助人理解文字。',messages:[{role:'user',content:'请用一句中文解释这句话，并引用段落编号。'}],signal:controller.signal,onText:()=>{}})]);status.textContent='连接成功，可以开始阅读问答。';}
+        catch(e){status.textContent=controller.signal.aborted?'已停止测试':(e instanceof Error?e.message:'连接失败，请检查配置。');status.classList.toggle('is-error',!controller.signal.aborted);}
+        finally{if(this.test===controller)this.test=undefined;test.disabled=false;stop.hidden=true;}
+      },'gr-settings-button is-primary');
+      body.createDiv({cls:'gr-settings-description gr-service-note',text:'连接测试仅发送公开测试句，不读取笔记。'});
+    }else if(this.tab==='reading'){
+      section('打开方式');const preview=body.createDiv({cls:'gr-settings-preview'});preview.createDiv({cls:'gr-settings-label',text:'点击插件，再进入沉浸阅读'});preview.createDiv({cls:'gr-settings-description',text:'文件照常在 Obsidian 中打开。点击左侧阅读图标后进入沉浸模式，退出后回到普通文档；重启时也恢复普通文档。'});
+      section('阅读外观');
+      select('纸张','仅作用于沉浸阅读。',s.theme,{auto:'跟随系统',paper:'纸张',sepia:'暖黄',snow:'雪白',night:'夜读',ink:'墨蓝'},v=>s.theme=v);
+      select('字体','正文显示字体。',s.font,{serif:'衬线',sans:'无衬线'},v=>s.font=v);
+      select('字号','',String(s.fontSize),Object.fromEntries(Array.from({length:14},(_,i)=>[String(i+15),(i+15)+' px'])),v=>s.fontSize=Number(v));
+      select('行距','',String(s.lineHeight),{'1.5':'紧凑','1.64':'标准','1.82':'宽松',[String(s.lineHeight)]:({1.5:'紧凑',1.64:'标准',1.82:'宽松'} as Record<string,string>)[String(s.lineHeight)]||'自定义'},v=>s.lineHeight=Number(v));
+      select('正文宽度','',String(s.measure),{'28':'窄','32':'适中','37':'宽'},v=>s.measure=Number(v));
+      section('问答范围');select('新问题默认范围','选中正文后可以围绕附近段落提问。',s.context,{nearby:'选文及相邻段落',whole:'当前文档全文'},v=>s.context=v);
+      const limit=input('上下文上限','1,000–300,000 字符，超出时提示缩小范围。',String(s.maxContext),'60000',()=>{} ,'number');limit.min='1000';limit.max='300000';limit.onchange=()=>{const n=Number(limit.value);if(Number.isInteger(n)&&n>=1000&&n<=300000){s.maxContext=n;void this.save().catch(showError);}else{limit.value=String(s.maxContext);new Notice('请输入1,000–300,000之间的整数。');}};
+    }else{
+      section('阅读数据');const card=body.createDiv({cls:'gr-settings-preview'});card.createDiv({cls:'gr-settings-label',text:'批注留在本地，原文保持不变'});card.createDiv({cls:'gr-settings-description',text:'划线、批注、对话和阅读进度保存在当前库的插件数据中。导出笔记会在收集箱新建 Markdown。'});
+      section('隐私与支持范围');body.createDiv({cls:'gr-settings-description gr-about-text',text:'只处理你主动打开的 Markdown 文档。私密日记与受保护目录不会进入阅读器，嵌入的其他笔记不会自动展开给模型。当前支持 Markdown，PDF 与 EPUB 尚未支持。'});
+      section('快捷操作');for(const[label,key]of [['退出沉浸阅读','Esc'],['聚焦提问','/'],['发送问题','Enter'],['输入换行','Shift + Enter']]){row(label).createEl('kbd',{text:key});}
+    }
   }
 }
