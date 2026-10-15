@@ -1,3 +1,4 @@
+import type {ReadingBrief} from './brief';
 export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
@@ -7,7 +8,7 @@ export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
 export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean; style?:MarkStyle }
-export interface Reading { highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
+export interface Reading { brief?:ReadingBrief; highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
 export const freshReading = (): Reading => ({highlights: [], threads: [], progress: 0, draft: '', updated: Date.now()});
 export function makeAnchor(text: string, start: number, end: number): Anchor {
   while (start < end && /\s/.test(text[start])) start++;
