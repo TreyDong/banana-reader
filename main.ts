@@ -39,6 +39,7 @@ export default class GlossPlugin extends Plugin {
     this.app.workspace.onLayoutReady(()=>{requestAnimationFrame(()=>{if(this.unloading)return;for(const leaf of this.app.workspace.getLeavesOfType(VIEW)){const path=leaf.getViewState().state?.path;if(typeof path==='string'&&this.app.vault.getAbstractFileByPath(path) instanceof TFile)void leaf.setViewState({type:'markdown',state:{file:path}}).catch(showError);}});});
     this.addRibbonIcon('book-open-text', '进入沉浸阅读', () => {void this.openCurrent().catch(showError);});
     this.addCommand({id: 'open-reader', name: '进入沉浸阅读', callback: () => {void this.openCurrent().catch(showError);}});
+    this.addCommand({id:'toggle-question',name:'显示 / 收起提问框',checkCallback:checking=>{const v=this.app.workspace.getActiveViewOfType(GlossView);if(!v)return false;if(!checking)v.toggleComposer();return true;}});
     this.addCommand({id: 'choose-document', name: '选择文档开始阅读', callback: () => this.choose()});
     this.addCommand({id: 'toggle-focus', name: '切换沉浸式阅读', checkCallback: checking => {const v = this.app.workspace.getActiveViewOfType(GlossView); if (!v) return false; if (!checking) void v.exitReader().catch(showError); return true;}});
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && file.extension === 'md' && !blockedPath(file.path)) menu.addItem(i => i.setTitle('进入沉浸阅读').setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
@@ -120,6 +121,8 @@ class GlossView extends ItemView {
   private railWindow!: HTMLElement;
   private railGeometry: {top:number;height:number;fill:number;heading:boolean}[]=[];
   private composer!: HTMLTextAreaElement;
+  private composerWrap!: HTMLElement;
+  private questionButton!: HTMLButtonElement;
   private composeLabel!: HTMLElement;
   private sendButton!: HTMLButtonElement;
   private focusButton!: HTMLButtonElement;
@@ -164,17 +167,19 @@ class GlossView extends ItemView {
     this.registerDomEvent(this.containerEl.ownerDocument,'keydown',e=>{
       const target=e.target as HTMLElement;
       if(target.closest?.('.modal-container')||(!this.focus&&this.app.workspace.getActiveViewOfType(GlossView)!==this))return;
+      if(e.isComposing||e.keyCode===229)return;
       if(e.key==='Escape') {
         if(this.lens&&!this.lens.hidden){e.preventDefault();this.closeLens();return;}
+        if(this.composerWrap&&!this.composerWrap.hidden){e.preventDefault();this.toggleComposer(false);return;}
         if(this.notebookOpen){this.toggleNotebook(false);return;}
         if(this.appearance&&!this.appearance.hidden){this.appearance.hidden=true;return;}
         if(this.focus)void this.exitReader().catch(showError);return;
       }
       if(target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
       if(e.metaKey||e.ctrlKey||e.altKey)return;
+      if(e.key==='/'){e.preventDefault();this.closeLens();this.toggleComposer(true);return;}
       if(this.selected&&this.lens&&!this.lens.hidden&&e.key.length===1){e.preventDefault();this.showLens('ask',e.key);return;}
       if(e.key.toLowerCase()==='f'){e.preventDefault();if(this.focus)void this.exitReader().catch(showError);else this.toggleFocus(true);}
-      if(e.key==='/'){e.preventDefault();this.selected=undefined;this.activeThread=undefined;this.updateContext();this.composer.focus();}
     });
     this.registerEvent(this.app.vault.on('modify',f=>{if(f.path!==this.path)return;clearTimeout(this.reloadTimer);this.reloadTimer=setTimeout(()=>void this.loadDocument(this.path,true).catch(showError),500);}));
     this.registerEvent(this.app.vault.on('delete',f=>{if(f.path===this.path){this.stop();new Notice('原文已移除，批注仍保留。');}}));
@@ -200,6 +205,7 @@ class GlossView extends ItemView {
     const tools=top.createEl('nav',{cls:'gloss-tools',attr:{'aria-label':'阅读工具'}});
     this.iconButton(tools,'list','文档目录',()=>this.showContents());
     button(tools,'Aa',()=>this.toggleAppearance(),'gloss-aa').setAttribute('aria-label','阅读外观');
+    this.questionButton=this.iconButton(tools,'message-circle','提问 · /',()=>this.toggleComposer());this.questionButton.setAttribute('aria-expanded','false');
     this.focusButton=this.iconButton(tools,'arrow-left','返回文档',()=>this.exitReader());
     const notebook=button(tools,'',()=>this.toggleNotebook(),'gloss-notebook-button');setIcon(notebook,'notebook-pen');notebook.createSpan({text:'笔记本'});notebook.setAttribute('aria-label','阅读笔记本');
     this.iconButton(tools,'settings-2','Agent 服务设置',()=>{(this.app as any).setting.open();(this.app as any).setting.openTabById(this.plugin.manifest.id);});
@@ -235,12 +241,12 @@ class GlossView extends ItemView {
     this.page.createDiv({cls:'gloss-end',text:'读到这里，留下一个属于你的想法。'});
     this.margin=this.grid.createEl('aside',{cls:'gloss-margin-column',attr:{'aria-label':'页边批注'}});
     this.buildRail();
-    const compose=this.root.createDiv({cls:'gloss-composer'});
+    const compose=this.composerWrap=this.root.createDiv({cls:'gloss-composer',attr:{role:'group','aria-label':'文档提问'}});compose.hidden=true;
     this.composeLabel=compose.createDiv({cls:'gloss-compose-context'});
     const row=compose.createDiv({cls:'gloss-compose-row'});
     this.composer=row.createEl('textarea',{cls:'gloss-question',attr:{'aria-label':'向 Agent 提问',placeholder:'询问这篇文章…',rows:'1'}});this.composer.value=this.data.draft||'';
-    this.composer.addEventListener('input',()=>this.rememberDraft());this.composer.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void this.send().catch(showError);}});
-    row.createEl('kbd',{text:'/'});
+    this.composer.addEventListener('input',()=>this.rememberDraft());this.protectInput(this.composer);this.composer.addEventListener('focus',()=>this.closeLens());this.composer.addEventListener('keydown',e=>{if(!e.isComposing&&e.keyCode!==229&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();void this.send().catch(showError);}});
+    this.iconButton(row,'x','收起提问框 · Esc',()=>this.toggleComposer(false),'gloss-compose-close');
     const scope=button(row,'全文',()=>{this.plugin.store.settings.context=this.plugin.store.settings.context==='whole'?'nearby':'whole';this.refreshSettings();void this.plugin.persist().catch(showError);},'gloss-scope');scope.title='点击切换：当前文档全文 / 选文及相邻段落';
     this.sendButton=this.iconButton(row,'arrow-up','发送问题',()=>this.aborter?this.stop():this.send(),'gloss-send');
     this.drawer=this.root.createEl('aside',{cls:'gloss-notebook',attr:{'aria-label':'阅读笔记本'}});this.drawer.hidden=!this.notebookOpen;
@@ -251,6 +257,7 @@ class GlossView extends ItemView {
     this.appearance=this.root.createDiv({cls:'gloss-appearance'});this.appearance.hidden=true;
     this.article.addEventListener('mouseup',()=>this.captureSelection());this.article.addEventListener('keyup',e=>{if(e.key.startsWith('Arrow')||e.key==='Shift')this.captureSelection();});
     this.article.addEventListener('click',e=>{
+      const selection=this.article.ownerDocument.getSelection();if(selection&&!selection.isCollapsed&&this.article.contains(selection.anchorNode))return;
       const el=(e.target as HTMLElement).closest<HTMLElement>('[data-h],[data-g]');if(!el)return;
       if(el.dataset.g){const t=this.data.threads.find(t=>t.id===el.dataset.g?.split(' ')[0]);if(t){this.activateThread(t);return;}}
       if(el.dataset.h){const h=this.data.highlights.find(h=>h.id===el.dataset.h?.split(' ')[0]);if(h){this.selected=h.anchor;this.activeHighlight=h.id;this.activeThread=undefined;this.paintHighlights();this.showLens('actions');this.updateContext();}}
@@ -305,9 +312,23 @@ class GlossView extends ItemView {
   private captureProgress(){if(this.plugin.unloading||this.restoring||!this.scroller?.isConnected||!this.scroller.clientHeight||!this.path||this.root.clientHeight>(this.root.ownerDocument.defaultView?.innerHeight||window.innerHeight)+1)return;const max=this.scroller.scrollHeight-this.scroller.clientHeight;this.data.progress=max>0?Math.max(0,Math.min(1,this.scroller.scrollTop/max)):0;}
   private globalPoint(node:Node,offset:number){const block=this.blocks.find(el=>el.contains(node));if(!block)return null;const r=this.article.ownerDocument.createRange();r.selectNodeContents(block);r.setEnd(node,offset);return this.passages[this.blocks.indexOf(block)].start+r.toString().length;}
   captureSelection(){const s=this.article.ownerDocument.getSelection();if(!s||s.isCollapsed||!s.rangeCount)return;const r=s.getRangeAt(0);if(!this.article.contains(r.commonAncestorContainer))return;let start=this.globalPoint(r.startContainer,r.startOffset),end=this.globalPoint(r.endContainer,r.endOffset);if(start===null||end===null){const touched=this.blocks.filter(b=>r.intersectsNode(b));if(!touched.length)return;if(start===null)start=this.passages[this.blocks.indexOf(touched[0])].start;if(end===null)end=this.passages[this.blocks.indexOf(touched.at(-1)!)].end;}if(end<=start)return;const a=makeAnchor(this.text,start,end);if(!a.quote.trim())return;this.selected=a;this.activeThread=undefined;this.activeHighlight=undefined;this.updateContext();this.showLens('actions');}
+  private protectInput(input:HTMLInputElement|HTMLTextAreaElement){
+    for(const event of ['pointerdown','mousedown','click','paste','cut','copy'] as const)input.addEventListener(event,e=>e.stopPropagation());
+    input.addEventListener('keydown',event=>{const e=event as KeyboardEvent;if(e.key!=='Escape'||e.isComposing||e.keyCode===229)e.stopPropagation();});
+  }
+  private focusInput(input:HTMLInputElement|HTMLTextAreaElement){
+    input.focus({preventScroll:true});
+    // Pointer activation and workspace handlers may finish after the button callback.
+    requestAnimationFrame(()=>{if(input.isConnected&&!input.closest('[hidden]'))input.focus({preventScroll:true});});
+  }
+  toggleComposer(next=this.composerWrap.hidden){
+    this.composerWrap.hidden=!next;this.questionButton.setAttribute('aria-expanded',String(next));this.questionButton.toggleClass('is-active',next);
+    if(next){this.closeLens();this.updateContext();this.layoutMargin();this.focusInput(this.composer);}
+    else if(this.composer===this.composer.ownerDocument.activeElement)this.composer.blur();
+  }
   private closeLens(){if(this.lens){this.lens.hidden=true;this.lensInput=undefined;}}
   private showLens(mode:'actions'|'ask'|'note',initial=''){
-    if(!this.selected)return;this.lensMode=mode;this.lens.empty();this.lens.hidden=false;this.lens.classList.toggle('is-editor',mode!=='actions');
+    if(!this.selected)return;if(mode!=='actions')this.toggleComposer(false);this.lensMode=mode;this.lensInput=undefined;this.lens.empty();this.lens.hidden=false;this.lens.classList.toggle('is-editor',mode!=='actions');
     if(mode==='actions'){
       const ask=button(this.lens,'提问',()=>this.showLens('ask'),'gloss-lens-action gloss-lens-ask');ask.createSpan({cls:'gloss-lens-caret'});this.lens.createSpan({cls:'gloss-lens-divider'});
       for(const command of this.plugin.store.settings.commands.slice(0,2))button(this.lens,command.name,()=>this.runCommand(command),'gloss-lens-action gloss-command-action');
@@ -322,10 +343,13 @@ class GlossView extends ItemView {
       const existing=this.data.highlights.find(h=>h.id===this.activeHighlight);this.lensInput.value=mode==='note'?existing?.note||'':initial;
       const footer=this.lens.createDiv({cls:'gloss-lens-editor-footer'});if(mode==='ask'){this.iconButton(footer,'arrow-up','发送选文问题',()=>this.send(this.lensInput?.value),'gloss-lens-submit');}
       else button(footer,'保存批注',()=>this.saveLensNote(),'gloss-lens-save');
-      this.lensInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&(mode==='ask'||e.metaKey||e.ctrlKey)){e.preventDefault();void(mode==='ask'?this.send(this.lensInput!.value):this.saveLensNote()).catch(showError);}});
-      this.lensInput.focus();this.lensInput.setSelectionRange(this.lensInput.value.length,this.lensInput.value.length);
+      this.protectInput(this.lensInput);
+      this.lensInput.addEventListener('keydown',e=>{if(!e.isComposing&&e.keyCode!==229&&e.key==='Enter'&&!e.shiftKey&&(mode==='ask'||e.metaKey||e.ctrlKey)){e.preventDefault();void(mode==='ask'?this.send(this.lensInput!.value):this.saveLensNote()).catch(showError);}});
+      // The anchor is already stored; release the document selection before editing.
+      this.article.ownerDocument.getSelection()?.removeAllRanges();
     }
     this.placeLens();
+    if(this.lensInput){this.focusInput(this.lensInput);this.lensInput.setSelectionRange(this.lensInput.value.length,this.lensInput.value.length);}
   }
   private async runCommand(command:ReadingCommand){if(!this.selected)return;await this.send(renderCommand(command.prompt,this.selected.quote,this.path.split('/').pop()?.replace(/\.md$/,'')||''));}
   private showMoreActions(){const extra=this.lens.querySelector('.gloss-lens-more');if(extra){extra.remove();return;}const row=this.lens.createDiv({cls:'gloss-lens-more'});for(const c of this.plugin.store.settings.commands.slice(2))button(row,c.name,()=>this.runCommand(c),'gloss-lens-action gloss-command-action');button(row,'复制',async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();},'gloss-lens-action');this.iconButton(row,'settings-2','管理选文指令',()=>{this.closeLens();(this.app as any).setting.open();(this.app as any).setting.openTabById(this.plugin.manifest.id);const tab=(this.app as any).setting.activeTab;if(tab instanceof GlossSettings){tab.tab='commands';tab.display();}},'gloss-lens-action');this.placeLens();}
@@ -348,7 +372,7 @@ class GlossView extends ItemView {
     else{for(let i=1;i<t.messages.length;i++){const m=t.messages[i];if(m.role==='user'){const q=card.createDiv({cls:'gloss-followup-question'});setIcon(q,'corner-down-right');q.createSpan({text:m.content});}else{const body=card.createDiv({cls:'gloss-answer markdown-rendered'});if(!m.content&&this.aborter)body.createDiv({cls:'gloss-writing',attr:{role:'status','aria-label':'正在写下回答'}});else{await MarkdownRenderer.render(this.app,passiveEmbeds(m.content),body,this.path,component);if(component!==this.marginRender)return;this.citeButtons(body,t);}}}
       if(t.error)card.createDiv({cls:'gloss-error',text:t.error});
       const foot=card.createDiv({cls:'gloss-card-footer'});foot.createSpan({text:this.plugin.store.settings.provider==='codex'?'Codex':this.plugin.store.settings.provider==='claude'?'Claude':'API'});if(this.aborter)this.iconButton(foot,'square','停止回答',()=>this.stop());else{this.iconButton(foot,'copy','复制完整对话',async()=>{await navigator.clipboard.writeText(t.messages.map(m=>(m.role==='user'?'Q: ':'')+m.content).join('\n\n'));new Notice('已复制对话');});}
-      const form=card.createDiv({cls:'gloss-followup'}),input=form.createEl('input',{attr:{type:'text','aria-label':'继续追问这条批注',placeholder:'继续追问…'}});input.disabled=!!this.aborter;const submit=()=>{this.activeThread=t.id;this.selected=t.anchor;return this.send(input.value);};input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void submit().catch(showError);}});this.iconButton(form,'arrow-up','发送追问',submit,'gloss-followup-send');}
+      const form=card.createDiv({cls:'gloss-followup'}),input=form.createEl('input',{attr:{type:'text','aria-label':'继续追问这条批注',placeholder:'继续追问…'}});input.disabled=!!this.aborter;const submit=()=>{this.activeThread=t.id;this.selected=t.anchor;return this.send(input.value);};this.protectInput(input);input.addEventListener('keydown',e=>{if(!e.isComposing&&e.keyCode!==229&&e.key==='Enter'){e.preventDefault();void submit().catch(showError);}});this.iconButton(form,'arrow-up','发送追问',submit,'gloss-followup-send');}
     card.addEventListener('mouseenter',()=>this.setHover(t.id));card.addEventListener('mouseleave',()=>this.setHover());return card;}
   private paragraphNumber(a:Anchor){const start=resolveAnchor(this.text,a);return start===null?null:this.passages.find(p=>p.end>start)?.number;}
   private renderNote(parent:HTMLElement,h:Highlight,notebook=false){const card=parent.createEl('article',{cls:'gloss-margin-card gloss-personal-card'});card.dataset.cardId=h.id;card.dataset.color=h.color;if(!notebook){this.cards.set(h.id,card);const prior=this.previousPositions.get(h.id);if(prior){card.style.transform=prior;card.style.visibility='visible';card.dataset.placed='true';}}card.toggleClass('is-active',h.id===this.activeHighlight);const head=card.createDiv({cls:'gloss-card-heading'});head.createSpan({cls:'gloss-note-color',attr:{'data-color':h.color}});head.createSpan({text:'我的批注'});const number=this.paragraphNumber(h.anchor);if(number)button(head,'¶'+number,()=>this.jump(h.anchor),'gloss-citation');button(card,h.anchor.quote,()=>{this.selected=h.anchor;this.activeHighlight=h.id;this.showLens('actions');this.jump(h.anchor);},'gloss-note-quote');if(h.note)card.createEl('p',{cls:'gloss-personal-note',text:h.note});if(number===null)card.createDiv({cls:'gloss-stale',text:'原文已变更 · 摘录仍保留'});const actions=card.createDiv({cls:'gloss-note-actions'});this.iconButton(actions,'pen-line','编辑批注',()=>{this.selected=h.anchor;this.activeHighlight=h.id;this.showLens('note');});this.iconButton(actions,'message-circle','讨论这段',()=>{this.selected=h.anchor;this.activeThread=undefined;this.showLens('ask');this.updateContext();});this.iconButton(actions,'eraser','移除高亮',()=>this.removeHighlight(h.id));return card;}
@@ -368,10 +392,10 @@ class GlossView extends ItemView {
     for(const h of this.data.highlights.filter(h=>!h.removed&&h.note)){const card=this.cards.get(h.id);if(!card)continue;const rect=anchorRange(this.blocks,this.passages,this.text,h.anchor)?.getClientRects()[0];items.push({id:h.id,desired:Math.max(0,rect?rect.top-base-6:0),height:card.offsetHeight||48,created:h.created});}
     items.sort((a,b)=>a.desired-b.desired||a.created-b.created);const positions=placeMarginItems(items,this.activeThread||this.activeHighlight);let bottom=0;for(const item of items){const card=this.cards.get(item.id)!;const first=!card.dataset.placed;if(first)card.style.transition='none';card.style.transform=`translateY(${Math.round(positions[item.id])}px)`;card.dataset.placed='true';card.style.visibility='visible';bottom=Math.max(bottom,positions[item.id]+item.height);if(first)requestAnimationFrame(()=>card.style.removeProperty('transition'));}
     this.margin.style.minHeight=Math.max(this.page.offsetHeight,bottom+100)+'px';const hint=this.margin.querySelector<HTMLElement>('.gloss-margin-hint');if(hint)hint.style.transform=`translateY(${Math.max(0,this.article.getBoundingClientRect().top-base)}px)`;this.updateRail(true);}
-  async send(override?:string,forceWhole=false){if(this.aborter)return;const question=(override??this.composer.value).trim();if(!question){this.composer.focus();return;}if(blockedPath(this.path))throw new Error('此文档不能发送给模型。');if(!(this.app.vault.getAbstractFileByPath(this.path)instanceof TFile))throw new Error('原文已移除。');const path=this.path,data=this.data,settings={...this.plugin.store.settings};let target=data.threads.find(t=>t.id===this.activeThread);const whole=forceWhole||!this.selected||settings.context==='whole';const context=target?.context||contextFor(this.passages,forceWhole?undefined:this.selected,this.text,whole,settings.maxContext);
+  async send(override?:string,forceWhole=false){if(this.aborter)return;const question=(override??this.composer.value).trim();if(!question){this.toggleComposer(true);return;}if(blockedPath(this.path))throw new Error('此文档不能发送给模型。');if(!(this.app.vault.getAbstractFileByPath(this.path)instanceof TFile))throw new Error('原文已移除。');const path=this.path,data=this.data,settings={...this.plugin.store.settings};let target=data.threads.find(t=>t.id===this.activeThread);const whole=forceWhole||!this.selected||settings.context==='whole';const context=target?.context||contextFor(this.passages,forceWhole?undefined:this.selected,this.text,whole,settings.maxContext);
     if(!target){const citations:Record<string,Anchor>={};for(const p of this.passages)if(context.includes(`[¶${p.number}] `))citations[String(p.number)]=makeAnchor(this.text,p.start,p.end);target={id:uid(),anchor:forceWhole?undefined:this.selected?{...this.selected}:undefined,messages:[],created:Date.now(),context,citations};data.threads.push(target);this.activeThread=target.id;}
     const thread=target;thread.messages.push({role:'user',content:question});delete thread.error;const history=thread.messages.map(m=>({...m})),response={role:'assistant' as const,content:''};thread.messages.push(response);data.draft='';data.updated=Date.now();this.composer.value='';this.closeLens();this.article.ownerDocument.getSelection()?.removeAllRanges();
-    this.activeHighlight=undefined;const controller=new AbortController();this.aborter=controller;this.composer.disabled=true;setIcon(this.sendButton,'square');this.sendButton.setAttribute('aria-label','停止回答');this.sendButton.title='停止回答';this.fresh=thread.id;this.paintHighlights();this.updateContext();if(this.narrow){this.notebookOpen=true;this.drawer.hidden=false;}
+    this.activeHighlight=undefined;const controller=new AbortController();this.aborter=controller;this.composerWrap.hidden=false;this.questionButton.setAttribute('aria-expanded','true');this.questionButton.toggleClass('is-active',true);this.composer.disabled=true;setIcon(this.sendButton,'square');this.sendButton.setAttribute('aria-label','停止回答');this.sendButton.title='停止回答';this.fresh=thread.id;this.paintHighlights();this.updateContext();if(this.narrow){this.notebookOpen=true;this.drawer.hidden=false;}
     try{await this.plugin.persist();await this.renderMargin();response.content=await askAgent({settings,context,quote:thread.anchor?.quote,messages:history,signal:controller.signal,onText:text=>{response.content=text;if(this.path!==path||this.aborter!==controller)return;clearTimeout(this.renderTimer);this.renderTimer=setTimeout(()=>void this.renderMargin().catch(showError),100);}});}catch(e){thread.error=e instanceof Error?e.message:'回答失败，请重试。';if(!response.content)thread.messages.pop();}
     finally{clearTimeout(this.renderTimer);data.updated=Date.now();try{await this.plugin.persist();}catch(e){showError(e);}if(this.aborter===controller){this.aborter=undefined;if(this.path===path&&this.root.isConnected){this.composer.disabled=false;setIcon(this.sendButton,'arrow-up');this.sendButton.setAttribute('aria-label','发送问题');this.sendButton.title='发送问题';this.fresh=undefined;this.article.querySelectorAll('.is-new').forEach(el=>el.removeClass('is-new'));await this.renderMargin();}}}
   }

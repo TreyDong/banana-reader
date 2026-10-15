@@ -68,3 +68,11 @@ Date: 2026-10-15. Target: a faithful native Obsidian adaptation of the Gloss rea
 - 29 automated tests pass; TypeScript/build pass. No unresolved visual or entry-flow P0/P1/P2 issue in this scope.
 
 final result: passed
+
+## 0.4.1 follow-up: input focus and quiet composer
+
+- Default entry has no bottom composer; toolbar message button and / reveal it with focus, Esc or close hides it without losing draft or selected anchor. A configurable Obsidian command is registered too.
+- Inline editor releases the DOM selection after saving the anchor, positions before focus and reasserts focus after pointer activation. Editable mouse/keyboard events stay local; composing Enter and legacy 229 do not send in any reader input.
+- Do not activate an existing highlight/thread when a noncollapsed article selection is present.
+- Native UI verified actual keyboard input (not AX setValue), click-to-edit, toolbar and / opening, Esc closing and draft restoration. Runtime event check: composing Enter ignored, legacy 229 ignored, ordinary Enter handled exactly once. Build + 29 regression tests passed.
+- The reported intermittent failure did not reproduce consistently on the public fixture before the fix. Focus/selection handling was hardened; direct Chinese typing through the automation did not reliably inject Unicode, so the input-method guard was additionally verified through runtime composition events.
