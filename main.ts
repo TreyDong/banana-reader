@@ -1,11 +1,13 @@
-import { Plugin, ItemView, WorkspaceLeaf, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, Setting, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath } from 'obsidian';
-import { type Anchor, type Thread, type Reading, type Passage, freshReading, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading } from './core';
+import { Plugin, ItemView, WorkspaceLeaf, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, Setting, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, setIcon } from 'obsidian';
+import { type Anchor, type Thread, type Reading, type Passage, type Highlight, freshReading, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading } from './core';
 import { type AgentSettings, askAgent } from './agent';
 
+import {placeMarginItems, anchorRange, paintMarks, type TextMark, type MarginItem} from './reading-ui';
+
 const VIEW = 'gloss-reader';
-interface Settings extends AgentSettings { theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number }
+interface Settings extends AgentSettings { theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 19, font: 'serif', lineHeight: 1.95, context: 'nearby', maxContext: 60000};
+const DEFAULTS: Settings = {provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false};
 const uid = () => crypto.randomUUID();
 function button(parent: HTMLElement, text: string, action: () => void | Promise<void>, cls = ''): HTMLButtonElement {
   const b = parent.createEl('button', {text, cls}); b.type = 'button';
@@ -19,10 +21,15 @@ function passiveEmbeds(md: string): string {
 
 export default class GlossPlugin extends Plugin {
   store!: Store;
+  unloading = false;
   private saveQueue: Promise<void> = Promise.resolve();
   async onload() {
     const saved = await this.loadData();
-    this.store = {version: 1, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
+    this.store = {version: 2, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
+    if (saved && (saved.version || 1) < 2) {
+      if (saved.settings?.fontSize === 19) this.store.settings.fontSize = 20;
+      if (saved.settings?.lineHeight === 1.95) this.store.settings.lineHeight = 1.64;
+    }
     this.registerView(VIEW, leaf => new GlossView(leaf, this));
     this.addSettingTab(new GlossSettings(this.app, this));
     this.addRibbonIcon('book-open-text', 'Gloss · 阅读与思考', () => {void this.openCurrent().catch(showError);});
@@ -62,14 +69,18 @@ export default class GlossPlugin extends Plugin {
     else this.choose();
   }
   async openFile(file: TFile): Promise<GlossView> {
+    const immersive = this.app.workspace.getLeavesOfType(VIEW).some(l => (l.view as GlossView).root?.classList.contains('gloss-focus'));
+    for (const l of this.app.workspace.getLeavesOfType(VIEW)) if ((l.view as GlossView).path !== file.path && (l.view as GlossView).root?.classList.contains('gloss-focus')) (l.view as GlossView).toggleFocus(false);
     if (file.extension !== 'md') throw new Error('这一版支持 Markdown 文档。');
     if (blockedPath(file.path)) throw new Error('此目录受隐私边界保护，请使用原生阅读视图。');
-    let leaf = this.app.workspace.getLeavesOfType(VIEW).find(l => (l.view as GlossView).path === file.path);
+    let leaf = this.app.workspace.getLeavesOfType(VIEW).find(l => (l.view as GlossView).path === file.path || l.getViewState().state?.path === file.path);
     if (!leaf) {leaf = this.app.workspace.getLeaf('tab'); await leaf.setViewState({type: VIEW, state: {path: file.path}, active: true});}
+    await leaf.loadIfDeferred();
+    if (!(leaf.view instanceof GlossView)) await leaf.open(new GlossView(leaf, this));
     await this.app.workspace.revealLeaf(leaf);
-    const v = leaf.view as GlossView; if (v.path !== file.path || !v.article) await v.loadDocument(file.path); return v;
+    const v = leaf.view as GlossView; if (v.path !== file.path || !v.article) await v.loadDocument(file.path); if (immersive) v.toggleFocus(true); return v;
   }
-  onunload() {for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) (leaf.view as GlossView).stop();}
+  onunload() {this.unloading=true;for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) if (leaf.view instanceof GlossView) leaf.view.stop();}
 }
 
 class DocumentPicker extends FuzzySuggestModal<TFile> {
@@ -92,349 +103,276 @@ class NoteModal extends Modal {
 
 class GlossView extends ItemView {
   path = '';
-  article!: HTMLElement;
   root!: HTMLElement;
+  article!: HTMLElement;
   private scroller!: HTMLElement;
+  private grid!: HTMLElement;
+  private page!: HTMLElement;
   private margin!: HTMLElement;
+  private drawer!: HTMLElement;
+  private drawerBody!: HTMLElement;
+  private rail!: HTMLElement;
+  private railWindow!: HTMLElement;
+  private railGeometry: {top:number;height:number;fill:number;heading:boolean}[]=[];
   private composer!: HTMLTextAreaElement;
-  private contextLabel!: HTMLElement;
-  private quoteEl!: HTMLElement;
-  private progressEl!: HTMLElement;
-  private lens!: HTMLElement;
-  private toc!: HTMLElement;
+  private composeLabel!: HTMLElement;
   private sendButton!: HTMLButtonElement;
-  private aborter?: AbortController;
-  private markdown?: Component;
-  private marginRender?: Component;
-  private blocks: HTMLElement[] = [];
-  private passages: Passage[] = [];
-  private text = '';
+  private focusButton!: HTMLButtonElement;
+  private lens!: HTMLElement;
+  private lensMode: 'actions'|'ask'|'note' = 'actions';
+  private lensInput?: HTMLTextAreaElement;
+  private appearance!: HTMLElement;
   private selected?: Anchor;
   private activeThread?: string;
+  private activeHighlight?: string;
+  private fresh?: string;
   private focus = false;
+  private notebookOpen = false;
+  private narrow = false;
+  private revision = 0;
   private restoring = false;
   private pendingProgress?: number;
+  private text = '';
+  private blocks: HTMLElement[] = [];
+  private passages: Passage[] = [];
+  private cards = new Map<string, HTMLElement>();
+  private previousPositions = new Map<string,string>();
+  private markdown?: Component;
+  private marginRender?: Component;
+  private aborter?: AbortController;
   private resizeObserver?: ResizeObserver;
-  private revision = 0;
+  private marginObserver?: ResizeObserver;
   private progressTimer?: ReturnType<typeof setTimeout>;
+  private draftTimer?: ReturnType<typeof setTimeout>;
   private renderTimer?: ReturnType<typeof setTimeout>;
   private reloadTimer?: ReturnType<typeof setTimeout>;
-  private focusButton!: HTMLButtonElement;
-  private tab: 'threads' | 'highlights' = 'threads';
+  private frame = 0;
   constructor(leaf: WorkspaceLeaf, readonly plugin: GlossPlugin) {super(leaf);}
   getViewType() {return VIEW;}
   getDisplayText() {return this.path ? `Gloss · ${this.path.split('/').pop()?.replace(/\.md$/, '')}` : 'Gloss';}
   getIcon() {return 'book-open-text';}
-  getState() {return {path: this.path};}
-  async setState(state: {path?: string}, result: any) {if (state?.path) await this.loadDocument(state.path); await super.setState(state, result);}
+  getState() {return {path:this.path};}
+  async setState(state:{path?:string}, result:any) {if(state?.path)await this.loadDocument(state.path);await super.setState(state,result);}
   async onOpen() {
     this.contentEl.addClass('gloss-host');
-    this.registerDomEvent(this.containerEl.ownerDocument, 'keydown', e => {
-      if ((e.target as HTMLElement).closest?.('.modal-container')) return;
-      if (!this.focus && this.app.workspace.getActiveViewOfType(GlossView) !== this) return;
-      if (e.key === 'Escape') {this.lens?.hide(); if (this.focus) this.toggleFocus(false); return;}
-      const input = (e.target as HTMLElement).closest('textarea,input,select,[contenteditable="true"]');
-      if (input) return;
-      if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey) {e.preventDefault(); this.toggleFocus();}
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {e.preventDefault(); this.composer?.focus();}
+    this.registerEvent(this.app.workspace.on('active-leaf-change',leaf=>{if(leaf&&leaf!==this.leaf&&this.focus)this.toggleFocus(false);}));
+    this.registerDomEvent(this.containerEl.ownerDocument,'keydown',e=>{
+      const target=e.target as HTMLElement;
+      if(target.closest?.('.modal-container')||(!this.focus&&this.app.workspace.getActiveViewOfType(GlossView)!==this))return;
+      if(e.key==='Escape') {
+        if(this.lens&&!this.lens.hidden){e.preventDefault();this.closeLens();return;}
+        if(this.notebookOpen){this.toggleNotebook(false);return;}
+        if(this.appearance&&!this.appearance.hidden){this.appearance.hidden=true;return;}
+        if(this.focus)this.toggleFocus(false);return;
+      }
+      if(target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+      if(e.metaKey||e.ctrlKey||e.altKey)return;
+      if(this.selected&&this.lens&&!this.lens.hidden&&e.key.length===1){e.preventDefault();this.showLens('ask',e.key);return;}
+      if(e.key.toLowerCase()==='f'){e.preventDefault();this.toggleFocus();}
+      if(e.key==='/'){e.preventDefault();this.selected=undefined;this.activeThread=undefined;this.updateContext();this.composer.focus();}
     });
-    this.registerEvent(this.app.vault.on('modify', file => {
-      if (file.path !== this.path) return;
-      clearTimeout(this.reloadTimer); this.reloadTimer = setTimeout(() => {void this.loadDocument(this.path, true).catch(showError);}, 500);
-    }));
-    this.registerEvent(this.app.vault.on('delete', file => {if (file.path === this.path) {this.stop(); new Notice('原文已移除。Gloss 已保留批注，请勿覆盖同名文档。');}}));
+    this.registerEvent(this.app.vault.on('modify',f=>{if(f.path!==this.path)return;clearTimeout(this.reloadTimer);this.reloadTimer=setTimeout(()=>void this.loadDocument(this.path,true).catch(showError),500);}));
+    this.registerEvent(this.app.vault.on('delete',f=>{if(f.path===this.path){this.stop();new Notice('原文已移除，批注仍保留。');}}));
   }
-  async loadDocument(path: string, retainPosition = false) {
-    if (blockedPath(path)) throw new Error('此目录受隐私边界保护。');
-    const file = this.app.vault.getAbstractFileByPath(path); if (!(file instanceof TFile)) throw new Error('找不到这篇文档。');
-    this.stop(); this.captureProgress(); await this.flushDraft();
-    const token = ++this.revision;
-    const oldRatio = retainPosition ? this.plugin.read(this.path).progress : null;
-    const raw = await this.app.vault.cachedRead(file); if (token !== this.revision) return;
-    const desiredProgress = oldRatio ?? this.plugin.read(path).progress;
-    this.pendingProgress = desiredProgress;
-    this.restoring = true;
-    this.resizeObserver?.disconnect();
-    this.path = path; this.activeThread = undefined; this.selected = undefined;
-    this.markdown?.unload(); this.markdown && this.removeChild(this.markdown);
-    this.markdown = new Component(); this.addChild(this.markdown);
-    this.root?.remove(); this.contentEl.empty();
-    this.root = this.contentEl.createDiv({cls: 'gloss-root'}); this.applyAppearance();
-    const toolbar = this.root.createDiv({cls: 'gloss-toolbar'});
-    const brand = button(toolbar, 'g.  GLOSS', () => this.plugin.choose(), 'gloss-brand'); brand.title = '选择阅读文档';
-    const fileLabel = toolbar.createDiv({cls: 'gloss-file-label', text: file.basename}); fileLabel.title = file.path;
-    button(toolbar, '目录', () => this.toc.toggleClass('is-open', !this.toc.hasClass('is-open')));
-    button(toolbar, 'Aa', () => this.appearanceMenu());
-    button(toolbar, '伴读', () => this.root.toggleClass('gloss-side-open', !this.root.hasClass('gloss-side-open')), 'gloss-side-toggle');
-    button(toolbar, '导出笔记', () => this.exportNotes());
-    this.focusButton = button(toolbar, '沉浸阅读', () => this.toggleFocus());
-    button(toolbar, '设置', () => {(this.app as any).setting.open(); (this.app as any).setting.openTabById(this.plugin.manifest.id);});
-    this.progressEl = this.root.createDiv({cls: 'gloss-progress', attr: {'aria-label': '阅读进度'}});
-    this.toc = this.root.createDiv({cls: 'gloss-toc'});
-    this.scroller = this.root.createDiv({cls: 'gloss-scroll'});
-    const page = this.scroller.createDiv({cls: 'gloss-page'});
-    page.createDiv({cls: 'gloss-eyebrow', text: 'READ · QUESTION · KEEP'});
-    page.createEl('h1', {cls: 'gloss-document-title', text: file.basename});
-    page.createDiv({cls: 'gloss-document-meta', text: '选一段文字，留一个问题，让理解在页边生长。'});
-    this.article = page.createEl('article', {cls: 'gloss-article markdown-rendered', attr: {'aria-label': '阅读正文'}});
-    const info = getFrontMatterInfo(raw);
-    await MarkdownRenderer.render(this.app, passiveEmbeds(raw.slice(info.contentStart)), this.article, path, this.markdown);
-    if (token !== this.revision) return;
-    // Text-only indexes exclude nested blocks and embedded attachments, keeping quote offsets stable.
-    const selectors = 'p,h1,h2,h3,h4,h5,h6,li,pre,table';
-    this.blocks = Array.from(this.article.querySelectorAll<HTMLElement>(selectors)).filter(el => {
-      if (el.closest('.internal-embed, .external-embed')) return false;
-      const ancestor = el.parentElement?.closest(selectors); return (!ancestor || !this.article.contains(ancestor)) && !!el.textContent?.trim();
+  private iconButton(parent:HTMLElement,name:string,label:string,action:()=>void|Promise<void>,cls='') {
+    const b=button(parent,'',action,`gloss-icon ${cls}`);setIcon(b,name);b.setAttribute('aria-label',label);b.title=label;return b;
+  }
+  private get data(){return this.plugin.read(this.path);}
+  async loadDocument(path:string,retainPosition=false) {
+    if(blockedPath(path))throw new Error('此目录受隐私边界保护。');
+    const file=this.app.vault.getAbstractFileByPath(path);if(!(file instanceof TFile))throw new Error('找不到这篇文档。');
+    this.stop();this.captureProgress();await this.flushDraft();
+    const token=++this.revision, raw=await this.app.vault.cachedRead(file);if(token!==this.revision)return;
+    const progress=this.plugin.read(path).progress;
+    this.path=path;this.selected=undefined;this.activeThread=undefined;this.activeHighlight=undefined;this.restoring=true;this.pendingProgress=progress;
+    this.resizeObserver?.disconnect();this.marginObserver?.disconnect();
+    if(this.markdown){this.removeChild(this.markdown);this.markdown.unload();}this.markdown=new Component();this.addChild(this.markdown);
+    this.root?.remove();this.contentEl.empty();
+    this.root=this.contentEl.createDiv({cls:'gloss-root'});this.applyAppearance();
+    const top=this.root.createEl('header',{cls:'gloss-toolbar'});
+    const brand=button(top,'',()=>this.plugin.choose(),'gloss-brand');setIcon(brand,'list-filter');brand.createSpan({text:'Gloss'});brand.setAttribute('aria-label','Gloss · 选择阅读文档');
+    top.createSpan({cls:'gloss-brand-divider'});top.createSpan({cls:'gloss-vault-label',text:'OBSIDIAN'});
+    const titleBtn=button(top,file.basename,()=>this.scroller.scrollTo({top:0,behavior:'smooth'}),'gloss-top-title');titleBtn.title=file.path;
+    const tools=top.createEl('nav',{cls:'gloss-tools',attr:{'aria-label':'阅读工具'}});
+    this.iconButton(tools,'list','文档目录',()=>this.showContents());
+    button(tools,'Aa',()=>this.toggleAppearance(),'gloss-aa').setAttribute('aria-label','阅读外观');
+    this.focusButton=this.iconButton(tools,'maximize','沉浸阅读',()=>this.toggleFocus());
+    const notebook=button(tools,'',()=>this.toggleNotebook(),'gloss-notebook-button');setIcon(notebook,'notebook-pen');notebook.createSpan({text:'笔记本'});notebook.setAttribute('aria-label','阅读笔记本');
+    this.iconButton(tools,'settings-2','Agent 服务设置',()=>{(this.app as any).setting.open();(this.app as any).setting.openTabById(this.plugin.manifest.id);});
+    this.scroller=this.root.createDiv({cls:'gloss-scroll'});
+    this.grid=this.scroller.createDiv({cls:'gloss-reader-grid'});
+    this.rail=this.grid.createDiv({cls:'gloss-rail',attr:{'aria-label':'文档导航'}});
+    this.page=this.grid.createDiv({cls:'gloss-page'});
+    const fm=this.app.metadataCache.getFileCache(file)?.frontmatter||{};
+    let body=raw.slice(getFrontMatterInfo(raw).contentStart);
+    const firstHeading=body.match(/^\s*# ([^\n]+)\s*\n/);
+    const title=String(fm.title||firstHeading?.[1]||file.basename);
+    if(firstHeading)body=body.slice(firstHeading[0].length);
+    const header=this.page.createEl('header',{cls:'gloss-document-header'});
+    const source=header.createDiv({cls:'gloss-document-source'});source.createSpan({cls:'gloss-source-dot'});source.createSpan({text:String(fm.source_label||file.parent?.name||'当前文档')});
+    header.createEl('h1',{cls:'gloss-document-title',text:title});
+    if(fm.description||fm.dek)header.createEl('p',{cls:'gloss-document-dek',text:String(fm.description||fm.dek)});
+    const meta=header.createDiv({cls:'gloss-document-meta'}),byline=meta.createDiv();
+    if(fm.author){const by=byline.createDiv({cls:'gloss-byline',text:String(fm.author)});if(fm.published||fm.date)by.createSpan({cls:'gloss-published',text:' · '+String(fm.published||fm.date)});}
+    const stats=byline.createDiv({cls:'gloss-reading-stats'});
+    const sourceBtn=button(meta,'',()=>this.app.workspace.openLinkText(path,'',true),'gloss-original');setIcon(sourceBtn,'arrow-up-right');sourceBtn.createSpan({text:'原文'});
+    const brief=button(header,'',async()=>{this.selected=undefined;this.activeThread=undefined;await this.send('请给出这篇文档的要旨、关键论点和阅读路线，引用段落编号。',true);},'gloss-brief');
+    const briefTop=brief.createSpan({cls:'gloss-brief-title',text:'解读这篇文章'});const briefArrow=briefTop.createSpan();setIcon(briefArrow,'arrow-right');brief.createSpan({cls:'gloss-brief-description',text:'先抓住要旨、关键观点，再带着问题阅读'});brief.createSpan({cls:'gloss-brief-key',text:'B'});
+    this.article=this.page.createEl('article',{cls:'gloss-article markdown-rendered',attr:{'aria-label':'阅读正文'}});
+    await MarkdownRenderer.render(this.app,passiveEmbeds(body),this.article,path,this.markdown);if(token!==this.revision)return;
+    const selector='p,h1,h2,h3,h4,h5,h6,li,pre,table';
+    this.blocks=Array.from(this.article.querySelectorAll<HTMLElement>(selector)).filter(el=>{if(el.closest('.internal-embed,.external-embed'))return false;const a=el.parentElement?.closest(selector);return(!a||!this.article.contains(a))&&!!el.textContent?.trim();});
+    if(!this.blocks.length&&this.article.textContent?.trim())this.blocks=[this.article];
+    const index=indexPassages(this.blocks.map(el=>el.textContent||''));this.text=index.text;this.passages=index.passages;
+    this.blocks.forEach((el,i)=>{el.addClass('gloss-passage');el.dataset.glossParagraph=String(i+1);});
+    const first=this.blocks.find(el=>el.tagName==='P');if(first){first.addClass('gloss-first-paragraph');if(/^[A-Za-z]/.test(first.textContent||''))first.addClass('gloss-dropcap');}
+    const minutes=Math.max(1,Math.round(this.text.split(/\s+/).length/240+(this.text.match(/[\u3400-\u9fff]/g)||[]).length/450));
+    stats.textContent=`${minutes} 分钟阅读 · ${this.blocks.filter(el=>!/^H/.test(el.tagName)).length} 个段落`;
+    this.page.createDiv({cls:'gloss-end',text:'读到这里，留下一个属于你的想法。'});
+    this.margin=this.grid.createEl('aside',{cls:'gloss-margin-column',attr:{'aria-label':'页边批注'}});
+    this.buildRail();
+    const compose=this.root.createDiv({cls:'gloss-composer'});
+    this.composeLabel=compose.createDiv({cls:'gloss-compose-context'});
+    const row=compose.createDiv({cls:'gloss-compose-row'});
+    this.composer=row.createEl('textarea',{cls:'gloss-question',attr:{'aria-label':'向 Agent 提问',placeholder:'询问这篇文章…',rows:'1'}});this.composer.value=this.data.draft||'';
+    this.composer.addEventListener('input',()=>this.rememberDraft());this.composer.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void this.send().catch(showError);}});
+    row.createEl('kbd',{text:'/'});
+    const scope=button(row,'全文',()=>{this.plugin.store.settings.context=this.plugin.store.settings.context==='whole'?'nearby':'whole';this.refreshSettings();void this.plugin.persist().catch(showError);},'gloss-scope');scope.title='点击切换：当前文档全文 / 选文及相邻段落';
+    this.sendButton=this.iconButton(row,'arrow-up','发送问题',()=>this.aborter?this.stop():this.send(),'gloss-send');
+    this.drawer=this.root.createEl('aside',{cls:'gloss-notebook',attr:{'aria-label':'阅读笔记本'}});this.drawer.hidden=!this.notebookOpen;
+    const drawerHead=this.drawer.createDiv({cls:'gloss-notebook-head'});drawerHead.createEl('h2',{text:'阅读笔记'});this.iconButton(drawerHead,'download','导出 Markdown 笔记',()=>this.exportNotes());this.iconButton(drawerHead,'x','收起笔记本',()=>this.toggleNotebook(false));
+    this.drawerBody=this.drawer.createDiv({cls:'gloss-notebook-body'});
+    this.lens=this.root.createDiv({cls:'gloss-lens',attr:{role:'toolbar','aria-label':'选文操作'}});this.lens.hidden=true;
+    this.lens.addEventListener('mousedown',e=>{if(!(e.target as HTMLElement).closest('textarea,input'))e.preventDefault();});
+    this.appearance=this.root.createDiv({cls:'gloss-appearance'});this.appearance.hidden=true;
+    this.article.addEventListener('mouseup',()=>this.captureSelection());this.article.addEventListener('keyup',e=>{if(e.key.startsWith('Arrow')||e.key==='Shift')this.captureSelection();});
+    this.article.addEventListener('click',e=>{
+      const el=(e.target as HTMLElement).closest<HTMLElement>('[data-h],[data-g]');if(!el)return;
+      if(el.dataset.g){const t=this.data.threads.find(t=>t.id===el.dataset.g?.split(' ')[0]);if(t){this.activateThread(t);return;}}
+      if(el.dataset.h){const h=this.data.highlights.find(h=>h.id===el.dataset.h?.split(' ')[0]);if(h){this.selected=h.anchor;this.activeHighlight=h.id;this.activeThread=undefined;this.paintHighlights();this.showLens('actions');this.updateContext();}}
     });
-    if (!this.blocks.length && this.article.textContent?.trim()) this.blocks = [this.article];
-    const index = indexPassages(this.blocks.map(el => el.textContent || '')); this.passages = index.passages; this.text = index.text;
-    this.blocks.forEach((el, i) => {el.dataset.glossParagraph = String(i + 1); el.addClass('gloss-passage');});
-    const headings = this.blocks.filter(el => /^H[1-6]$/.test(el.tagName));
-    if (!headings.length) this.toc.createSpan({text: '这篇文档没有标题目录。'});
-    for (const el of headings) button(this.toc, el.textContent || '', () => el.scrollIntoView({behavior: 'smooth', block: 'start'}));
-    const side = this.scroller.createEl('aside', {cls: 'gloss-side', attr: {'aria-label': '阅读伴侣'}});
-    const sideTop = side.createDiv({cls: 'gloss-side-heading'}); sideTop.createSpan({text: '页边思考'}); sideTop.createSpan({cls: 'gloss-local-badge', text: '本地保存'});
-    const tabs = side.createDiv({cls: 'gloss-tabs'});
-    button(tabs, '对话', () => {this.tab = 'threads'; void this.renderMargin();});
-    button(tabs, '高亮与批注', () => {this.tab = 'highlights'; void this.renderMargin();});
-    button(tabs, '新问题 ＋', () => {this.activeThread = undefined; this.selected = undefined; this.updateContext(); this.tab = 'threads'; void this.renderMargin(); this.composer.focus();});
-    this.margin = side.createDiv({cls: 'gloss-margin', attr: {'aria-live': 'polite'}});
-    const compose = side.createDiv({cls: 'gloss-compose'});
-    this.contextLabel = compose.createDiv({cls: 'gloss-context-label'});
-    this.quoteEl = compose.createDiv({cls: 'gloss-compose-quote'});
-    const contextRow = compose.createDiv({cls: 'gloss-context-row'});
-    const scope = contextRow.createEl('select', {attr: {'aria-label': '发送给 Agent 的内容范围'}});
-    scope.createEl('option', {value: 'nearby', text: '选文及相邻段落'}); scope.createEl('option', {value: 'whole', text: '当前文档全文'}); scope.value = this.plugin.store.settings.context;
-    scope.addEventListener('change', () => {this.plugin.store.settings.context = scope.value; void this.plugin.persist().catch(showError); this.updateContext();});
-    const starters = compose.createDiv({cls: 'gloss-starters'});
-    for (const [label, prompt] of [['解释', '请解释这段话的含义和关键概念。'], ['举例', '请用一个具体例子帮助我理解。'], ['质疑', '这段论述有哪些隐含假设和可能的反例？'], ['翻译', '请翻译这段话：英文译成中文，中文译成英文。']]) button(starters, label, () => {this.composer.value = prompt; this.rememberDraft(); this.composer.focus();});
-    this.composer = compose.createEl('textarea', {cls: 'gloss-question', attr: {'aria-label': '向 Agent 提问', placeholder: '这段话，哪里让你停了下来？', rows: '3'}}); this.composer.value = this.plugin.read(path).draft || '';
-    this.composer.addEventListener('input', () => this.rememberDraft());
-    this.composer.addEventListener('keydown', e => {if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {e.preventDefault(); void this.send().catch(showError);}});
-    const sendRow = compose.createDiv({cls: 'gloss-send-row'});
-    sendRow.createSpan({text: this.plugin.store.settings.provider === 'codex' ? 'Codex CLI · ⌘↵ 发送' : '自定义 API · ⌘↵ 发送', cls: 'gloss-provider'});
-    this.sendButton = button(sendRow, '发送 ↗', () => this.aborter ? this.stop() : this.send(), 'gloss-send');
-    compose.createDiv({cls: 'gloss-disclosure', text: '点击发送后，所示范围的正文会交给所选模型处理。未配置服务时仍可阅读与批注。'});
-    this.lens = this.root.createDiv({cls: 'gloss-lens', attr: {role: 'toolbar', 'aria-label': '选文操作'}}); this.lens.hide();
-    this.lens.addEventListener('mousedown', e => e.preventDefault());
-    button(this.lens, '问 Agent', () => {this.activeThread = undefined; this.tab = 'threads'; this.root.addClass('gloss-side-open'); this.updateContext(); this.lens.hide(); void this.renderMargin(); this.composer.focus();});
-    for (const [color, label] of [['yellow', '黄'], ['green', '绿'], ['pink', '粉']]) {const b = button(this.lens, label, () => this.highlight(color), `gloss-color gloss-color-${color}`); b.setAttribute('aria-label', label + '色高亮');}
-    button(this.lens, '写批注', () => this.annotate());
-    this.article.addEventListener('mouseup', () => this.captureSelection());
-    this.article.addEventListener('keyup', e => {if (e.key.startsWith('Arrow') || e.key === 'Shift') this.captureSelection();});
-    this.article.addEventListener('click', e => {const mark = (e.target as HTMLElement).closest<HTMLElement>('mark[data-gloss-id]'); if (mark) {const h = this.plugin.read(this.path).highlights.find(h => h.id === mark.dataset.glossId); if (h) {this.selected = h.anchor; this.activeThread = undefined; this.tab = 'highlights'; this.updateContext(); void this.renderMargin();}}});
-    this.scroller.addEventListener('scroll', () => {this.lens.hide(); if (this.restoring) return; this.captureProgress(); clearTimeout(this.progressTimer); this.progressTimer = setTimeout(() => {void this.plugin.persist().catch(showError);}, 700);}, {passive: true});
-    this.root.addEventListener('click', e => {const link = (e.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link'); if (link) {e.preventDefault(); void this.app.workspace.openLinkText(link.dataset.href || link.getAttribute('href') || '', this.path, true);}});
-    this.updateContext(); this.paintHighlights(); await this.renderMargin(); this.toggleFocus(this.focus);
-    this.resizeObserver = new ResizeObserver(() => this.restorePosition());
-    this.resizeObserver.observe(this.scroller);
-    requestAnimationFrame(() => {if (token === this.revision) this.restorePosition();});
+    this.article.addEventListener('mouseover',e=>{const g=(e.target as HTMLElement).closest<HTMLElement>('[data-g]')?.dataset.g;this.setHover(g?.split(' ')[0]);});
+    this.article.addEventListener('mouseleave',()=>this.setHover());
+    this.root.addEventListener('pointerdown',e=>{const target=e.target as HTMLElement;if(!this.lens.contains(target)&&!target.closest('[data-h]'))this.closeLens();if(!this.appearance.contains(target)&&!target.closest('.gloss-aa'))this.appearance.hidden=true;});
+    this.root.addEventListener('click',e=>{const a=(e.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link');if(a){e.preventDefault();void this.app.workspace.openLinkText(a.dataset.href||a.getAttribute('href')||'',path,true);}});
+    this.scroller.addEventListener('scroll',()=>{if(this.restoring)return;this.captureProgress();this.updateRail();if(!this.lens.hidden)this.placeLens();top.toggleClass('is-scrolled',this.scroller.scrollTop>180);clearTimeout(this.progressTimer);this.progressTimer=setTimeout(()=>void this.plugin.persist().catch(showError),700);},{passive:true});
+    this.paintHighlights();this.refreshSettings();await this.renderMargin();this.toggleFocus(this.focus);
+    this.resizeObserver=new ResizeObserver(()=>{this.narrow=this.root.clientWidth<1080;this.root.toggleClass('gloss-narrow',this.narrow);this.restorePosition();this.scheduleLayout();if(!this.lens.hidden)this.placeLens();});
+    this.resizeObserver.observe(this.root);this.resizeObserver.observe(this.scroller);this.resizeObserver.observe(this.page);
+    requestAnimationFrame(()=>{if(token===this.revision){this.restorePosition();this.scheduleLayout();}});
     this.app.workspace.requestSaveLayout();
   }
-  applyAppearance() {
-    if (!this.root) return;
-    const s = this.plugin.store.settings;
-    this.root.dataset.theme = s.theme; this.root.dataset.font = s.font;
-    this.root.style.setProperty('--gloss-font-size', s.fontSize + 'px'); this.root.style.setProperty('--gloss-line-height', String(s.lineHeight));
+  applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.scheduleLayout();}
+  refreshSettings(){this.applyAppearance();if(!this.root)return;const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.plugin.store.settings.context==='whole'?'全文':(this.selected?'选文':'全文');this.updateContext();}
+  toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);}if(this.focusButton){setIcon(this.focusButton,next?'minimize':'maximize');this.focusButton.setAttribute('aria-label',next?'退出沉浸阅读':'沉浸阅读');this.focusButton.title=next?'退出沉浸 · Esc':'沉浸阅读 · F';}if(changing)requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.scheduleLayout();});}
+  private toggleNotebook(next=!this.notebookOpen){this.notebookOpen=next;this.drawer.hidden=!next;this.root.toggleClass('gloss-notebook-open',next);if(next)void this.renderMargin();}
+  private showContents(){const modal=new Modal(this.app);modal.setTitle('文档目录');let count=0;this.blocks.forEach(el=>{if(/^H[1-6]$/.test(el.tagName)){button(modal.contentEl,el.textContent||'',()=>{modal.close();el.scrollIntoView({behavior:'smooth',block:'start'});},'gloss-contents-item');count++;}});if(!count)modal.contentEl.createEl('p',{text:'这篇文档没有分节标题。'});modal.open();}
+  private toggleAppearance(){if(!this.appearance.hidden){this.appearance.hidden=true;return;}this.appearance.empty();const s=this.plugin.store.settings;this.appearance.createDiv({cls:'gloss-pop-title',text:'阅读外观'});const themes=this.appearance.createDiv({cls:'gloss-theme-swatches'});for(const [key,label] of [['auto','跟随系统'],['paper','纸张'],['sepia','暖黄'],['snow','雪白'],['night','夜读'],['ink','墨蓝']]){const b=button(themes,label,()=>{s.theme=key;this.applyAppearance();void this.plugin.persist().catch(showError);this.appearance.hidden=true;},'gloss-theme-swatch');b.dataset.theme=key;b.classList.toggle('is-selected',s.theme===key);}
+    const faces=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [key,label] of [['serif','衬线'],['sans','无衬线']])button(faces,label,()=>{s.font=key;this.applyAppearance();void this.plugin.persist().catch(showError);});
+    const size=this.appearance.createDiv({cls:'gloss-pop-row'});this.iconButton(size,'minus','减小字号',()=>{s.fontSize=Math.max(15,s.fontSize-1);this.applyAppearance();size.querySelector('.gloss-size-value')!.textContent=String(s.fontSize);void this.plugin.persist().catch(showError);});size.createSpan({cls:'gloss-size-value',text:String(s.fontSize)});this.iconButton(size,'plus','增大字号',()=>{s.fontSize=Math.min(28,s.fontSize+1);this.applyAppearance();size.querySelector('.gloss-size-value')!.textContent=String(s.fontSize);void this.plugin.persist().catch(showError);});
+    const leading=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [['紧凑',1.5],['标准',1.64],['宽松',1.82]]as const)button(leading,label,()=>{s.lineHeight=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
+    const widths=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [['窄',28],['适中',32],['宽',37]]as const)button(widths,label,()=>{s.measure=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
+    const pens=this.appearance.createDiv({cls:'gloss-pop-row'});pens.createSpan({text:'批注笔色'});for(const [pen,label]of [['vermilion','朱红'],['cobalt','钴蓝'],['moss','苔绿'],['graphite','石墨']]){const b=button(pens,'',()=>{s.pen=pen;this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-pen-swatch');b.dataset.pen=pen;b.title=label;b.setAttribute('aria-label',label+'批注笔');}
+    button(this.appearance,s.numbers?'隐藏段落编号':'显示段落编号',()=>{s.numbers=!s.numbers;this.applyAppearance();void this.plugin.persist().catch(showError);this.appearance.hidden=true;},'gloss-pop-number');this.appearance.hidden=false;}
+  private buildRail(){
+    this.rail.empty();this.rail.setAttribute('role','slider');this.rail.setAttribute('aria-label','阅读位置');this.rail.setAttribute('aria-valuemin','0');this.rail.setAttribute('aria-valuemax','100');
+    const lines=this.rail.createDiv({cls:'gloss-rail-lines'});
+    for(const p of this.passages){const b=lines.createEl('button',{cls:'gloss-rail-line',attr:{type:'button','aria-label':'跳到第 '+p.number+' 段'}});b.dataset.paragraph=String(p.number);b.addEventListener('click',e=>{if(e.detail===0)this.blocks[p.number-1].scrollIntoView({behavior:'smooth',block:'start'});});}
+    this.railWindow=this.rail.createDiv({cls:'gloss-rail-window'});this.railWindow.setAttribute('aria-hidden','true');
+    let drag=false;
+    const travel=(clientY:number,instant=false)=>{const rect=this.rail.getBoundingClientRect(),y=Math.max(0,Math.min(rect.height,clientY-rect.top)),article=this.article.getBoundingClientRect(),scroller=this.scroller.getBoundingClientRect();this.scroller.scrollTo({top:this.scroller.scrollTop+article.top-scroller.top+y/Math.max(1,rect.height)*article.height-this.scroller.clientHeight*.3,behavior:instant?'instant':'smooth'});};
+    this.rail.addEventListener('pointerdown',e=>{e.preventDefault();this.rail.setPointerCapture(e.pointerId);travel(e.clientY);drag=true;});this.rail.addEventListener('pointermove',e=>{if(drag&&e.buttons)travel(e.clientY,true);});this.rail.addEventListener('pointerup',()=>drag=false);this.rail.addEventListener('pointercancel',()=>drag=false);this.updateRail(true);
   }
-  refreshSettings() {
-    this.applyAppearance();
-    const label = this.root?.querySelector('.gloss-provider');
-    if (label) label.textContent = this.plugin.store.settings.provider === 'codex' ? 'Codex CLI · ⌘↵ 发送' : '自定义 API · ⌘↵ 发送';
-    const scope = this.root?.querySelector<HTMLSelectElement>('.gloss-context-row select');
-    if (scope) scope.value = this.plugin.store.settings.context;
-    this.updateContext();
+  private updateRail(measure=false){
+    if(!this.railWindow||!this.scroller)return;const article=this.article.getBoundingClientRect(),height=Math.max(80,this.scroller.clientHeight-64);this.rail.style.height=height+'px';const k=height/Math.max(1,article.height);
+    if(measure||this.railGeometry.length!==this.blocks.length)this.railGeometry=this.blocks.map(b=>{const r=b.getBoundingClientRect();return{top:r.top-article.top,height:r.height,fill:Math.min(1,.45+(b.textContent?.length||0)/1400),heading:/^H/.test(b.tagName)};});
+    this.rail.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach((el,i)=>{const g=this.railGeometry[i];if(!g)return;el.style.top=g.top*k+'px';el.style.height=Math.max(1,g.height*k-2)+'px';el.style.width=(g.heading?18:18*g.fill)+'px';el.classList.toggle('is-heading',g.heading);});
+    this.rail.querySelectorAll('.gloss-rail-tick,.gloss-rail-gloss').forEach(el=>el.remove());
+    const at=(a:Anchor)=>{const start=resolveAnchor(this.text,a);if(start===null)return null;const i=this.passages.findIndex(p=>p.end>start);return this.railGeometry[i]?.top*k;};
+    for(const h of this.data.highlights.filter(h=>!h.removed)){const top=at(h.anchor);if(top===null||top===undefined)continue;const tick=this.rail.createSpan({cls:'gloss-rail-tick'});tick.dataset.color=h.color;tick.style.top=top+'px';}
+    for(const t of this.data.threads){if(!t.anchor)continue;const top=at(t.anchor);if(top===null||top===undefined)continue;const tick=this.rail.createSpan({cls:'gloss-rail-gloss'});tick.style.top=top+'px';}
+    const visibleTop=this.scroller.getBoundingClientRect().top-article.top,vTop=Math.max(0,visibleTop*k),vHeight=Math.max(14,Math.min(height-vTop,this.scroller.clientHeight*k));this.railWindow.style.top=vTop+'px';this.railWindow.style.height=vHeight+'px';this.rail.setAttribute('aria-valuenow',String(Math.round(Math.max(0,Math.min(1,(visibleTop+this.scroller.clientHeight*.3)/Math.max(1,article.height)))*100)));
   }
-  private appearanceMenu() {
-    const modal = new Modal(this.app); modal.setTitle('让阅读更舒服');
-    new Setting(modal.contentEl).setName('纸张').addDropdown(d => d.addOptions({paper: '暖纸', light: '纸白', dark: '夜读'}).setValue(this.plugin.store.settings.theme).onChange(v => {this.plugin.store.settings.theme = v; this.applyAppearance(); void this.plugin.persist().catch(showError);}));
-    new Setting(modal.contentEl).setName('字体').addDropdown(d => d.addOptions({serif: '衬线 · 阅读', sans: '无衬线 · 清晰'}).setValue(this.plugin.store.settings.font).onChange(v => {this.plugin.store.settings.font = v; this.applyAppearance(); void this.plugin.persist().catch(showError);}));
-    new Setting(modal.contentEl).setName('字号').addSlider(s => s.setLimits(15, 28, 1).setValue(this.plugin.store.settings.fontSize).setDynamicTooltip().onChange(v => {this.plugin.store.settings.fontSize = v; this.applyAppearance(); void this.plugin.persist().catch(showError);}));
-    new Setting(modal.contentEl).setName('行距').addSlider(s => s.setLimits(1.4, 2.4, 0.05).setValue(this.plugin.store.settings.lineHeight).setDynamicTooltip().onChange(v => {this.plugin.store.settings.lineHeight = v; this.applyAppearance(); void this.plugin.persist().catch(showError);}));
-    modal.open();
-  }
-  toggleFocus(next = !this.focus) {
-    const changing = next !== this.focus;
-    const max = this.scroller ? this.scroller.scrollHeight - this.scroller.clientHeight : 0;
-    const progress = max > 0 ? this.scroller.scrollTop / max : 0;
-    this.focus = next;
-    if (this.root) {
-      // Portal outside Obsidian's contained leaf so full-window reading is not clipped by split panes.
-      if (next && this.root.parentElement !== this.root.ownerDocument.body) this.root.ownerDocument.body.appendChild(this.root);
-      else if (!next && this.root.parentElement !== this.contentEl) this.contentEl.appendChild(this.root);
-      this.root.toggleClass('gloss-focus', next);
+  private rememberDraft(){if(!this.path||!this.composer)return;this.data.draft=this.composer.value;clearTimeout(this.draftTimer);this.draftTimer=setTimeout(()=>void this.plugin.persist().catch(showError),500);}
+  private async flushDraft(){if(this.path&&this.composer){this.data.draft=this.composer.value;await this.plugin.persist();}}
+  onResize(){this.restorePosition();this.scheduleLayout();}
+  private restorePosition(){if(!this.restoring||this.pendingProgress===undefined||!this.scroller?.isConnected||!this.scroller.clientHeight||!this.scroller.clientWidth)return;if(this.root.clientHeight>(this.root.ownerDocument.defaultView?.innerHeight||window.innerHeight)+1)return;this.scroller.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*this.pendingProgress,behavior:'instant'});this.pendingProgress=undefined;this.restoring=false;this.captureProgress();this.updateRail();}
+  private captureProgress(){if(this.plugin.unloading||this.restoring||!this.scroller?.isConnected||!this.scroller.clientHeight||!this.path||this.root.clientHeight>(this.root.ownerDocument.defaultView?.innerHeight||window.innerHeight)+1)return;const max=this.scroller.scrollHeight-this.scroller.clientHeight;this.data.progress=max>0?Math.max(0,Math.min(1,this.scroller.scrollTop/max)):0;}
+  private globalPoint(node:Node,offset:number){const block=this.blocks.find(el=>el.contains(node));if(!block)return null;const r=this.article.ownerDocument.createRange();r.selectNodeContents(block);r.setEnd(node,offset);return this.passages[this.blocks.indexOf(block)].start+r.toString().length;}
+  captureSelection(){const s=this.article.ownerDocument.getSelection();if(!s||s.isCollapsed||!s.rangeCount)return;const r=s.getRangeAt(0);if(!this.article.contains(r.commonAncestorContainer))return;let start=this.globalPoint(r.startContainer,r.startOffset),end=this.globalPoint(r.endContainer,r.endOffset);if(start===null||end===null){const touched=this.blocks.filter(b=>r.intersectsNode(b));if(!touched.length)return;if(start===null)start=this.passages[this.blocks.indexOf(touched[0])].start;if(end===null)end=this.passages[this.blocks.indexOf(touched.at(-1)!)].end;}if(end<=start)return;const a=makeAnchor(this.text,start,end);if(!a.quote.trim())return;this.selected=a;this.activeThread=undefined;this.activeHighlight=undefined;this.updateContext();this.showLens('actions');}
+  private closeLens(){if(this.lens){this.lens.hidden=true;this.lensInput=undefined;}}
+  private showLens(mode:'actions'|'ask'|'note',initial=''){
+    if(!this.selected)return;this.lensMode=mode;this.lens.empty();this.lens.hidden=false;this.lens.classList.toggle('is-editor',mode!=='actions');
+    if(mode==='actions'){
+      const ask=button(this.lens,'提问',()=>this.showLens('ask'),'gloss-lens-action gloss-lens-ask');ask.createSpan({cls:'gloss-lens-caret'});this.lens.createSpan({cls:'gloss-lens-divider'});
+      const explain=button(this.lens,'',()=>this.send('请解释这段话在文中的含义和作用。'),'gloss-lens-action');setIcon(explain,'lightbulb');explain.createSpan({text:'解释'});
+      const define=button(this.lens,'',()=>this.send('请解释选文中的概念或用词，并给出具体例子。'),'gloss-lens-action');setIcon(define,'book-a');define.createSpan({text:'释义'});
+      this.iconButton(this.lens,'ellipsis','更多选文操作',()=>this.showMoreActions(),'gloss-lens-action');this.lens.createSpan({cls:'gloss-lens-divider'});
+      const group=this.lens.createDiv({cls:'gloss-marker-group'}),marker=this.iconButton(group,'highlighter','高亮选文',()=>this.highlight(this.plugin.store.settings.marker||'yellow'),'gloss-lens-action');marker.dataset.color=this.plugin.store.settings.marker||'yellow';
+      const palette=group.createDiv({cls:'gloss-marker-palette'});for(const [color,label]of [['yellow','黄色'],['green','绿色'],['blue','蓝色'],['pink','粉色']]){const b=button(palette,'',()=>this.highlight(color),'gloss-marker-dot');b.dataset.color=color;b.setAttribute('aria-label',label+'高亮');b.title=label;b.classList.toggle('is-on',color===(this.plugin.store.settings.marker||'yellow'));}
+      this.iconButton(this.lens,'pen-line','写批注',()=>this.showLens('note'),'gloss-lens-action');
+      if(this.activeHighlight)this.iconButton(this.lens,'eraser','移除这条高亮',()=>this.removeHighlight(this.activeHighlight!),'gloss-lens-action');
+    }else{
+      const head=this.lens.createDiv({cls:'gloss-lens-editor-head'});head.createSpan({text:mode==='ask'?'关于这段话':'用自己的话记下来'});this.iconButton(head,'x','关闭选文输入',()=>this.closeLens(),'gloss-lens-action');
+      this.lensInput=this.lens.createEl('textarea',{cls:'gloss-lens-input',attr:{'aria-label':mode==='ask'?'选文提问':'选文批注',placeholder:mode==='ask'?'这句话为什么这样说？':'这段话让你想到了什么？',rows:mode==='ask'?'2':'3'}});
+      const existing=this.data.highlights.find(h=>h.id===this.activeHighlight);this.lensInput.value=mode==='note'?existing?.note||'':initial;
+      const footer=this.lens.createDiv({cls:'gloss-lens-editor-footer'});if(mode==='ask'){for(const [label,prompt]of [['举个例子','请举一个具体例子。'],['为什么重要','这段话为什么重要？']])button(footer,label,()=>this.send(prompt),'gloss-lens-starter');this.iconButton(footer,'arrow-up','发送选文问题',()=>this.send(this.lensInput?.value),'gloss-lens-submit');}
+      else button(footer,'保存批注',()=>this.saveLensNote(),'gloss-lens-save');
+      this.lensInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&(mode==='ask'||e.metaKey||e.ctrlKey)){e.preventDefault();void(mode==='ask'?this.send(this.lensInput!.value):this.saveLensNote()).catch(showError);}});
+      this.lensInput.focus();this.lensInput.setSelectionRange(this.lensInput.value.length,this.lensInput.value.length);
     }
-    if (this.focusButton) this.focusButton.textContent = next ? '退出沉浸 · Esc' : '沉浸阅读';
-    if (changing) requestAnimationFrame(() => {if (this.scroller) this.scroller.scrollTop = Math.max(0, this.scroller.scrollHeight - this.scroller.clientHeight) * progress;});
+    this.placeLens();
   }
-  private rememberDraft() {if (!this.path || !this.composer) return; this.plugin.read(this.path).draft = this.composer.value; clearTimeout(this.progressTimer); this.progressTimer = setTimeout(() => {void this.plugin.persist().catch(showError);}, 500);}
-  private async flushDraft() {if (this.path && this.composer) {this.plugin.read(this.path).draft = this.composer.value; await this.plugin.persist();}}
-  onResize() {this.restorePosition();}
-  private restorePosition() {
-    if (!this.restoring || this.pendingProgress === undefined || !this.scroller?.isConnected || this.scroller.clientHeight <= 0 || this.scroller.clientWidth <= 0) return;
-    // During workspace restoration Obsidian briefly gives new leaves their content height,
-    // which can exceed the window. Wait for the bounded pane before applying a saved ratio.
-    if (this.root.clientHeight > (this.root.ownerDocument.defaultView?.innerHeight || window.innerHeight) + 1) return;
-    this.scroller.scrollTo({top: Math.max(0, this.scroller.scrollHeight - this.scroller.clientHeight) * this.pendingProgress, behavior: 'instant'});
-    this.pendingProgress = undefined; this.restoring = false; this.captureProgress();
+  private showMoreActions(){const extra=this.lens.querySelector('.gloss-lens-more');if(extra){extra.remove();return;}const row=this.lens.createDiv({cls:'gloss-lens-more'});for(const[label,prompt]of [['简化','请用更简单的语言解释选文。'],['反例','这个判断有哪些前提和反例？'],['翻译','请翻译选文：英文译中文，中文译英文。']])button(row,label,()=>this.send(prompt),'gloss-lens-action');button(row,'复制',async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();},'gloss-lens-action');this.placeLens();}
+  private placeLens(){if(!this.selected||this.lens.hidden)return;const r=anchorRange(this.blocks,this.passages,this.text,this.selected);if(!r)return;const rects=Array.from(r.getClientRects()).filter(r=>r.width>0);if(!rects.length)return;const first=rects[0],last=rects.at(-1)!,box=this.root.getBoundingClientRect(),w=this.lens.offsetWidth,h=this.lens.offsetHeight,center=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;const x=Math.max(12,Math.min(this.root.clientWidth-w-12,center-box.left-w/2));const above=first.top-box.top-h-12>=66;const y=above?first.top-box.top-h-12:last.bottom-box.top+12;this.lens.style.left=x+'px';this.lens.style.top=Math.max(66,Math.min(this.root.clientHeight-h-12,y))+'px';this.lens.style.setProperty('--gloss-arrow',Math.max(18,Math.min(w-18,(above?first.left+Math.min(40,first.width/2):(last.left+last.right)/2)-box.left-x))+'px');this.lens.classList.toggle('is-below',!above);}
+  private updateContext(){if(!this.composer)return;const t=this.data.threads.find(t=>t.id===this.activeThread),a=t?.anchor||this.selected;this.composeLabel.textContent=a?`“${a.quote.length>50?a.quote.slice(0,50)+'…':a.quote}”`:'';this.composeLabel.hidden=!a;this.composer.placeholder=t?'继续追问…':a?'询问这段文字…':'询问这篇文章…';const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=a&&this.plugin.store.settings.context!=='whole'?'选文':'全文';}
+  private paintHighlights(){if(!this.article)return;const marks:TextMark[]=[];for(const h of this.data.highlights.filter(h=>!h.removed)){const start=resolveAnchor(this.text,h.anchor);if(start!==null)marks.push({id:h.id,start,end:start+h.anchor.quote.length,kind:'highlight',color:h.color,note:!!h.note});}for(const t of this.data.threads){if(!t.anchor)continue;const start=resolveAnchor(this.text,t.anchor);if(start!==null)marks.push({id:t.id,start,end:start+t.anchor.quote.length,kind:'thread'});}paintMarks(this.article,this.blocks,this.passages,marks,this.activeThread||this.activeHighlight,this.fresh);this.rail?.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach(el=>{const p=this.passages[Number(el.dataset.paragraph)-1],h=marks.find(m=>m.kind==='highlight'&&m.end>p.start&&m.start<p.end),t=marks.some(m=>m.kind==='thread'&&m.end>p.start&&m.start<p.end);el.dataset.color=h?.color||'';el.classList.toggle('has-gloss',t);});}
+  private matchedHighlight(){if(!this.selected)return;const at=resolveAnchor(this.text,this.selected);return this.data.highlights.find(h=>!h.removed&&h.anchor.quote===this.selected!.quote&&resolveAnchor(this.text,h.anchor)===at);}
+  private async highlight(color:string){if(!this.selected)return;let h=this.matchedHighlight();if(h)h.color=color;else{h={id:uid(),anchor:{...this.selected},color,note:'',created:Date.now()};this.data.highlights.push(h);}this.plugin.store.settings.marker=color;this.activeHighlight=undefined;this.fresh=h.id;this.data.updated=Date.now();await this.plugin.persist();this.article.ownerDocument.getSelection()?.removeAllRanges();this.closeLens();this.paintHighlights();await this.renderMargin();const id=h.id;setTimeout(()=>{if(this.fresh===id){this.fresh=undefined;this.article.querySelectorAll('.is-new').forEach(el=>el.removeClass('is-new'));}},750);}
+  private async saveLensNote(){if(!this.selected||!this.lensInput)return;let h=this.matchedHighlight();const note=this.lensInput.value.trim();if(h)h.note=note;else{if(!note){this.closeLens();return;}h={id:uid(),anchor:{...this.selected},color:this.plugin.store.settings.marker||'yellow',note,created:Date.now()};this.data.highlights.push(h);}this.activeHighlight=h.id;this.fresh=h.id;this.data.updated=Date.now();await this.plugin.persist();this.closeLens();this.paintHighlights();await this.renderMargin();if(this.narrow)this.toggleNotebook(true);}
+  private async removeHighlight(id:string){const h=this.data.highlights.find(h=>h.id===id);if(!h)return;h.removed=true;await this.plugin.persist();this.closeLens();this.activeHighlight=undefined;this.paintHighlights();await this.renderMargin();new Notice('高亮已移除，可在笔记本底部恢复。');}
+  private jump(anchor:Anchor){const r=anchorRange(this.blocks,this.passages,this.text,anchor);if(!r){new Notice('原文已变化，无法可靠定位；摘录仍完整保留。');return;}const start=resolveAnchor(this.text,anchor)!,i=this.passages.findIndex(p=>p.end>start),b=this.blocks[i];b.scrollIntoView({behavior:'smooth',block:'center'});b.addClass('gloss-jump');setTimeout(()=>b.removeClass('gloss-jump'),1800);}
+  private activateThread(t:Thread){this.activeThread=t.id;this.activeHighlight=undefined;this.selected=t.anchor;this.paintHighlights();this.updateContext();if(this.narrow){this.notebookOpen=true;this.drawer.hidden=false;}void this.renderMargin();}
+  revealSaved(id:string){const h=this.data.highlights.find(h=>h.id===id),t=this.data.threads.find(t=>t.id===id);if(h){this.activeHighlight=h.id;this.selected=h.anchor;this.jump(h.anchor);if(h.note){void this.renderMargin();if(this.narrow)this.toggleNotebook(true);}else this.showLens('actions');}if(t){this.activateThread(t);if(t.anchor)this.jump(t.anchor);}}
+  private setHover(id?:string){this.article.querySelectorAll<HTMLElement>('[data-g]').forEach(el=>el.classList.toggle('is-hover',!!id&&el.dataset.g!.split(' ').includes(id)));for(const [key,card]of this.cards)card.classList.toggle('is-hover',id===key);}
+  private citeButtons(parent:HTMLElement,t:Thread){const walker=parent.ownerDocument.createTreeWalker(parent,4),nodes:Text[]=[];while(walker.nextNode()){const n=walker.currentNode as Text;if(/\[¶\d+\]/.test(n.data)&&!n.parentElement?.closest('pre,code,a,button'))nodes.push(n);}for(const n of nodes){const frag=parent.ownerDocument.createDocumentFragment();let end=0;for(const m of n.data.matchAll(/\[¶(\d+)\]/g)){frag.append(n.data.slice(end,m.index));const b=parent.ownerDocument.createElement('button');b.className='gloss-citation';b.textContent='¶'+m[1];const a=t.citations?.[m[1]];if(a)b.onclick=()=>this.jump(a);else{b.disabled=true;b.title='未提供的原文段落';}frag.append(b);end=m.index!+m[0].length;}frag.append(n.data.slice(end));n.replaceWith(frag);}}
+  private async renderThread(parent:HTMLElement,t:Thread,component:Component,notebook=false){const active=t.id===this.activeThread,card=parent.createEl('article',{cls:'gloss-margin-card gloss-thread-card'});card.dataset.threadId=t.id;card.dataset.cardId=t.id;card.toggleClass('is-active',active);card.toggleClass('is-collapsed',!active);if(!notebook){this.cards.set(t.id,card);const prior=this.previousPositions.get(t.id);if(prior){card.style.transform=prior;card.style.visibility='visible';card.dataset.placed='true';}}const number=t.anchor?this.paragraphNumber(t.anchor):null;const head=card.createDiv({cls:'gloss-card-heading'});head.createSpan({cls:'gloss-card-kind',text:'提问'});if(number)button(head,'¶'+number,()=>this.jump(t.anchor!),'gloss-citation');
+    if(active)this.iconButton(head,'chevrons-down-up','折叠这条批注',()=>{this.activeThread=undefined;this.paintHighlights();this.updateContext();void this.renderMargin();},'gloss-collapse');
+    const first=t.messages.find(m=>m.role==='user');card.createEl('p',{cls:'gloss-card-question',text:first?.content||'关于这篇文档'});
+    if(!active){const answer=t.messages.filter(m=>m.role==='assistant').at(-1)?.content||t.error||(this.aborter?'正在写下回答…':'尚无回答');card.createEl('p',{cls:'gloss-card-gist',text:answer.replace(/[#*_`]/g,'').slice(0,180)});card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-label','展开批注：'+first?.content);card.addEventListener('click',()=>this.activateThread(t));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.activateThread(t);}});}
+    else{for(let i=1;i<t.messages.length;i++){const m=t.messages[i];if(m.role==='user'){const q=card.createDiv({cls:'gloss-followup-question'});setIcon(q,'corner-down-right');q.createSpan({text:m.content});}else{const body=card.createDiv({cls:'gloss-answer markdown-rendered'});if(!m.content&&this.aborter)body.createDiv({cls:'gloss-writing',attr:{role:'status','aria-label':'正在写下回答'}});else{await MarkdownRenderer.render(this.app,passiveEmbeds(m.content),body,this.path,component);if(component!==this.marginRender)return;this.citeButtons(body,t);}}}
+      if(t.error)card.createDiv({cls:'gloss-error',text:t.error});
+      const foot=card.createDiv({cls:'gloss-card-footer'});foot.createSpan({text:this.plugin.store.settings.provider==='codex'?'Codex':'AI 伴读'});if(this.aborter)this.iconButton(foot,'square','停止回答',()=>this.stop());else{this.iconButton(foot,'copy','复制完整对话',async()=>{await navigator.clipboard.writeText(t.messages.map(m=>(m.role==='user'?'Q: ':'')+m.content).join('\n\n'));new Notice('已复制对话');});}
+      const form=card.createDiv({cls:'gloss-followup'}),input=form.createEl('input',{attr:{type:'text','aria-label':'继续追问这条批注',placeholder:'继续追问…'}});input.disabled=!!this.aborter;const submit=()=>{this.activeThread=t.id;this.selected=t.anchor;return this.send(input.value);};input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void submit().catch(showError);}});this.iconButton(form,'arrow-up','发送追问',submit,'gloss-followup-send');}
+    card.addEventListener('mouseenter',()=>this.setHover(t.id));card.addEventListener('mouseleave',()=>this.setHover());return card;}
+  private paragraphNumber(a:Anchor){const start=resolveAnchor(this.text,a);return start===null?null:this.passages.find(p=>p.end>start)?.number;}
+  private renderNote(parent:HTMLElement,h:Highlight,notebook=false){const card=parent.createEl('article',{cls:'gloss-margin-card gloss-personal-card'});card.dataset.cardId=h.id;card.dataset.color=h.color;if(!notebook){this.cards.set(h.id,card);const prior=this.previousPositions.get(h.id);if(prior){card.style.transform=prior;card.style.visibility='visible';card.dataset.placed='true';}}card.toggleClass('is-active',h.id===this.activeHighlight);const head=card.createDiv({cls:'gloss-card-heading'});head.createSpan({cls:'gloss-note-color',attr:{'data-color':h.color}});head.createSpan({text:'我的批注'});const number=this.paragraphNumber(h.anchor);if(number)button(head,'¶'+number,()=>this.jump(h.anchor),'gloss-citation');button(card,h.anchor.quote,()=>{this.selected=h.anchor;this.activeHighlight=h.id;this.showLens('actions');this.jump(h.anchor);},'gloss-note-quote');if(h.note)card.createEl('p',{cls:'gloss-personal-note',text:h.note});if(number===null)card.createDiv({cls:'gloss-stale',text:'原文已变更 · 摘录仍保留'});const actions=card.createDiv({cls:'gloss-note-actions'});this.iconButton(actions,'pen-line','编辑批注',()=>{this.selected=h.anchor;this.activeHighlight=h.id;this.showLens('note');});this.iconButton(actions,'message-circle','讨论这段',()=>{this.selected=h.anchor;this.activeThread=undefined;this.showLens('ask');this.updateContext();});this.iconButton(actions,'eraser','移除高亮',()=>this.removeHighlight(h.id));return card;}
+  private async renderMargin(){if(!this.margin)return;if(this.marginRender){this.removeChild(this.marginRender);this.marginRender.unload();}this.marginObserver?.disconnect();const component=new Component();this.marginRender=component;this.addChild(component);for(const[id,card]of this.cards)this.previousPositions.set(id,card.style.transform);this.margin.empty();this.drawerBody.empty();this.cards.clear();
+    const notes=this.data.highlights.filter(h=>!h.removed&&h.note);
+    for(const t of this.data.threads){await this.renderThread(this.margin,t,component);if(component!==this.marginRender)return;}
+    for(const h of notes)this.renderNote(this.margin,h);
+    if(!this.data.threads.length&&!notes.length){const hint=this.margin.createDiv({cls:'gloss-margin-hint'});hint.createEl('p',{text:'这里留给你的思考。'});hint.createEl('p',{text:'选中一句话，直接输入问题。回答会写在它旁边。'});}
+    const all=this.data.highlights.filter(h=>!h.removed);if(all.length){this.drawerBody.createEl('h3',{text:'划线与批注 · '+all.length});for(const h of all)this.renderNote(this.drawerBody,h,true);}
+    if(this.data.threads.length){this.drawerBody.createEl('h3',{text:'阅读对话 · '+this.data.threads.length});for(const t of this.data.threads){await this.renderThread(this.drawerBody,t,component,true);if(component!==this.marginRender)return;}}
+    if(!all.length&&!this.data.threads.length)this.drawerBody.createEl('p',{cls:'gloss-notebook-empty',text:'划线、批注和阅读中的好问题，都留在这里。'});
+    const removed=this.data.highlights.filter(h=>h.removed);if(removed.length)button(this.drawerBody,'恢复最近移除的高亮',async()=>{removed.at(-1)!.removed=false;await this.plugin.persist();this.paintHighlights();await this.renderMargin();},'gloss-restore');
+    this.marginObserver=new ResizeObserver(()=>this.scheduleLayout());for(const card of this.cards.values())this.marginObserver.observe(card);this.scheduleLayout();}
+  private scheduleLayout(){cancelAnimationFrame(this.frame);this.frame=requestAnimationFrame(()=>this.layoutMargin());}
+  private layoutMargin(){if(!this.margin?.isConnected)return;const compose=this.root.querySelector<HTMLElement>('.gloss-composer');if(compose){const r=this.page.getBoundingClientRect(),root=this.root.getBoundingClientRect();compose.style.left=(r.left-root.left+r.width/2)+'px';}const base=this.margin.getBoundingClientRect().top,items:MarginItem[]=[];
+    for(const t of this.data.threads){const card=this.cards.get(t.id);if(!card)continue;const rect=t.anchor?anchorRange(this.blocks,this.passages,this.text,t.anchor)?.getClientRects()[0]:this.article.getBoundingClientRect();const desired=rect?rect.top-base-6:0;items.push({id:t.id,desired:Math.max(0,desired),height:card.offsetHeight||64,created:t.created});}
+    for(const h of this.data.highlights.filter(h=>!h.removed&&h.note)){const card=this.cards.get(h.id);if(!card)continue;const rect=anchorRange(this.blocks,this.passages,this.text,h.anchor)?.getClientRects()[0];items.push({id:h.id,desired:Math.max(0,rect?rect.top-base-6:0),height:card.offsetHeight||48,created:h.created});}
+    items.sort((a,b)=>a.desired-b.desired||a.created-b.created);const positions=placeMarginItems(items,this.activeThread||this.activeHighlight);let bottom=0;for(const item of items){const card=this.cards.get(item.id)!;const first=!card.dataset.placed;if(first)card.style.transition='none';card.style.transform=`translateY(${Math.round(positions[item.id])}px)`;card.dataset.placed='true';card.style.visibility='visible';bottom=Math.max(bottom,positions[item.id]+item.height);if(first)requestAnimationFrame(()=>card.style.removeProperty('transition'));}
+    this.margin.style.minHeight=Math.max(this.page.offsetHeight,bottom+100)+'px';const hint=this.margin.querySelector<HTMLElement>('.gloss-margin-hint');if(hint)hint.style.transform=`translateY(${Math.max(0,this.article.getBoundingClientRect().top-base)}px)`;this.updateRail(true);}
+  async send(override?:string,forceWhole=false){if(this.aborter)return;const question=(override??this.composer.value).trim();if(!question){this.composer.focus();return;}if(blockedPath(this.path))throw new Error('此文档不能发送给模型。');if(!(this.app.vault.getAbstractFileByPath(this.path)instanceof TFile))throw new Error('原文已移除。');const path=this.path,data=this.data,settings={...this.plugin.store.settings};let target=data.threads.find(t=>t.id===this.activeThread);const whole=forceWhole||!this.selected||settings.context==='whole';const context=target?.context||contextFor(this.passages,forceWhole?undefined:this.selected,this.text,whole,settings.maxContext);
+    if(!target){const citations:Record<string,Anchor>={};for(const p of this.passages)if(context.includes(`[¶${p.number}] `))citations[String(p.number)]=makeAnchor(this.text,p.start,p.end);target={id:uid(),anchor:forceWhole?undefined:this.selected?{...this.selected}:undefined,messages:[],created:Date.now(),context,citations};data.threads.push(target);this.activeThread=target.id;}
+    const thread=target;thread.messages.push({role:'user',content:question});delete thread.error;const history=thread.messages.map(m=>({...m})),response={role:'assistant' as const,content:''};thread.messages.push(response);data.draft='';data.updated=Date.now();this.composer.value='';this.closeLens();this.article.ownerDocument.getSelection()?.removeAllRanges();
+    this.activeHighlight=undefined;const controller=new AbortController();this.aborter=controller;this.composer.disabled=true;setIcon(this.sendButton,'square');this.sendButton.setAttribute('aria-label','停止回答');this.sendButton.title='停止回答';this.fresh=thread.id;this.paintHighlights();this.updateContext();if(this.narrow){this.notebookOpen=true;this.drawer.hidden=false;}
+    try{await this.plugin.persist();await this.renderMargin();response.content=await askAgent({settings,context,quote:thread.anchor?.quote,messages:history,signal:controller.signal,onText:text=>{response.content=text;if(this.path!==path||this.aborter!==controller)return;clearTimeout(this.renderTimer);this.renderTimer=setTimeout(()=>void this.renderMargin().catch(showError),100);}});}catch(e){thread.error=e instanceof Error?e.message:'回答失败，请重试。';if(!response.content)thread.messages.pop();}
+    finally{clearTimeout(this.renderTimer);data.updated=Date.now();try{await this.plugin.persist();}catch(e){showError(e);}if(this.aborter===controller){this.aborter=undefined;if(this.path===path&&this.root.isConnected){this.composer.disabled=false;setIcon(this.sendButton,'arrow-up');this.sendButton.setAttribute('aria-label','发送问题');this.sendButton.title='发送问题';this.fresh=undefined;this.article.querySelectorAll('.is-new').forEach(el=>el.removeClass('is-new'));await this.renderMargin();}}}
   }
-  private captureProgress() {if (this.restoring || !this.scroller?.isConnected || !this.scroller.clientHeight || !this.path || !this.progressEl) return; const max = this.scroller.scrollHeight - this.scroller.clientHeight; const ratio = max > 0 ? this.scroller.scrollTop / max : 0; this.plugin.read(this.path).progress = Math.max(0, Math.min(1, ratio)); this.progressEl.style.setProperty('--gloss-progress', `${ratio * 100}%`); this.progressEl.setAttribute('aria-label', `阅读进度 ${Math.round(ratio * 100)}%`);}
-  private globalPoint(node: Node, offset: number): number | null {
-    const block = this.blocks.find(el => el.contains(node)); if (!block) return null;
-    const range = this.article.ownerDocument.createRange(); range.selectNodeContents(block); range.setEnd(node, offset);
-    return this.passages[this.blocks.indexOf(block)].start + range.toString().length;
-  }
-  captureSelection() {
-    const selection = this.article.ownerDocument.getSelection(); if (!selection || selection.isCollapsed || !selection.rangeCount) {this.lens.hide(); return;}
-    const range = selection.getRangeAt(0); if (!this.article.contains(range.commonAncestorContainer)) return;
-    const start = this.globalPoint(range.startContainer, range.startOffset), end = this.globalPoint(range.endContainer, range.endOffset);
-    if (start === null || end === null || end <= start) return;
-    const a = makeAnchor(this.text, start, end); if (!a.quote.trim()) return;
-    this.selected = a; this.activeThread = undefined; this.updateContext();
-    const box = range.getBoundingClientRect(), rootBox = this.root.getBoundingClientRect();
-    this.lens.show(); const width = this.lens.offsetWidth;
-    this.lens.style.left = Math.max(8, Math.min(this.root.clientWidth - width - 8, box.left - rootBox.left)) + 'px';
-    this.lens.style.top = Math.max(50, Math.min(this.root.clientHeight - this.lens.offsetHeight - 8, box.bottom - rootBox.top + 8)) + 'px';
-  }
-  private updateContext() {
-    if (!this.contextLabel) return;
-    const thread = this.plugin.read(this.path).threads.find(t => t.id === this.activeThread);
-    const anchor = thread?.anchor || this.selected;
-    this.contextLabel.textContent = thread ? '继续这条对话 · 保留最初上下文' : anchor ? '围绕选文提问' : '围绕当前文档提问';
-    this.quoteEl.textContent = anchor?.quote || (this.plugin.store.settings.context === 'whole' ? '本轮发送：当前文档全文' : '选中一段原文后，可仅发送它和相邻段落。');
-    this.quoteEl.toggleClass('has-quote', !!anchor);
-  }
-  private pointAt(block: HTMLElement, offset: number): {node: Node; offset: number} {
-    const doc = block.ownerDocument, walker = doc.createTreeWalker(block, NodeFilter.SHOW_TEXT); let seen = 0, last: Node = block;
-    while (walker.nextNode()) {last = walker.currentNode; const len = last.textContent?.length || 0; if (seen + len >= offset) return {node: last, offset: offset - seen}; seen += len;}
-    return {node: last, offset: last.nodeType === Node.TEXT_NODE ? last.textContent?.length || 0 : 0};
-  }
-  private paintHighlights() {
-    for (const mark of Array.from(this.article.querySelectorAll('mark[data-gloss-id]'))) mark.replaceWith(...Array.from(mark.childNodes));
-    this.article.normalize();
-    const records = this.plugin.read(this.path).highlights.filter(h => !h.removed);
-    // Work backwards so splitting text nodes preserves offsets, including overlapping marks.
-    for (const h of records.slice().reverse()) {
-      const at = resolveAnchor(this.text, h.anchor); if (at === null) continue;
-      for (let i = 0; i < this.passages.length; i++) {
-        const p = this.passages[i], start = Math.max(0, at - p.start), end = Math.min(p.text.length, at + h.anchor.quote.length - p.start); if (end <= start) continue;
-        const block = this.blocks[i]; const walker = block.ownerDocument.createTreeWalker(block, NodeFilter.SHOW_TEXT); const segments: {node: Text; start: number; end: number}[] = []; let seen = 0;
-        while (walker.nextNode()) {const node = walker.currentNode as Text, len = node.length; if (seen < end && seen + len > start) segments.push({node, start: Math.max(0, start - seen), end: Math.min(len, end - seen)}); seen += len;}
-        for (const s of segments.reverse()) {const range = block.ownerDocument.createRange(); range.setStart(s.node, s.start); range.setEnd(s.node, s.end); const mark = block.ownerDocument.createElement('mark'); mark.dataset.glossId = h.id; mark.dataset.color = h.color; mark.title = h.note || '点击查看高亮'; range.surroundContents(mark);}
-      }
-    }
-  }
-  private async highlight(color: string) {
-    if (!this.selected) return;
-    const data = this.plugin.read(this.path); const existing = data.highlights.find(h => !h.removed && h.anchor.start === this.selected!.start && h.anchor.quote === this.selected!.quote);
-    if (existing) existing.color = color; else data.highlights.push({id: uid(), anchor: {...this.selected}, color, note: '', created: Date.now()});
-    data.updated = Date.now(); await this.plugin.persist(); this.paintHighlights(); this.lens.hide(); this.root.addClass('gloss-side-open'); this.tab = 'highlights'; await this.renderMargin();
-  }
-  private annotate(id?: string) {
-    const path = this.path, data = this.plugin.read(path), existing = id ? data.highlights.find(h => h.id === id) : undefined;
-    const anchor = existing?.anchor || this.selected; if (!anchor) {new Notice('请先选择一段原文。'); return;}
-    new NoteModal(this.app, existing?.note || '', async note => {
-      if (existing) existing.note = note;
-      else data.highlights.push({id: uid(), anchor: {...anchor}, color: 'yellow', note, created: Date.now()});
-      data.updated = Date.now(); await this.plugin.persist();
-      if (this.path === path) {this.paintHighlights(); this.tab = 'highlights'; this.lens.hide(); await this.renderMargin();}
-    }).open();
-  }
-  private jump(anchor: Anchor) {
-    const start = resolveAnchor(this.text, anchor); if (start === null) {new Notice('原文已变化，暂时无法可靠定位。摘录仍完整保留。'); return;}
-    const index = this.passages.findIndex(p => p.end > start); const block = this.blocks[index]; if (!block) return;
-    block.scrollIntoView({behavior: 'smooth', block: 'center'}); block.addClass('gloss-jump'); setTimeout(() => block.removeClass('gloss-jump'), 1600);
-  }
-  revealSaved(id: string) {const data = this.plugin.read(this.path), highlight = data.highlights.find(h => h.id === id), thread = data.threads.find(t => t.id === id); if (highlight) {this.tab = 'highlights'; this.jump(highlight.anchor);} if (thread) {this.tab = 'threads'; this.activeThread = thread.id; this.selected = thread.anchor; if (thread.anchor) this.jump(thread.anchor); this.updateContext();} void this.renderMargin();}
-  private citeButtons(parent: HTMLElement, thread: Thread) {
-    const walker = parent.ownerDocument.createTreeWalker(parent, NodeFilter.SHOW_TEXT); const nodes: Text[] = [];
-    while (walker.nextNode()) {const n = walker.currentNode as Text; if (/\[¶\d+\]/.test(n.data) && !n.parentElement?.closest('code,pre,a,button')) nodes.push(n);}
-    for (const node of nodes) {const frag = parent.ownerDocument.createDocumentFragment(); let end = 0; const regex = /\[¶(\d+)\]/g; let match;
-      while ((match = regex.exec(node.data))) {frag.append(node.data.slice(end, match.index)); const b = parent.ownerDocument.createElement('button'); b.className = 'gloss-citation'; b.textContent = match[0]; const anchor = thread.citations?.[match[1]]; if (anchor) b.onclick = () => this.jump(anchor); else {b.disabled = true; b.title = '回答引用了未提供的段落，无法定位';} frag.append(b); end = regex.lastIndex;} frag.append(node.data.slice(end)); node.replaceWith(frag);
-    }
-  }
-  private async renderMargin() {
-    if (!this.margin) return;
-    this.marginRender?.unload(); this.marginRender && this.removeChild(this.marginRender);
-    const component = new Component(); this.marginRender = component; this.addChild(component);
-    const parent = this.margin; const scroll = parent.scrollTop; parent.empty();
-    this.root.querySelectorAll('.gloss-tabs button').forEach((b, i) => b.toggleClass('is-active', i === (this.tab === 'threads' ? 0 : 1)));
-    const data = this.plugin.read(this.path);
-    if (this.tab === 'highlights') {
-      const items = data.highlights.filter(h => !h.removed);
-      if (!items.length) {parent.createEl('h3', {text: '把值得停留的句子留下'}); parent.createEl('p', {text: '选中文字后，可以划线或写下你的理解。它们会留在这篇文档旁边。', cls: 'gloss-empty'});}
-      for (const h of items) {
-        const card = parent.createDiv({cls: 'gloss-highlight-card'}); card.dataset.color = h.color;
-        button(card, h.anchor.quote, () => this.jump(h.anchor), 'gloss-quote-button');
-        if (resolveAnchor(this.text, h.anchor) === null) card.createDiv({cls: 'gloss-stale', text: '原文已变化 · 摘录已保留，暂无法定位'});
-        if (h.note) card.createDiv({cls: 'gloss-personal-note', text: h.note});
-        const actions = card.createDiv({cls: 'gloss-card-actions'});
-        button(actions, h.note ? '编辑批注' : '写批注', () => this.annotate(h.id));
-        button(actions, '讨论这段', () => {this.selected = h.anchor; this.activeThread = undefined; this.tab = 'threads'; this.updateContext(); void this.renderMargin(); this.composer.focus();});
-        button(actions, '移除', async () => {h.removed = true; await this.plugin.persist(); this.paintHighlights(); await this.renderMargin();});
-      }
-      const removed = data.highlights.filter(h => h.removed); if (removed.length) button(parent, `恢复最近移除的高亮（${removed.length}）`, async () => {removed[removed.length - 1].removed = false; await this.plugin.persist(); this.paintHighlights(); await this.renderMargin();}, 'gloss-restore');
-    } else {
-      if (!data.threads.length) {parent.createDiv({cls: 'gloss-empty-symbol', text: '“'}); parent.createEl('h3', {text: '好问题，从一句话开始。'}); parent.createEl('p', {cls: 'gloss-empty', text: '选中左侧原文，问它是什么意思、请它举例，或试着提出一个反例。回答和来源会一起留在这里。'});}
-      for (const t of data.threads) {
-        const card = parent.createDiv({cls: 'gloss-thread'}); card.toggleClass('is-active', t.id === this.activeThread); card.dataset.threadId = t.id;
-        if (t.anchor) button(card, t.anchor.quote, () => this.jump(t.anchor!), 'gloss-quote-button');
-        else card.createDiv({cls: 'gloss-thread-scope', text: '整篇文档'});
-        for (const m of t.messages) {
-          const msg = card.createDiv({cls: `gloss-message gloss-message-${m.role}`}); msg.createDiv({cls: 'gloss-role', text: m.role === 'user' ? '我的问题' : 'Agent'});
-          const content = msg.createDiv({cls: 'markdown-rendered'});
-          await MarkdownRenderer.render(this.app, passiveEmbeds(m.content), content, this.path, component);
-          if (component !== this.marginRender) return; if (m.role === 'assistant') this.citeButtons(content, t);
-        }
-        if (t.error) card.createDiv({cls: 'gloss-error', text: t.error});
-        if (this.aborter && t.id === this.activeThread && t.messages[t.messages.length - 1]?.role !== 'assistant') card.createDiv({cls: 'gloss-waiting', text: '正在阅读上下文…'});
-        const actions = card.createDiv({cls: 'gloss-card-actions'});
-        button(actions, '继续追问', () => {this.activeThread = t.id; this.selected = t.anchor; this.updateContext(); this.composer.focus(); void this.renderMargin();});
-        button(actions, '复制对话', async () => {await navigator.clipboard.writeText(t.messages.map(m => `${m.role === 'user' ? '我的问题' : 'Agent'}\n\n${m.content}`).join('\n\n')); new Notice('已复制对话');});
-      }
-    }
-    parent.scrollTop = scroll;
-  }
-  async send() {
-    if (this.aborter) return;
-    const question = this.composer.value.trim(); if (!question) {this.composer.focus(); return;}
-    if (blockedPath(this.path)) throw new Error('此文档不能发送给模型。');
-    const path = this.path, data = this.plugin.read(path), settings = {...this.plugin.store.settings};
-    let thread = data.threads.find(t => t.id === this.activeThread);
-    const whole = settings.context === 'whole';
-    if (!thread && !this.selected && !whole) throw new Error('请先选中一段文字，或将范围切换为“当前文档全文”。');
-    const context = thread?.context || contextFor(this.passages, this.selected, this.text, whole, settings.maxContext);
-    if (!thread) {
-      const citations: Record<string, Anchor> = {};
-      for (const p of this.passages) if (context.includes(`[¶${p.number}] `)) citations[String(p.number)] = makeAnchor(this.text, p.start, p.end);
-      thread = {id: uid(), anchor: this.selected ? {...this.selected} : undefined, messages: [], created: Date.now(), context, citations}; data.threads.push(thread); this.activeThread = thread.id;
-    }
-    const target = thread; target.messages.push({role: 'user', content: question}); delete target.error; data.draft = ''; data.updated = Date.now();
-    this.composer.value = ''; await this.plugin.persist();
-    this.aborter = new AbortController(); const controller = this.aborter; this.sendButton.textContent = '停止 ■'; this.composer.disabled = true; this.tab = 'threads'; this.updateContext(); await this.renderMargin();
-    const response = {role: 'assistant' as const, content: ''}; const history = target.messages.map(m => ({...m})); target.messages.push(response);
-    try {
-      response.content = await askAgent({settings, context, quote: target.anchor?.quote, messages: history, signal: controller.signal, onText: text => {
-        response.content = text;
-        if (this.path !== path || this.aborter !== controller) return;
-        clearTimeout(this.renderTimer); this.renderTimer = setTimeout(() => {void this.renderMargin().catch(showError);}, 120);
-      }});
-    } catch(e) {target.error = e instanceof Error ? e.message : '回答失败，请重试。'; if (!response.content) target.messages.pop();}
-    finally {
-      clearTimeout(this.renderTimer); data.updated = Date.now(); await this.plugin.persist();
-      if (this.aborter === controller) {this.aborter = undefined; this.sendButton.textContent = '发送 ↗'; this.composer.disabled = false; if (this.path === path) {await this.renderMargin(); this.margin.scrollTop = this.margin.scrollHeight;}}
-    }
-  }
-  stop() {this.aborter?.abort();}
-  private async exportNotes() {
-    const data = this.plugin.read(this.path); if (!data.highlights.some(h => !h.removed) && !data.threads.length) {new Notice('先留下一条高亮、批注或对话再导出。'); return;}
-    const folder = '收集箱'; if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
-    const title = this.path.split('/').pop()!.replace(/\.md$/, '').replace(/[\\/:*?"<>|\[\]#^]/g, '-');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-'); let path = normalizePath(`${folder}/${title}-阅读笔记-${stamp}.md`);
-    if (this.app.vault.getAbstractFileByPath(path)) path = normalizePath(`${folder}/${title}-阅读笔记-${stamp}-${uid().slice(0, 6)}.md`);
-    await this.app.vault.create(path, exportReading(this.path, data, this.app.vault.getName())); new Notice(`阅读笔记已保存到 ${path}`);
-  }
-  async onClose() {this.revision++; this.stop(); this.resizeObserver?.disconnect(); clearTimeout(this.progressTimer); clearTimeout(this.renderTimer); clearTimeout(this.reloadTimer); this.captureProgress(); this.root?.remove(); await this.flushDraft();}
+  stop(){this.aborter?.abort();}
+  private async exportNotes(){const data=this.data;if(!data.highlights.some(h=>!h.removed)&&!data.threads.length){new Notice('先留下一条划线、批注或对话。');return;}const folder='收集箱';if(!this.app.vault.getAbstractFileByPath(folder))await this.app.vault.createFolder(folder);const title=this.path.split('/').pop()!.replace(/\.md$/,'').replace(/[\\/:*?"<>|\[\]#^]/g,'-'),stamp=new Date().toISOString().replace(/[:.]/g,'-');let path=normalizePath(`${folder}/${title}-阅读笔记-${stamp}.md`);if(this.app.vault.getAbstractFileByPath(path))path=normalizePath(`${folder}/${title}-阅读笔记-${stamp}-${uid().slice(0,6)}.md`);await this.app.vault.create(path,exportReading(this.path,data,this.app.vault.getName()));new Notice('阅读笔记已保存到 '+path);}
+  async onClose(){this.revision++;this.stop();this.resizeObserver?.disconnect();this.marginObserver?.disconnect();cancelAnimationFrame(this.frame);clearTimeout(this.progressTimer);clearTimeout(this.draftTimer);clearTimeout(this.renderTimer);clearTimeout(this.reloadTimer);this.root?.remove();await this.flushDraft();}
 }
 
 class GlossSettings extends PluginSettingTab {
@@ -459,6 +397,6 @@ class GlossSettings extends PluginSettingTab {
     new Setting(el).setName('上下文字符上限').setDesc('超出时提示缩小范围，不静默截断文档。').addText(t => t.setValue(String(s.maxContext)).onChange(async v => {const n = Number(v); if (Number.isFinite(n) && n >= 1000 && n <= 300000) {s.maxContext = Math.round(n); await save();}}));
     el.createEl('h3', {text: '存储与边界'});
     el.createEl('p', {text: '批注、对话、草稿与进度保存在插件 data.json 中。导出会在收集箱新建 Markdown 笔记，原文不改写。私密日记与受保护目录不进入本阅读器。嵌入的其他笔记不会自动展开给模型。'});
-    el.createEl('p', {text: '当前支持 Markdown；PDF、EPUB、网页导入和朗读尚未实现。快捷键：F 沉浸，Esc 退出，/ 聚焦提问，⌘/Ctrl+Enter 发送。'});
+    el.createEl('p', {text: '当前支持 Markdown；PDF、EPUB、网页导入和朗读尚未实现。快捷键：F 沉浸，Esc 退出，/ 询问全文，选文后直接输入提问，Enter 发送。'});
   }
 }

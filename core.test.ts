@@ -4,6 +4,33 @@ import * as http from 'node:http';
 import { once } from 'node:events';
 import { makeAnchor, resolveAnchor, indexPassages, contextFor, freshReading, exportReading, blockedPath } from './core';
 import { apiEndpoint, askAgent, parseCodexLine } from './agent';
+import {placeMarginItems, segmentMarks} from './reading-ui';
+
+test('margin notes remain next to their paragraphs when they do not collide',()=>{
+  assert.deepEqual(placeMarginItems([{id:'a',desired:100,height:60,created:1},{id:'b',desired:300,height:90,created:2}]),{a:100,b:300});
+});
+test('active margin comment keeps its anchor while neighboring notes move above and below',()=>{
+  const items=[{id:'a',desired:200,height:60,created:1},{id:'active',desired:220,height:180,created:2},{id:'b',desired:240,height:50,created:3}];
+  assert.deepEqual(placeMarginItems(items,'active'),{a:144,active:220,b:416});
+});
+test('dense comments never overlap or extend above the page',()=>{
+  const items=[{id:'a',desired:0,height:110,created:1},{id:'b',desired:3,height:170,created:2},{id:'c',desired:9,height:40,created:3}];
+  const tops=placeMarginItems(items,'b');assert.ok(tops.a>=0);for(let i=1;i<items.length;i++)assert.ok(tops[items[i].id]>=tops[items[i-1].id]+items[i-1].height+16);
+  assert.deepEqual(placeMarginItems([]),{});
+});
+test('overlapping reader highlight and AI underline retain both identities without nested marks',()=>{
+  const segments=segmentMarks(12,[{id:'h',start:1,end:9,kind:'highlight',color:'blue'},{id:'g',start:5,end:11,kind:'thread'}]);
+  assert.deepEqual(segments.map(s=>[s.start,s.end,s.highlights.map(h=>h.id),s.threads.map(g=>g.id)]),[[0,1,[],[]],[1,5,['h'],[]],[5,9,['h'],['g']],[9,11,[],['g']],[11,12,[],[]]]);
+  assert.equal(segments.reduce((sum,s)=>sum+s.end-s.start,0),12);
+});
+test('a newer overlapping color does not destroy the previous highlight boundaries',()=>{
+  const segments=segmentMarks(9,[{id:'yellow',start:0,end:7,kind:'highlight',color:'yellow'},{id:'pink',start:3,end:9,kind:'highlight',color:'pink'}]);
+  assert.deepEqual(segments.map(s=>s.highlights.at(-1)?.color),['yellow','pink','pink']);assert.equal(segments[1].highlights.length,2);
+});
+test('cross-paragraph marks clip to each text block without adding or dropping characters',()=>{
+  const segments=segmentMarks(6,[{id:'wide',start:-4,end:4,kind:'highlight',color:'green'},{id:'next',start:4,end:11,kind:'thread'},{id:'invalid',start:7,end:3,kind:'pending'}]);
+  assert.deepEqual(segments.map(s=>[s.start,s.end]),[[0,4],[4,6]]);assert.equal(segments[0].highlights[0].id,'wide');assert.equal(segments[1].threads[0].id,'next');assert.ok(segments.every(s=>!s.pending));
+});
 
 test('Chinese selection survives inserted paragraphs and repeated phrases', () => {
   const source = '第一章\n\n我们在这里慢慢阅读。\n\n第二章\n\n我们在这里慢慢阅读。';

@@ -1,14 +1,16 @@
 # Gloss Reader for Obsidian
 
-在 Markdown 文档旁边阅读、提问、划线和留下理解的桌面插件。版本 0.1.0。
+在 Markdown 文档旁边阅读、提问、划线和留下理解的桌面插件。版本 0.2.0。
+
+本版直接适配 Gloss 的阅读界面源码：字体、纸张纹理、页面网格、黑色选文浮层、四色高亮、朱红下划线、页边卡片和段落缩略轨道。React / Next.js 的界面机制译为 Obsidian ItemView 与原生 DOM，模型服务沿用本插件的 Codex CLI / 兼容 API 两种接入。
 
 ## 使用
 
 - 打开一篇 Markdown，点击左侧 `Gloss · 阅读与思考`，或运行命令 `Gloss Reader: 在 Gloss 中阅读当前文档`；文件右键也可进入。
-- 选中正文：问 Agent、黄/绿/粉三色高亮、写批注。选中不会自动发送。
-- 右侧选择“选文及相邻段落”或“当前文档全文”，输入问题，点击发送或按 ⌘/Ctrl+Enter。可停止、继续追问、复制对话。
+- 选中正文：问 Agent、黄/绿/蓝/粉四色高亮、写批注。高亮按钮悬停展开颜色，选文工具条内可直接编辑问题或批注。选中不会自动发送。
+- 底部浮动提问栏切换“选文 / 全文”，输入问题，按 Enter 发送、Shift+Enter 换行。也可在选文浮层发问。回答显示在对应段落旁，可展开、停止、继续追问或复制。窄分栏通过笔记本查看回答。
 - 回答中的 `[¶n]` 返回对应原文。每条对话保留开始时的上下文与引用锚点；原文变化后用摘录重新定位，无法可靠匹配会明确提示。
-- F 进入沉浸阅读，Esc 退出；/ 聚焦提问。工具栏可调整纸张、字体、字号、行距，或打开目录。
+- F 进入沉浸阅读，Esc 退出；/ 聚焦提问。工具栏可调整纸张、字体、字号、行距，或打开目录；左侧段落缩略轨道支持点击与拖动。沉浸模式仍可选文和与 Agent 交互。
 - “导出笔记”会在 `收集箱/` 新建 Markdown，含摘录、批注、完整对话与原文回跳链接。不会覆盖旧笔记。
 
 ## Agent
@@ -36,14 +38,24 @@ npm test
 npm run build
 ```
 
-将 `main.js`、`styles.css`、`manifest.json` 放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。
+将 `main.js`、`styles.css`、`manifest.json` 和 `THIRD_PARTY_NOTICES.md` 放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。
 
-## 参考和实现边界
+## 来源和适配范围
 
-- [Nutlope/gloss](https://github.com/Nutlope/gloss)：参考选文问答、页边理解、段落引用和沉浸阅读的公开交互。2026-10-15 检查的仓库未包含 LICENSE，因此没有拷贝其源代码或素材。
-- [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader)：参考主动选文提问、独立阅读上下文、保存回答、回到来源和保留伴读的专注模式。未拷贝源码、字体或示例书。
+- [Nutlope/gloss](https://github.com/Nutlope/gloss)：直接适配阅读区 CSS、选文浮层、分段标记、页边避让和缩略轨道的布局与交互；真实 Newsreader / Schibsted 字体嵌入本地 CSS，可离线显示。源文件对应和字体许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader)：参考主动选文提问、独立阅读上下文和伴读专注模式，未拷贝其源码、字体或示例书。
 
-本插件独立实现，不代表上述项目的官方移植或授权衍生版本。
+本插件不是上述项目的官方版本。Gloss 原版的账户、云端书架、网页导入和 Together 专用服务未移入。Obsidian 中使用中文操作文案和本地文档选择；中文正文使用系统衬线回退字体。
+
+## 0.2.0 验证记录（2026-10-15）
+
+- TypeScript 检查、构建通过；18 项自动测试通过，包含页边活动卡片优先避让、重叠标记分段和跨段落裁剪。
+- 实际打开与原版相同的公开文章，对照字体、换行、栏宽、留白、选文工具条和纸张颜色；记录见 [design-qa.md](design-qa.md)。
+- Obsidian 实际完成蓝色高亮、内联批注、一次真实 Codex 选文问答、回答内段落引用回跳与笔记导出。导出包含完整摘录、个人批注、回答和回跳链接。
+- 700px 夜读和 390px 桌面分栏容器均检查笔记本与工具栏可访问；未将容器检查称为移动端实测。
+- 完整停用 / 启用后阅读位置 45.0015% → 45.0015%；本版示例一条高亮、一条对话的两条消息保留，0.1.0 示例高亮和四条消息保留。
+- 修复 Obsidian 重载占位页被误认为真实阅读器，以及卸载阶段临时布局把阅读进度覆盖为零的问题。
+- API 接入沿用 0.1.0 的本地模拟验证，尚未使用外部服务商实测。运行数据不持久化 API Key；公开示例和运行数据不提交至源码仓库。
 
 ## 0.1.0 验证记录（2026-10-15）
 

@@ -1,1 +1,9 @@
-{"id":"gloss-reader","name":"Gloss Reader","version":"0.1.0","minAppVersion":"1.8.0","description":"Read Markdown with an AI companion, anchored highlights, margin notes and focus mode.","author":"Trey","isDesktopOnly":true}
+{
+  "id": "gloss-reader",
+  "name": "Gloss Reader",
+  "version": "0.2.0",
+  "minAppVersion": "1.8.0",
+  "description": "Read Markdown with an AI companion, anchored highlights, margin notes and focus mode.",
+  "author": "Trey",
+  "isDesktopOnly": true
+}
