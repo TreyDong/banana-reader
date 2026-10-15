@@ -1,0 +1,67 @@
+export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
+export interface Passage { text: string; start: number; end: number; number: number }
+export interface Message { role: 'user' | 'assistant'; content: string }
+export interface Thread { id: string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean }
+export interface Reading { highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
+export const freshReading = (): Reading => ({highlights: [], threads: [], progress: 0, draft: '', updated: Date.now()});
+export function makeAnchor(text: string, start: number, end: number): Anchor {
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  return { quote: text.slice(start, end), start, prefix: text.slice(Math.max(0, start - 48), start), suffix: text.slice(end, end + 48) };
+}
+export function resolveAnchor(text: string, a: Anchor): number | null {
+  if (!a.quote) return null;
+  const candidates: {pos: number; score: number}[] = [];
+  let pos = text.indexOf(a.quote);
+  while (pos !== -1) {
+    let score = 0;
+    for (let i = 1; i <= a.prefix.length && pos >= i; i++) { if (text[pos - i] !== a.prefix[a.prefix.length - i]) break; score++; }
+    for (let i = 0; i < a.suffix.length && pos + a.quote.length + i < text.length; i++) { if (text[pos + a.quote.length + i] !== a.suffix[i]) break; score++; }
+    candidates.push({pos, score});
+    pos = text.indexOf(a.quote, pos + 1);
+  }
+  if (candidates.length === 1) return candidates[0].pos;
+  candidates.sort((a, b) => b.score - a.score);
+  if (!candidates.length || !candidates[0].score || candidates[0].score === candidates[1].score) return null;
+  return candidates[0].pos;
+}
+export function indexPassages(texts: string[]): {text: string; passages: Passage[]} {
+  let text = '';
+  const passages = texts.map((t, i) => {
+    const start = text.length; text += t;
+    const result = {text: t, start, end: text.length, number: i + 1};
+    if (i < texts.length - 1) text += '\n\n';
+    return result;
+  });
+  return {text, passages};
+}
+export function contextFor(passages: Passage[], anchor: Anchor | undefined, text: string, whole: boolean, maxChars: number): string {
+  let chosen = passages;
+  if (!whole && anchor) {
+    const start = resolveAnchor(text, anchor);
+    if (start === null) throw new Error('原文已变化，无法可靠定位选文。请重新选择。');
+    const first = passages.findIndex(p => p.end > start);
+    const last = passages.findIndex(p => p.end >= start + anchor.quote.length);
+    chosen = passages.slice(Math.max(0, first - 1), Math.min(passages.length, Math.max(first, last) + 2));
+  }
+  const context = chosen.map(p => `[¶${p.number}] ${p.text}`).join('\n\n');
+  if (context.length > maxChars) throw new Error(`本轮上下文超过 ${maxChars.toLocaleString()} 字符，请缩小选区或改为“选文及相邻段落”。`);
+  return context;
+}
+export function blockedPath(path: string): boolean {
+  return path.split('/').some(p => ['日记', '60_工作库', '20_投资库', 'A1_交易数据'].includes(p));
+}
+export function exportReading(path: string, data: Reading, vault: string): string {
+  const source = `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(path)}`;
+  let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
+  const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
+  for (const h of data.highlights.filter(h => !h.removed)) {
+    md += `## 摘录\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
+  }
+  for (const t of data.threads) {
+    md += `## 阅读对话\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
+    for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'}\n\n${m.content}\n\n`;
+  }
+  return md;
+}
