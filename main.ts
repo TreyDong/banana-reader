@@ -1,13 +1,15 @@
 import { Plugin, ItemView, WorkspaceLeaf, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, setIcon } from 'obsidian';
 import { type Anchor, type Thread, type Reading, type Passage, type Highlight, freshReading, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading } from './core';
-import { type AgentSettings, askAgent } from './agent';
+import { type AgentSettings, type ApiProtocol, API_DEFAULTS, askAgent } from './agent';
 
 import {placeMarginItems, anchorRange, paintMarks, type TextMark, type MarginItem} from './reading-ui';
 
+import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand,type ReadingCommand} from './prompts';
+
 const VIEW = 'gloss-reader';
-interface Settings extends AgentSettings { theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean }
+interface Settings extends AgentSettings { theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}> }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false};
+const DEFAULTS: Settings = {commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false};
 const uid = () => crypto.randomUUID();
 function button(parent: HTMLElement, text: string, action: () => void | Promise<void>, cls = ''): HTMLButtonElement {
   const b = parent.createEl('button', {text, cls}); b.type = 'button';
@@ -26,6 +28,7 @@ export default class GlossPlugin extends Plugin {
   async onload() {
     const saved = await this.loadData();
     this.store = {version: 2, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
+    this.store.settings.commands=normalizeCommands(saved?.settings?.commands);
     if (saved && (saved.version || 1) < 2) {
       if (saved.settings?.fontSize === 19) this.store.settings.fontSize = 20;
       if (saved.settings?.lineHeight === 1.95) this.store.settings.lineHeight = 1.64;
@@ -264,7 +267,7 @@ class GlossView extends ItemView {
     this.app.workspace.requestSaveLayout();
   }
   applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.scheduleLayout();}
-  refreshSettings(){this.applyAppearance();if(!this.root)return;const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.plugin.store.settings.context==='whole'?'全文':(this.selected?'选文':'全文');this.updateContext();}
+  refreshSettings(){this.applyAppearance();if(!this.root)return;const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.plugin.store.settings.context==='whole'?'全文':(this.selected?'选文':'全文');this.updateContext();if(this.selected&&this.lens&&!this.lens.hidden&&this.lensMode==='actions')this.showLens('actions');}
   async exitReader(){this.captureProgress();await this.flushDraft();this.toggleFocus(false);const existing=this.app.workspace.getLeavesOfType('markdown').find(l=>l.getViewState().state?.file===this.path);if(existing){await this.app.workspace.revealLeaf(existing);this.leaf.detach();}else await this.leaf.setViewState({type:'markdown',state:{file:this.path},active:true});}
   toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);}if(this.focusButton){setIcon(this.focusButton,'arrow-left');this.focusButton.setAttribute('aria-label','返回普通文档');this.focusButton.title='返回文档 · Esc';}if(changing)requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.scheduleLayout();});}
   private toggleNotebook(next=!this.notebookOpen){this.notebookOpen=next;this.drawer.hidden=!next;this.root.toggleClass('gloss-notebook-open',next);if(next)void this.renderMargin();}
@@ -307,9 +310,8 @@ class GlossView extends ItemView {
     if(!this.selected)return;this.lensMode=mode;this.lens.empty();this.lens.hidden=false;this.lens.classList.toggle('is-editor',mode!=='actions');
     if(mode==='actions'){
       const ask=button(this.lens,'提问',()=>this.showLens('ask'),'gloss-lens-action gloss-lens-ask');ask.createSpan({cls:'gloss-lens-caret'});this.lens.createSpan({cls:'gloss-lens-divider'});
-      const explain=button(this.lens,'',()=>this.send('请解释这段话在文中的含义和作用。'),'gloss-lens-action');setIcon(explain,'lightbulb');explain.createSpan({text:'解释'});
-      const define=button(this.lens,'',()=>this.send('请解释选文中的概念或用词，并给出具体例子。'),'gloss-lens-action');setIcon(define,'book-a');define.createSpan({text:'释义'});
-      this.iconButton(this.lens,'ellipsis','更多选文操作',()=>this.showMoreActions(),'gloss-lens-action');this.lens.createSpan({cls:'gloss-lens-divider'});
+      for(const command of this.plugin.store.settings.commands.slice(0,2))button(this.lens,command.name,()=>this.runCommand(command),'gloss-lens-action gloss-command-action');
+      this.iconButton(this.lens,'ellipsis','更多选文指令',()=>this.showMoreActions(),'gloss-lens-action');this.lens.createSpan({cls:'gloss-lens-divider'});
       const group=this.lens.createDiv({cls:'gloss-marker-group'}),marker=this.iconButton(group,'highlighter','高亮选文',()=>this.highlight(this.plugin.store.settings.marker||'yellow'),'gloss-lens-action');marker.dataset.color=this.plugin.store.settings.marker||'yellow';
       const palette=group.createDiv({cls:'gloss-marker-palette'});for(const [color,label]of [['yellow','黄色'],['green','绿色'],['blue','蓝色'],['pink','粉色']]){const b=button(palette,'',()=>this.highlight(color),'gloss-marker-dot');b.dataset.color=color;b.setAttribute('aria-label',label+'高亮');b.title=label;b.classList.toggle('is-on',color===(this.plugin.store.settings.marker||'yellow'));}
       this.iconButton(this.lens,'pen-line','写批注',()=>this.showLens('note'),'gloss-lens-action');
@@ -318,14 +320,15 @@ class GlossView extends ItemView {
       const head=this.lens.createDiv({cls:'gloss-lens-editor-head'});head.createSpan({text:mode==='ask'?'关于这段话':'用自己的话记下来'});this.iconButton(head,'x','关闭选文输入',()=>this.closeLens(),'gloss-lens-action');
       this.lensInput=this.lens.createEl('textarea',{cls:'gloss-lens-input',attr:{'aria-label':mode==='ask'?'选文提问':'选文批注',placeholder:mode==='ask'?'这句话为什么这样说？':'这段话让你想到了什么？',rows:mode==='ask'?'2':'3'}});
       const existing=this.data.highlights.find(h=>h.id===this.activeHighlight);this.lensInput.value=mode==='note'?existing?.note||'':initial;
-      const footer=this.lens.createDiv({cls:'gloss-lens-editor-footer'});if(mode==='ask'){for(const [label,prompt]of [['举个例子','请举一个具体例子。'],['为什么重要','这段话为什么重要？']])button(footer,label,()=>this.send(prompt),'gloss-lens-starter');this.iconButton(footer,'arrow-up','发送选文问题',()=>this.send(this.lensInput?.value),'gloss-lens-submit');}
+      const footer=this.lens.createDiv({cls:'gloss-lens-editor-footer'});if(mode==='ask'){this.iconButton(footer,'arrow-up','发送选文问题',()=>this.send(this.lensInput?.value),'gloss-lens-submit');}
       else button(footer,'保存批注',()=>this.saveLensNote(),'gloss-lens-save');
       this.lensInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&(mode==='ask'||e.metaKey||e.ctrlKey)){e.preventDefault();void(mode==='ask'?this.send(this.lensInput!.value):this.saveLensNote()).catch(showError);}});
       this.lensInput.focus();this.lensInput.setSelectionRange(this.lensInput.value.length,this.lensInput.value.length);
     }
     this.placeLens();
   }
-  private showMoreActions(){const extra=this.lens.querySelector('.gloss-lens-more');if(extra){extra.remove();return;}const row=this.lens.createDiv({cls:'gloss-lens-more'});for(const[label,prompt]of [['简化','请用更简单的语言解释选文。'],['反例','这个判断有哪些前提和反例？'],['翻译','请翻译选文：英文译中文，中文译英文。']])button(row,label,()=>this.send(prompt),'gloss-lens-action');button(row,'复制',async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();},'gloss-lens-action');this.placeLens();}
+  private async runCommand(command:ReadingCommand){if(!this.selected)return;await this.send(renderCommand(command.prompt,this.selected.quote,this.path.split('/').pop()?.replace(/\.md$/,'')||''));}
+  private showMoreActions(){const extra=this.lens.querySelector('.gloss-lens-more');if(extra){extra.remove();return;}const row=this.lens.createDiv({cls:'gloss-lens-more'});for(const c of this.plugin.store.settings.commands.slice(2))button(row,c.name,()=>this.runCommand(c),'gloss-lens-action gloss-command-action');button(row,'复制',async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();},'gloss-lens-action');this.iconButton(row,'settings-2','管理选文指令',()=>{this.closeLens();(this.app as any).setting.open();(this.app as any).setting.openTabById(this.plugin.manifest.id);const tab=(this.app as any).setting.activeTab;if(tab instanceof GlossSettings){tab.tab='commands';tab.display();}},'gloss-lens-action');this.placeLens();}
   private placeLens(){if(!this.selected||this.lens.hidden)return;const r=anchorRange(this.blocks,this.passages,this.text,this.selected);if(!r)return;const rects=Array.from(r.getClientRects()).filter(r=>r.width>0);if(!rects.length)return;const first=rects[0],last=rects.at(-1)!,box=this.root.getBoundingClientRect(),w=this.lens.offsetWidth,h=this.lens.offsetHeight,center=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;const x=Math.max(12,Math.min(this.root.clientWidth-w-12,center-box.left-w/2));const above=first.top-box.top-h-12>=66;const y=above?first.top-box.top-h-12:last.bottom-box.top+12;this.lens.style.left=x+'px';this.lens.style.top=Math.max(66,Math.min(this.root.clientHeight-h-12,y))+'px';this.lens.style.setProperty('--gloss-arrow',Math.max(18,Math.min(w-18,(above?first.left+Math.min(40,first.width/2):(last.left+last.right)/2)-box.left-x))+'px');this.lens.classList.toggle('is-below',!above);}
   private updateContext(){if(!this.composer)return;const t=this.data.threads.find(t=>t.id===this.activeThread),a=t?.anchor||this.selected;this.composeLabel.textContent=a?`“${a.quote.length>50?a.quote.slice(0,50)+'…':a.quote}”`:'';this.composeLabel.hidden=!a;this.composer.placeholder=t?'继续追问…':a?'询问这段文字…':'询问这篇文章…';const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=a&&this.plugin.store.settings.context!=='whole'?'选文':'全文';}
   private paintHighlights(){if(!this.article)return;const marks:TextMark[]=[];for(const h of this.data.highlights.filter(h=>!h.removed)){const start=resolveAnchor(this.text,h.anchor);if(start!==null)marks.push({id:h.id,start,end:start+h.anchor.quote.length,kind:'highlight',color:h.color,note:!!h.note});}for(const t of this.data.threads){if(!t.anchor)continue;const start=resolveAnchor(this.text,t.anchor);if(start!==null)marks.push({id:t.id,start,end:start+t.anchor.quote.length,kind:'thread'});}paintMarks(this.article,this.blocks,this.passages,marks,this.activeThread||this.activeHighlight,this.fresh);this.rail?.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach(el=>{const p=this.passages[Number(el.dataset.paragraph)-1],h=marks.find(m=>m.kind==='highlight'&&m.end>p.start&&m.start<p.end),t=marks.some(m=>m.kind==='thread'&&m.end>p.start&&m.start<p.end);el.dataset.color=h?.color||'';el.classList.toggle('has-gloss',t);});}
@@ -344,7 +347,7 @@ class GlossView extends ItemView {
     if(!active){const answer=t.messages.filter(m=>m.role==='assistant').at(-1)?.content||t.error||(this.aborter?'正在写下回答…':'尚无回答');card.createEl('p',{cls:'gloss-card-gist',text:answer.replace(/[#*_`]/g,'').slice(0,180)});card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-label','展开批注：'+first?.content);card.addEventListener('click',()=>this.activateThread(t));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.activateThread(t);}});}
     else{for(let i=1;i<t.messages.length;i++){const m=t.messages[i];if(m.role==='user'){const q=card.createDiv({cls:'gloss-followup-question'});setIcon(q,'corner-down-right');q.createSpan({text:m.content});}else{const body=card.createDiv({cls:'gloss-answer markdown-rendered'});if(!m.content&&this.aborter)body.createDiv({cls:'gloss-writing',attr:{role:'status','aria-label':'正在写下回答'}});else{await MarkdownRenderer.render(this.app,passiveEmbeds(m.content),body,this.path,component);if(component!==this.marginRender)return;this.citeButtons(body,t);}}}
       if(t.error)card.createDiv({cls:'gloss-error',text:t.error});
-      const foot=card.createDiv({cls:'gloss-card-footer'});foot.createSpan({text:this.plugin.store.settings.provider==='codex'?'Codex':'AI 伴读'});if(this.aborter)this.iconButton(foot,'square','停止回答',()=>this.stop());else{this.iconButton(foot,'copy','复制完整对话',async()=>{await navigator.clipboard.writeText(t.messages.map(m=>(m.role==='user'?'Q: ':'')+m.content).join('\n\n'));new Notice('已复制对话');});}
+      const foot=card.createDiv({cls:'gloss-card-footer'});foot.createSpan({text:this.plugin.store.settings.provider==='codex'?'Codex':this.plugin.store.settings.provider==='claude'?'Claude':'API'});if(this.aborter)this.iconButton(foot,'square','停止回答',()=>this.stop());else{this.iconButton(foot,'copy','复制完整对话',async()=>{await navigator.clipboard.writeText(t.messages.map(m=>(m.role==='user'?'Q: ':'')+m.content).join('\n\n'));new Notice('已复制对话');});}
       const form=card.createDiv({cls:'gloss-followup'}),input=form.createEl('input',{attr:{type:'text','aria-label':'继续追问这条批注',placeholder:'继续追问…'}});input.disabled=!!this.aborter;const submit=()=>{this.activeThread=t.id;this.selected=t.anchor;return this.send(input.value);};input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void submit().catch(showError);}});this.iconButton(form,'arrow-up','发送追问',submit,'gloss-followup-send');}
     card.addEventListener('mouseenter',()=>this.setHover(t.id));card.addEventListener('mouseleave',()=>this.setHover());return card;}
   private paragraphNumber(a:Anchor){const start=resolveAnchor(this.text,a);return start===null?null:this.passages.find(p=>p.end>start)?.number;}
@@ -378,7 +381,7 @@ class GlossView extends ItemView {
 }
 
 class GlossSettings extends PluginSettingTab {
-  private tab='models';
+  tab='models';
   private test?:AbortController;
   constructor(app:App,private plugin:GlossPlugin){super(app,plugin);}
   hide(){this.test?.abort();this.test=undefined;}
@@ -388,7 +391,7 @@ class GlossSettings extends PluginSettingTab {
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
     identity.createSpan({cls:'gr-settings-name',text:'沉浸阅读'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
     const tabs=head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':'沉浸阅读设置'}});
-    for(const[key,label,icon]of [['models','模型与连接','sliders-horizontal'],['reading','阅读偏好','book-open'],['about','数据与关于','info']]){
+    for(const[key,label,icon]of [['models','模型与连接','sliders-horizontal'],['commands','选文指令','wand-sparkles'],['reading','阅读偏好','book-open']]){
       const b=button(tabs,'',()=>{this.tab=key;this.display();},'gr-settings-tab');const mark=b.createSpan();setIcon(mark,icon);b.createSpan({text:label});b.classList.toggle('is-active',this.tab===key);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(this.tab===key));b.id='gr-tab-'+key;b.setAttribute('aria-controls','gr-settings-panel');
     }
     const body=el.createDiv({cls:'gr-settings-body',attr:{id:'gr-settings-panel',role:'tabpanel','aria-labelledby':'gr-tab-'+this.tab}});
@@ -397,22 +400,26 @@ class GlossSettings extends PluginSettingTab {
     const select=(label:string,description:string,value:string,options:Record<string,string>,change:(v:string)=>void)=>{const d=row(label,description).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':label}});for(const[k,t]of Object.entries(options))d.createEl('option',{value:k,text:t});d.value=value;d.onchange=()=>{change(d.value);void this.save().catch(showError);};};
     const input=(label:string,desc:string,value:string,placeholder:string,change:(v:string)=>void,type='text')=>{const t=row(label,desc).createEl('input',{cls:'gr-settings-input',attr:{'aria-label':label,type,placeholder}});t.value=value;t.autocomplete='off';t.spellcheck=false;t.onchange=()=>{change(t.value.trim());void this.save().catch(showError);};return t;};
     if(this.tab==='models'){
-      section('阅读 Agent');body.createDiv({cls:'gr-settings-description gr-service-hint',text:'选择问答服务。只有你发送问题时，当前阅读范围才会交给模型。'});
+      section('模型服务');
       const list=body.createDiv({cls:'gr-service-list',attr:{role:'group','aria-label':'问答服务'}});
-      for(const[key,title,desc]of [['codex','Codex CLI','使用本机 ChatGPT 登录，无需填写 API Key'],['api','OpenAI 兼容 API','连接你自己的模型服务或本地接口']]){
+      for(const[key,title,desc]of [['codex','Codex CLI',''],['claude','Claude CLI',''],['api','API','']]){
         const card=button(list,'',async()=>{s.provider=key as Settings['provider'];await this.save();this.display();},'gr-service-card');card.classList.toggle('is-active',s.provider===key);card.setAttribute('aria-pressed',String(s.provider===key));
-        const radio=card.createSpan({cls:'gr-service-radio'});if(s.provider===key)setIcon(radio,'check');const copy=card.createSpan({cls:'gr-service-copy'});copy.createSpan({cls:'gr-service-title',text:title});copy.createSpan({cls:'gr-service-detail',text:desc});if(s.provider===key)card.createSpan({cls:'gr-service-badge',text:'使用中'});
+        const radio=card.createSpan({cls:'gr-service-radio'});if(s.provider===key)setIcon(radio,'check');const copy=card.createSpan({cls:'gr-service-copy'});copy.createSpan({cls:'gr-service-title',text:title});if(desc)copy.createSpan({cls:'gr-service-detail',text:desc});if(s.provider===key)card.createSpan({cls:'gr-service-badge',text:'使用中'});
       }
       section('连接配置');
-      if(s.provider==='codex'){
-        input('可执行文件','留空自动查找本机 Codex。',s.codexPath,'自动查找',v=>s.codexPath=v);
-        input('模型','留空沿用 Codex 默认模型。',s.codexModel,'Codex 默认模型',v=>s.codexModel=v);
+      if(s.provider==='codex'||s.provider==='claude'){
+        const claude=s.provider==='claude';
+        input('可执行文件','',claude?s.claudePath||'':s.codexPath,'自动查找',v=>{if(claude)s.claudePath=v;else s.codexPath=v;});
+        input('模型','',claude?s.claudeModel||'':s.codexModel,'CLI 默认模型',v=>{if(claude)s.claudeModel=v;else s.codexModel=v;});
       }else{
-        input('API 地址','基础地址填写到 /v1。',s.apiBase,'https://api.openai.com/v1',v=>s.apiBase=v);
-        input('模型 ID','填写模型服务提供的名称。',s.apiModel,'模型 ID',v=>s.apiModel=v);
-        const key=input('API Key','仅保留在当前会话，重启后需重新输入。',s.apiKey,'输入 API Key',v=>s.apiKey=v,'password');key.oninput=()=>{s.apiKey=key.value;};
+        select('协议','',s.apiProtocol||'openai',{openai:'OpenAI Chat Completions',responses:'OpenAI Responses',anthropic:'Anthropic Messages',gemini:'Google Gemini'},v=>{
+          const old=s.apiProtocol||'openai';s.apiProfiles||={};s.apiProfiles[old]={base:s.apiBase,model:s.apiModel};s.apiProtocol=v as ApiProtocol;const preset=s.apiProfiles[v];s.apiBase=preset?.base||API_DEFAULTS[s.apiProtocol];s.apiModel=preset?.model||'';s.apiKey='';this.display();
+        });
+        input('API 地址','',s.apiBase,API_DEFAULTS[s.apiProtocol||'openai'],v=>s.apiBase=v);
+        input('模型 ID','',s.apiModel,'模型 ID',v=>s.apiModel=v);
+        const key=input('API Key','当前会话有效',s.apiKey,'输入 API Key',v=>s.apiKey=v,'password');key.oninput=()=>{s.apiKey=key.value;};
       }
-      const footer=body.createDiv({cls:'gr-settings-footer'}),status=footer.createDiv({cls:'gr-settings-message',text:'配置更改后自动保存',attr:{role:'status','aria-live':'polite'}});
+      const footer=body.createDiv({cls:'gr-settings-footer'}),status=footer.createDiv({cls:'gr-settings-message',text:'',attr:{role:'status','aria-live':'polite'}});
       const stop=button(footer,'停止',()=>this.test?.abort(),'gr-settings-button');stop.hidden=true;
       const test=button(footer,'测试连接',async()=>{const controller=new AbortController();this.test=controller;test.disabled=true;stop.hidden=false;status.textContent='正在连接…';status.classList.remove('is-error');
         const cancelled=new Promise<never>((_,reject)=>controller.signal.addEventListener('abort',()=>reject(new Error('已停止')),{once:true}));
@@ -420,21 +427,37 @@ class GlossSettings extends PluginSettingTab {
         catch(e){status.textContent=controller.signal.aborted?'已停止测试':(e instanceof Error?e.message:'连接失败，请检查配置。');status.classList.toggle('is-error',!controller.signal.aborted);}
         finally{if(this.test===controller)this.test=undefined;test.disabled=false;stop.hidden=true;}
       },'gr-settings-button is-primary');
-      body.createDiv({cls:'gr-settings-description gr-service-note',text:'连接测试仅发送公开测试句，不读取笔记。'});
+
+    }else if(this.tab==='commands'){this.renderCommands(body);
     }else if(this.tab==='reading'){
-      section('打开方式');const preview=body.createDiv({cls:'gr-settings-preview'});preview.createDiv({cls:'gr-settings-label',text:'点击插件，再进入沉浸阅读'});preview.createDiv({cls:'gr-settings-description',text:'文件照常在 Obsidian 中打开。点击左侧阅读图标后进入沉浸模式，退出后回到普通文档；重启时也恢复普通文档。'});
       section('阅读外观');
-      select('纸张','仅作用于沉浸阅读。',s.theme,{auto:'跟随系统',paper:'纸张',sepia:'暖黄',snow:'雪白',night:'夜读',ink:'墨蓝'},v=>s.theme=v);
-      select('字体','正文显示字体。',s.font,{serif:'衬线',sans:'无衬线'},v=>s.font=v);
+      select('纸张','',s.theme,{auto:'跟随系统',paper:'纸张',sepia:'暖黄',snow:'雪白',night:'夜读',ink:'墨蓝'},v=>s.theme=v);
+      select('字体','',s.font,{serif:'衬线',sans:'无衬线'},v=>s.font=v);
       select('字号','',String(s.fontSize),Object.fromEntries(Array.from({length:14},(_,i)=>[String(i+15),(i+15)+' px'])),v=>s.fontSize=Number(v));
       select('行距','',String(s.lineHeight),{'1.5':'紧凑','1.64':'标准','1.82':'宽松',[String(s.lineHeight)]:({1.5:'紧凑',1.64:'标准',1.82:'宽松'} as Record<string,string>)[String(s.lineHeight)]||'自定义'},v=>s.lineHeight=Number(v));
       select('正文宽度','',String(s.measure),{'28':'窄','32':'适中','37':'宽'},v=>s.measure=Number(v));
-      section('问答范围');select('新问题默认范围','选中正文后可以围绕附近段落提问。',s.context,{nearby:'选文及相邻段落',whole:'当前文档全文'},v=>s.context=v);
-      const limit=input('上下文上限','1,000–300,000 字符，超出时提示缩小范围。',String(s.maxContext),'60000',()=>{} ,'number');limit.min='1000';limit.max='300000';limit.onchange=()=>{const n=Number(limit.value);if(Number.isInteger(n)&&n>=1000&&n<=300000){s.maxContext=n;void this.save().catch(showError);}else{limit.value=String(s.maxContext);new Notice('请输入1,000–300,000之间的整数。');}};
-    }else{
-      section('阅读数据');const card=body.createDiv({cls:'gr-settings-preview'});card.createDiv({cls:'gr-settings-label',text:'批注留在本地，原文保持不变'});card.createDiv({cls:'gr-settings-description',text:'划线、批注、对话和阅读进度保存在当前库的插件数据中。导出笔记会在收集箱新建 Markdown。'});
-      section('隐私与支持范围');body.createDiv({cls:'gr-settings-description gr-about-text',text:'只处理你主动打开的 Markdown 文档。私密日记与受保护目录不会进入阅读器，嵌入的其他笔记不会自动展开给模型。当前支持 Markdown，PDF 与 EPUB 尚未支持。'});
-      section('快捷操作');for(const[label,key]of [['退出沉浸阅读','Esc'],['聚焦提问','/'],['发送问题','Enter'],['输入换行','Shift + Enter']]){row(label).createEl('kbd',{text:key});}
+      section('问答范围');select('新问题默认范围','',s.context,{nearby:'选文及相邻段落',whole:'当前文档全文'},v=>s.context=v);
+      const limit=input('上下文上限','',String(s.maxContext),'60000',()=>{} ,'number');limit.min='1000';limit.max='300000';limit.onchange=()=>{const n=Number(limit.value);if(Number.isInteger(n)&&n>=1000&&n<=300000){s.maxContext=n;void this.save().catch(showError);}else{limit.value=String(s.maxContext);new Notice('请输入1,000–300,000之间的整数。');}};
     }
+  }
+  private renderCommands(body:HTMLElement){
+    const s=this.plugin.store.settings,head=body.createDiv({cls:'gr-command-heading'});head.createEl('h3',{text:`选文指令 ${s.commands.length} / ${MAX_COMMANDS}`,cls:'gr-settings-section'});
+    const add=button(head,'添加指令',()=>this.editCommand(),'gr-settings-button is-primary');add.disabled=s.commands.length>=MAX_COMMANDS;
+    const list=body.createDiv({cls:'gr-command-list'});if(!s.commands.length)list.createDiv({cls:'gr-settings-description',text:'还没有选文指令'});
+    s.commands.forEach((c,i)=>{const row=list.createDiv({cls:'gr-command-row'}),copy=row.createDiv({cls:'gr-command-copy'});copy.createDiv({cls:'gr-settings-label',text:c.name});copy.createDiv({cls:'gr-command-preview',text:c.prompt});const actions=row.createDiv({cls:'gr-command-actions'});
+      const move=async(delta:number)=>{const j=i+delta;if(j<0||j>=s.commands.length)return;[s.commands[i],s.commands[j]]=[s.commands[j],s.commands[i]];await this.save();this.display();};
+      for(const[icon,label,delta]of [['arrow-up','上移',-1],['arrow-down','下移',1]]as const){const b=button(actions,'',()=>move(delta),'gr-settings-button');setIcon(b,icon);b.setAttribute('aria-label',label+' '+c.name);b.disabled=i+delta<0||i+delta>=s.commands.length;}
+      button(actions,'编辑',()=>this.editCommand(c),'gr-settings-button');button(actions,'删除',async()=>{s.commands=s.commands.filter(x=>x.id!==c.id);await this.save();this.display();},'gr-settings-button');
+    });
+    const missing=DEFAULT_COMMANDS.filter(d=>!s.commands.some(c=>c.id===d.id));if(missing.length){const footer=body.createDiv({cls:'gr-command-restore'});for(const d of missing){const b=button(footer,'恢复“'+d.name+'”',async()=>{s.commands=saveCommand(s.commands,{...d});await this.save();this.display();},'gr-settings-button');b.disabled=s.commands.length>=MAX_COMMANDS;}}
+  }
+  private editCommand(command?:ReadingCommand){
+    const modal=new Modal(this.app);modal.setTitle(command?'编辑指令':'添加指令');modal.contentEl.addClass('gr-command-editor');
+    modal.contentEl.createEl('label',{text:'名称',attr:{for:'gr-command-name'}});const name=modal.contentEl.createEl('input',{attr:{id:'gr-command-name','aria-label':'指令名称',maxlength:'16',placeholder:'指令名称'}});name.value=command?.name||'';
+    modal.contentEl.createEl('label',{text:'Prompt',attr:{for:'gr-command-prompt'}});const prompt=modal.contentEl.createEl('textarea',{attr:{id:'gr-command-prompt','aria-label':'指令 Prompt',maxlength:'8000',rows:'9',placeholder:'输入对选文执行的指令…'}});prompt.value=command?.prompt||'';
+    modal.contentEl.createDiv({cls:'gr-settings-description',text:'可用变量：{{selection}} 选文 · {{title}} 文档名'});
+    const error=modal.contentEl.createDiv({cls:'gr-settings-message',attr:{role:'alert'}}),footer=modal.contentEl.createDiv({cls:'gr-settings-footer'});
+    const original=DEFAULT_COMMANDS.find(d=>d.id===command?.id);if(original)button(footer,'恢复默认',()=>{name.value=original.name;prompt.value=original.prompt;},'gr-settings-button');
+    button(footer,'取消',()=>modal.close(),'gr-settings-button');button(footer,'保存',async()=>{try{this.plugin.store.settings.commands=saveCommand(this.plugin.store.settings.commands,{...command,id:command?.id||uid(),name:name.value,prompt:prompt.value});await this.save();modal.close();this.display();}catch(e){error.textContent=e instanceof Error?e.message:'保存失败';}},'gr-settings-button is-primary');modal.open();name.focus();
   }
 }

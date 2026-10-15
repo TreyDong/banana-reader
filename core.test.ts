@@ -108,3 +108,58 @@ test('API failures never echo provider error bodies or keys', async () => {
   const {server,settings}=await mockService((req,res)=>{res.writeHead(401);res.end('secret-provider-error test-key');});
   try {await assert.rejects(askAgent({settings,context:'test',messages:[],signal:new AbortController().signal,onText:()=>{}}), e => String(e).includes('401') && !String(e).includes('test-key') && !String(e).includes('secret-provider-error'));} finally {server.closeAllConnections();server.close();}
 });
+
+import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand} from './prompts';
+import {parseApiEvent,apiRequest,cliConfig,parseClaudeLine,type ApiProtocol} from './agent';
+import {promises as fs} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
+test('command migration preserves edits, ordering and deliberate empty lists',()=>{
+  assert.equal(normalizeCommands(undefined).length,5);assert.deepEqual(normalizeCommands([]),[]);
+  const edited=[{id:'translate',name:'译成中文',prompt:'只译中文。'},{id:'mine',name:'我的指令',prompt:'自定义'}];
+  assert.deepEqual(normalizeCommands(edited).map(c=>[c.id,c.name,c.prompt]),edited.map(c=>[c.id,c.name,c.prompt]));
+  assert.equal(normalizeCommands([...edited,...edited]).length,2);
+});
+test('eight-command cap allows edits at capacity and rejects a ninth command',()=>{
+  let c=normalizeCommands(undefined);for(let i=c.length;i<MAX_COMMANDS;i++)c=saveCommand(c,{id:'custom'+i,name:'指令'+i,prompt:'问题'});
+  assert.equal(c.length,8);assert.throws(()=>saveCommand(c,{id:'ninth',name:'第九条',prompt:'不应保存'}),/最多/);
+  const updated=saveCommand(c,{...c[0],prompt:'修改内置 prompt'});assert.equal(updated[0].prompt,'修改内置 prompt');assert.equal(c[0].prompt,DEFAULT_COMMANDS[0].prompt);
+  assert.throws(()=>saveCommand(c,{...c[0],prompt:' '}),/Prompt/);assert.throws(()=>saveCommand(c,{...c[0],name:'长'.repeat(17)}),/名称/);
+});
+test('command placeholders are literal, preserve dollar signs and never execute code',()=>{
+  assert.equal(renderCommand('针对 {{title}}：{{selection}}','带 $& 与 {{title}} 的原文','文档'),'针对 文档：带 $& 与 {{title}} 的原文');
+  assert.equal(renderCommand('{{unknown}}','x','y'),'{{unknown}}');
+});
+for(const protocol of ['responses','anthropic','gemini'] as ApiProtocol[])for(const stream of [true,false])test(protocol+' handles '+(stream?'chunked SSE':'JSON')+' with correct request/auth and no duplicated final text',async()=>{
+  let sent:any,headers:any,path='';const updates:string[]=[];
+  const {server,settings}=await mockService((req,res)=>{let raw='';req.on('data',b=>raw+=b);req.on('end',()=>{sent=JSON.parse(raw);headers=req.headers;path=req.url||'';
+    const final=protocol==='responses'?{status:'completed',output:[{content:[{type:'output_text',text:'解释 [¶1]'}]}]}:protocol==='anthropic'?{content:[{type:'text',text:'解释 [¶1]'}]}:{candidates:[{content:{parts:[{text:'解释 [¶1]'}]}}]};
+    if(!stream){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(final));return;}
+    const events=protocol==='responses'?[{type:'response.output_text.delta',delta:'解释'},{type:'response.output_text.delta',delta:' [¶1]'},{type:'response.completed',response:final}]:protocol==='anthropic'?[{type:'content_block_delta',delta:{type:'text_delta',text:'解释'}},{type:'content_block_delta',delta:{type:'text_delta',text:' [¶1]'}},{type:'message_stop'}]:[{candidates:[{content:{parts:[{text:'secret thought',thought:true},{text:'解释'}]}}]},{candidates:[{content:{parts:[{text:' [¶1]'}]}}]}];
+    res.writeHead(200,{'Content-Type':'text/event-stream'});const output=events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join('');res.write(output.slice(0,31));setTimeout(()=>res.end(output.slice(31)),10);
+  });});
+  try{const answer=await askAgent({settings:{...settings,apiProtocol:protocol},context:'[¶1] 公开原文',messages:[{role:'user',content:'我的指令'}],signal:new AbortController().signal,onText:t=>updates.push(t)});assert.equal(answer,'解释 [¶1]');assert.equal(updates.at(-1),answer);
+    if(protocol==='responses'){assert.equal(path,'/v1/responses');assert.equal(sent.store,false);assert.equal(sent.input.at(-1).content,'我的指令');assert.equal(headers.authorization,'Bearer test-key');}
+    if(protocol==='anthropic'){assert.equal(path,'/v1/messages');assert.equal(headers['x-api-key'],'test-key');assert.equal(headers['anthropic-version'],'2023-06-01');assert.equal(sent.messages.at(-1).content,'我的指令');assert.ok(sent.max_tokens>0);}
+    if(protocol==='gemini'){assert.equal(path,'/v1/models/test-model:streamGenerateContent?alt=sse');assert.equal(headers['x-goog-api-key'],'test-key');assert.ok(!path.includes('test-key'));assert.equal(sent.contents.at(-1).parts[0].text,'我的指令');}
+  }finally{server.closeAllConnections();server.close();}
+});
+test('all API protocols cancel, sanitize errors and reject unsafe endpoints',async()=>{
+  for(const protocol of ['openai','responses','anthropic','gemini'] as ApiProtocol[]){
+    const {server,settings}=await mockService((req,res)=>{res.writeHead(200,{'Content-Type':'text/event-stream'});res.write(':keepalive\n\n');});
+    try{const c=new AbortController();const p=askAgent({settings:{...settings,apiProtocol:protocol},context:'test',messages:[],signal:c.signal,onText:()=>{}});setTimeout(()=>c.abort(),10);await assert.rejects(p,/已停止/);}finally{server.closeAllConnections();server.close();}
+    for(const base of ['https://secret@example.com/v1','https://example.com/v1?key=secret','http://example.com/v1'])assert.throws(()=>apiEndpoint(base,protocol,'m'));
+    const bad=await mockService((req,res)=>{res.writeHead(401);res.end('test-key private-provider-message');});try{await assert.rejects(askAgent({settings:{...bad.settings,apiProtocol:protocol},context:'test',messages:[],signal:new AbortController().signal,onText:()=>{}}),e=>String(e).includes('401')&&!String(e).includes('test-key')&&!String(e).includes('private-provider-message'));}finally{bad.server.closeAllConnections();bad.server.close();}
+  }
+  assert.deepEqual(parseApiEvent('responses',{type:'response.failed',response:{error:{message:'private'}}}),{error:true});assert.deepEqual(parseApiEvent('gemini',{promptFeedback:{blockReason:'SAFETY'}}),{error:true});
+});
+test('Claude CLI isolates tools/config, sends stdin context, parses text without duplicating final events',async()=>{
+  const folder=await fs.mkdtemp(join(tmpdir(),'reader-claude-test-'));const bin=join(folder,'claude');
+  await fs.writeFile(bin,'#!/usr/bin/env node\nlet data="";process.stdin.on("data",b=>data+=b);process.stdin.on("end",()=>{if(!data.includes("公开上下文")||!process.argv.includes("--safe-mode"))process.exit(2);for(const e of [{type:"stream_event",event:{type:"content_block_delta",delta:{type:"text_delta",text:"Claude 回答"}}},{type:"assistant",message:{content:[{type:"text",text:"Claude 回答"}]}},{type:"result",subtype:"success",result:"Claude 回答"}])console.log(JSON.stringify(e));});\n',{mode:0o700});
+  const settings={provider:'claude',claudePath:bin,claudeModel:'sonnet',codexPath:'',codexModel:'',apiBase:'',apiKey:'',apiModel:''};
+  try{const config=cliConfig(settings);assert.equal(config.args[config.args.indexOf('--tools')+1],'');assert.ok(config.args.includes('--safe-mode'));assert.ok(config.args.includes('--strict-mcp-config'));assert.ok(config.args.includes('--no-session-persistence'));assert.ok(!config.args.includes('--dangerously-skip-permissions'));
+    const updates:string[]=[];assert.equal(await askAgent({settings,context:'公开上下文',messages:[{role:'user',content:'测试'}],signal:new AbortController().signal,onText:t=>updates.push(t)}),'Claude 回答');assert.deepEqual(updates,['Claude 回答']);
+    assert.deepEqual(parseClaudeLine('{"type":"result","subtype":"error","is_error":true,"result":"private"}'),{error:true});assert.deepEqual(parseClaudeLine('{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}'),{error:true,login:true});
+  }finally{await fs.rm(folder,{recursive:true,force:true});}
+});

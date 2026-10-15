@@ -57,4 +57,14 @@ Date: 2026-10-15. Target: a faithful native Obsidian adaptation of the Gloss rea
 - Reading settings affect only the immersive view. Runtime plugin name is 沉浸阅读, version0.3.0; plugin ID/data path retained for compatibility.
 - Build and retained18 tests pass; lifecycle/UI checks above cover the changed entry and settings behavior. The settings connection test was started with the public test sentence; clicking Stop immediately displayed 已停止测试 and re-enabled the button. Provider connectivity success is not inferred from this cancellation test.
 
+## 0.4.0 follow-up: providers and editable commands
+
+- Compact native settings now have three tabs: models, selection commands, reading preferences. Removed opening-mode explanation, data/about tab and descriptive paragraphs. Models offer Codex CLI, Claude CLI and API; the API protocol dropdown lists Chat Completions, Responses, Anthropic and Gemini. Visually checked service cards, protocol menu and command editor at the same native settings window size as prior Banana reference.
+- Actual native UI: edited an existing built-in prompt, saved it, restored its default, added a custom command with placeholders, moved it up and observed the updated order. The toolbar's More menu then displayed the custom command. Clicking it sent a real HTTP request to a local Responses mock, displayed its streamed reply in the margin, and verified both selection and title placeholders had expanded correctly.
+- Temporary test command, mock answer and provider settings removed/restored after verification. Original highlights and conversations retained. No private document was used for the request.
+- Commands include a visible count and Add control disabled at eight. Tests cover eight-entry cap, editing at capacity, empty lists, edited built-ins, duplicate IDs, order and literal placeholder replacement. Fixed hardcoded starter prompts so all model-action shortcuts in the selection toolbar use editable commands.
+- Four protocol request/auth/response/cancellation/error paths verified with local mock HTTP servers. JSON and chunked SSE tested separately. Claude process test verifies stdin context, disabled tools/customizations/MCP, no persistent session and no duplicated final reply.
+- CLI/API integration coverage and external account availability are distinct. External API providers have not been live-tested with private keys. Claude live test with the sonnet alias returned a real Chinese explanation and [¶1] citation. Filtering all setting sources initially prevented authentication; retaining normal auth sources while using safe mode, disabled tools and strict empty MCP fixed that integration issue. Obsidian settings UI also completed its real Claude connection test successfully. No credentials were printed or persisted.
+- 29 automated tests pass; TypeScript/build pass. No unresolved visual or entry-flow P0/P1/P2 issue in this scope.
+
 final result: passed

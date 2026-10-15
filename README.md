@@ -1,8 +1,8 @@
 # 沉浸阅读 for Obsidian
 
-在 Markdown 文档旁边阅读、提问、划线和留下理解的桌面插件。版本 0.3.0。
+在 Markdown 文档旁边阅读、提问、划线和留下理解的桌面插件。版本 0.4.0。
 
-本版直接适配 Gloss 的阅读界面源码：字体、纸张纹理、页面网格、黑色选文浮层、四色高亮、朱红下划线、页边卡片和段落缩略轨道。React / Next.js 的界面机制译为 Obsidian ItemView 与原生 DOM，模型服务沿用本插件的 Codex CLI / 兼容 API 两种接入。
+本版直接适配 Gloss 的阅读界面源码：字体、纸张纹理、页面网格、黑色选文浮层、四色高亮、朱红下划线、页边卡片和段落缩略轨道。React / Next.js 的界面机制译为 Obsidian ItemView 与原生 DOM，模型服务沿用本插件的 Codex CLI / 兼容 API 多种接入。
 
 ## 使用
 
@@ -15,10 +15,26 @@
 
 ## Agent
 
-两种服务在插件设置切换：
+在“模型与连接”中选择服务：
 
 1. **Codex CLI**：沿用本机 ChatGPT 登录。自动查找可执行路径，可指定模型。`codex exec --json --ephemeral --ignore-user-config --sandbox read-only` 在临时空目录运行；没有加载自定义 CLI provider、MCP、hooks 或工作区配置。阅读文字通过标准输入传递。使用 CLI 默认模型时无需另外指定模型。CLI 输出按事件显示，API 支持逐字流式输出。
-2. **OpenAI 兼容 API**：填写 `/v1` 基础地址、模型 ID 和 Key。使用 Chat Completions；远程要求 HTTPS，本机服务可 HTTP。支持 SSE 和 JSON 回答。Key 仅保留在进程内存，重启需重新输入，不写进 data.json。未实际连接的服务商兼容性应单独测试。
+2. **Claude CLI**：使用本机 Claude 登录，自动查找路径，可填写模型别名或完整 ID。以 `--safe-mode --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands --no-session-persistence` 在临时空目录运行；保留认证来源，关闭工具与自定义扩展。支持流式文本，失败不回显原始诊断或凭据。需要本机版本支持这些参数。
+3. **API**：选择协议、填写基础地址、模型 ID 和 Key。支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages、Google Gemini 原生接口，均支持 SSE 与 JSON。默认地址与协议对应，可改为兼容服务/本机代理。Key 仅保留在内存中，切换协议时清空；原地址和模型按协议分别保留。外部服务商兼容性需实测。
+
+| 协议 | 基础地址示例 | 请求路径 |
+| --- | --- | --- |
+| OpenAI Chat Completions | `https://api.openai.com/v1` | `/chat/completions` |
+| OpenAI Responses | `https://api.openai.com/v1` | `/responses` |
+| Anthropic Messages | `https://api.anthropic.com/v1` | `/messages` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `/models/{model}:streamGenerateContent?alt=sse` |
+
+## 选文指令
+
+- “选文指令”最多8条，内置与自定义合计。默认提供解释、释义、简化、反例、翻译。
+- 每条均可编辑名称与 Prompt、调整顺序、删除。内置指令编辑器可以恢复默认内容，删掉的内置指令也能单独恢复。
+- 名称最多16字符，Prompt 最多8,000字符。可使用 `{{selection}}`（选文）与 `{{title}}`（文档名）；变量按文字替换，不执行代码。上下文与引用仍由阅读器提供。
+- 工具条直接显示前两条，其余在“更多”中。“提问”、四色高亮、手写批注、复制属于固定工具，不占8条指令名额。
+- 原文、批注与问答记录不因编辑指令而改变。
 
 设置中的“测试连接”只发送公开测试句，不读取笔记。点击发送才调用模型；正文会由该模型服务处理。本地 CLI 运行不代表模型离线。此版是阅读问答伴侣，不提供让 Agent 修改库文件或执行任意任务的入口。
 
@@ -46,6 +62,16 @@ npm run build
 - [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader)：参考主动选文提问、独立阅读上下文和伴读专注模式，未拷贝其源码、字体或示例书。
 
 本插件不是上述项目的官方版本。Gloss 原版的账户、云端书架、网页导入和 Together 专用服务未移入。Obsidian 中使用中文操作文案和本地文档选择；中文正文使用系统衬线回退字体。
+
+## 0.4.0 模型与指令（2026-10-15）
+
+- 29项测试通过：含三种新增 API 协议的 SSE/JSON 请求、头部与路径、取消/错误，Claude CLI 进程与事件解析，指令编辑迁移、变量替换与8条上限。
+- Obsidian 实测编辑内置 Prompt、恢复默认、新增自定义指令、上移排序；自定义指令出现在选文工具条，点击后通过本机 Responses 模拟接口收到页边回答。确认选文与文档名已替换，验收数据已清理，原服务已恢复。
+- 模型页实际选择 Anthropic 协议，默认基础地址和保存状态正确。未使用外部 API Key 测试服务商，不把本机模拟测试当作外部连通证明。
+- 移除“打开方式”、数据说明页与大段设置描述，仅保留模型、选文指令和实际阅读偏好。
+- 本机 Claude CLI 使用 sonnet 别名，真实返回了公开测试句的中文解释与 [¶1] 引用；Obsidian 设置页中的连接测试也显示成功。初次验证发现过滤认证来源会导致未登录，已改为保留认证来源，继续使用安全模式与禁用工具。
+
+协议依据：[Claude CLI](https://code.claude.com/docs/en/cli-reference)、[Anthropic 流式消息](https://platform.claude.com/docs/en/build-with-claude/streaming)、[Gemini GenerateContent](https://ai.google.dev/api/generate-content)、[OpenAI Responses 流式输出](https://platform.openai.com/docs/guides/streaming-responses)。
 
 ## 0.3.0 设置与入口调整（2026-10-15）
 
