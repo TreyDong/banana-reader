@@ -29,7 +29,7 @@ export function parseCodexLine(line: string): {text?: string; error?: string} {
 function payload(r: AskRequest): Message[] {
   return [
     {role: 'user', content: `${SYSTEM}\n\n<reading_context>\n${r.context}\n</reading_context>\n${r.quote ? '\n本轮选文：\n' + r.quote : ''}`},
-    ...r.messages,
+    ...r.messages.map(({role,content})=>({role,content})),
   ];
 }
 export async function askAgent(r: AskRequest): Promise<string> {
@@ -103,5 +103,26 @@ async function askAPI(r:AskRequest):Promise<string>{
     });
     const timer=setTimeout(()=>finish(new Error('AI 请求超时，请检查服务。')),180000);req.on('error',()=>finish(new Error('无法连接 AI 服务，请检查地址与网络。')));
     r.signal.addEventListener('abort',abort,{once:true});if(r.signal.aborted){abort();return;}req.end(JSON.stringify(body));
+  });
+}
+
+export interface ModelOption {id:string;name:string}
+export function normalizeModels(items:unknown):ModelOption[]{
+  if(!Array.isArray(items))return[];const seen=new Set<string>();const result:ModelOption[]=[];
+  for(const item of items){const id=typeof item==='string'?item:typeof item?.id==='string'?item.id:'';if(!id.trim()||id.length>160||/[\s\x00-\x1f]/.test(id)||seen.has(id))continue;seen.add(id);result.push({id,name:typeof item?.name==='string'?item.name.slice(0,100):id});if(result.length>=100)break;}return result;
+}
+export function mergeModels(...lists:ModelOption[][]):ModelOption[]{return normalizeModels(lists.flat());}
+export async function discoverCodexModels(cache=join(homedir(),'.codex','models_cache.json')):Promise<ModelOption[]>{
+  try{const value=JSON.parse(await fs.readFile(cache,'utf8'));return normalizeModels((value.models||[]).filter((m:any)=>m.visibility==='list').map((m:any)=>({id:m.slug,name:m.display_name||m.slug})));}catch{return[];}
+}
+export async function discoverApiModels(settings:AgentSettings,signal:AbortSignal):Promise<ModelOption[]>{
+  const protocol=settings.apiProtocol||'openai';apiEndpoint(settings.apiBase,protocol,'test');
+  const url=new URL(settings.apiBase.replace(/\/+$/,'')+'/models');const headers:Record<string,string>={Accept:'application/json'};
+  if(settings.apiKey){if(protocol==='anthropic')headers['x-api-key']=settings.apiKey;else if(protocol==='gemini')headers['x-goog-api-key']=settings.apiKey;else headers.Authorization='Bearer '+settings.apiKey;}
+  if(protocol==='anthropic')headers['anthropic-version']='2023-06-01';
+  return new Promise((resolve,reject)=>{
+    let done=false,body='';const finish=(error?:Error,models:ModelOption[]=[])=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);if(error){req.destroy();reject(error);}else resolve(models);};const abort=()=>finish(new Error('已停止'));
+    const req=(url.protocol==='https:'?https:http).request(url,{method:'GET',headers},res=>{if(!res.statusCode||res.statusCode>=300){res.resume();finish(new Error('无法获取模型列表（HTTP '+res.statusCode+'），可手动添加模型 ID。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk;if(body.length>2000000)finish(new Error('模型列表过大，请手动添加。'));});res.on('error',()=>finish(new Error('模型列表连接中断。')));res.on('aborted',()=>finish(new Error('模型列表连接中断。')));res.on('end',()=>{if(done)return;try{const value=JSON.parse(body);let items=protocol==='gemini'?(value.models||[]).filter((m:any)=>!m.supportedGenerationMethods||m.supportedGenerationMethods.includes('generateContent')).map((m:any)=>({id:String(m.name||'').replace(/^models\//,''),name:m.displayName||m.name})):value.data||[];const models=normalizeModels(items);if(!models.length)finish(new Error('服务未提供可用模型，可手动添加模型 ID。'));else finish(undefined,models);}catch{finish(new Error('模型列表格式无法识别，可手动添加模型 ID。'));}});});
+    const timer=setTimeout(()=>finish(new Error('获取模型列表超时。')),15000);req.on('error',()=>finish(new Error('无法连接模型服务。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end();
   });
 }

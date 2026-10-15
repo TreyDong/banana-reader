@@ -163,3 +163,34 @@ test('Claude CLI isolates tools/config, sends stdin context, parses text without
     assert.deepEqual(parseClaudeLine('{"type":"result","subtype":"error","is_error":true,"result":"private"}'),{error:true});assert.deepEqual(parseClaudeLine('{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}'),{error:true,login:true});
   }finally{await fs.rm(folder,{recursive:true,force:true});}
 });
+
+import {markStyle,MARK_STYLES} from './core';
+import {railMagnification} from './reading-ui';
+import {normalizeModels,mergeModels,discoverCodexModels,discoverApiModels,apiRequest} from './agent';
+test('legacy marks retain highlight style, wave and underline export without losing quote or notes',()=>{
+  assert.equal(markStyle(undefined),'highlight');assert.equal(markStyle('unsupported'),'highlight');assert.equal(markStyle('wavy'),'wavy');
+  const r=freshReading();r.highlights.push({id:'wave',anchor:makeAnchor('原文引句',0,4),color:'blue',style:'wavy',note:'我的理解',created:1});
+  r.threads.push({id:'t',anchor:makeAnchor('原文引句',0,4),messages:[{role:'user',content:'为什么？'},{role:'assistant',content:'因为原文如此。[¶1]',provider:'claude',model:'sonnet'}],created:1});
+  const md=exportReading('文章.md',r,'test');assert.match(md,/波浪线/);assert.match(md,/> 原文引句/);assert.match(md,/我的理解/);assert.match(md,/Agent · sonnet/);assert.match(md,/\[¶1\]/);assert.equal(MARK_STYLES.underline,'直线');
+});
+test('timeline magnification peaks near the reading position and decays symmetrically',()=>{
+  assert.equal(railMagnification(0),2.25);assert.ok(railMagnification(15)>railMagnification(45));assert.equal(railMagnification(-20),railMagnification(20));assert.ok(railMagnification(300)<1.001);
+});
+test('model discovery filters hidden Codex entries and preserves custom choices without duplicates',async()=>{
+  const folder=await fs.mkdtemp(join(tmpdir(),'reader-models-'));try{const cache=join(folder,'models.json');await fs.writeFile(cache,JSON.stringify({models:[{slug:'available',display_name:'Available',visibility:'list'},{slug:'internal',visibility:'hide'}]}));assert.deepEqual(await discoverCodexModels(cache),[{id:'available',name:'Available'}]);assert.deepEqual(await discoverCodexModels(join(folder,'missing')),[]);
+  assert.deepEqual(mergeModels([{id:'custom',name:'My model'}],[{id:'custom',name:'Other'},{id:'available',name:'Available'}]).map(m=>m.name),['My model','Available']);assert.equal(normalizeModels(['bad id','',null,{},'valid','valid']).length,1);
+  }finally{await fs.rm(folder,{recursive:true,force:true});}
+});
+test('model lists use protocol auth, filter Gemini embedding models, sanitize failures and support abort',async()=>{
+  let auth:any;const server=http.createServer((req,res)=>{auth=req.headers;if(req.url==='/fail/models'){res.writeHead(403);res.end('private-key');return;}if(req.url==='/wait/models')return;
+    res.setHeader('content-type','application/json');res.end(req.url==='/gemini/models'?JSON.stringify({models:[{name:'models/chat',displayName:'Chat',supportedGenerationMethods:['generateContent']},{name:'models/embed',supportedGenerationMethods:['embedContent']}]}):JSON.stringify({data:[{id:'chat-one',name:'Chat One'},{id:'chat-two'}]}));});server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+(server.address()as any).port;
+  const settings={provider:'api',apiProtocol:'openai' as const,codexPath:'',codexModel:'',apiBase:base,apiKey:'test-key',apiModel:'chat-one'};
+  try{for(const protocol of ['openai','responses','anthropic','gemini']as const){const result=await discoverApiModels({...settings,apiProtocol:protocol,apiBase:protocol==='gemini'?base+'/gemini':base},new AbortController().signal);assert.equal(result[0].id,protocol==='gemini'?'chat':'chat-one');assert.equal(result.length,protocol==='gemini'?1:2);assert.equal(auth[protocol==='anthropic'?'x-api-key':protocol==='gemini'?'x-goog-api-key':'authorization'],protocol==='openai'||protocol==='responses'?'Bearer test-key':'test-key');}
+  await assert.rejects(discoverApiModels({...settings,apiBase:base+'/fail'},new AbortController().signal),e=>!String(e).includes('private-key')&&/403/.test(String(e)));const controller=new AbortController();const pending=discoverApiModels({...settings,apiBase:base+'/wait'},controller.signal);controller.abort();await assert.rejects(pending,/已停止/);
+  const request=apiRequest({settings,context:'公开原文',messages:[{role:'assistant',content:'回答',provider:'claude',model:'sonnet'},{role:'user',content:'继续'}],signal:new AbortController().signal,onText:()=>{}});assert.ok(request.body.messages.every((m:any)=>!('model'in m)&&!('provider'in m)));
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+import {referenceTokens} from './core';
+test('citations preserve standalone, grouped and ranged references without unbounded expansion',()=>{
+  const source='引用[¶1]，参见[¶11–13]、[¶2, ¶5]和[¶8–¶9]。';assert.deepEqual(referenceTokens(source).map(t=>t.ids),[['1'],['11','12','13'],['2','5'],['8','9']]);assert.equal(referenceTokens('[¶0] [¶1–999999] [¶9–2]').length,0);assert.equal(referenceTokens('普通 [1] 或代码').length,0);
+});

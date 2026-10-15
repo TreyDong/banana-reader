@@ -1,6 +1,6 @@
 // Margin geometry and mark segmentation adapted for Obsidian from Nutlope/gloss.
 // References: components/reader/Margin.tsx, Block.tsx, lib/anchor.ts (54b13b8).
-import {resolveAnchor, type Anchor, type Passage} from './core';
+import {resolveAnchor, type Anchor, type Passage, type MarkStyle, markStyle} from './core';
 export interface MarginItem {id: string; desired: number; height: number; created: number}
 export function placeMarginItems(items: MarginItem[], active?: string): Record<string, number> {
   if (!items.length) return {};
@@ -10,7 +10,7 @@ export function placeMarginItems(items: MarginItem[], active?: string): Record<s
   else {forward(ai + 1); for (let i = ai - 1; i >= 0; i--) tops[i] = Math.min(tops[i], tops[i + 1] - gap - items[i].height); if (tops[0] < 0) {tops[0] = 0; forward(1);}}
   return Object.fromEntries(items.map((item, i) => [item.id, tops[i]]));
 }
-export interface TextMark {id: string; start: number; end: number; kind: 'highlight' | 'thread' | 'pending'; color?: string; note?: boolean}
+export interface TextMark {id: string; start: number; end: number; kind: 'highlight' | 'thread' | 'pending'; color?: string; note?: boolean; style?:MarkStyle}
 export interface Segment {start: number; end: number; highlights: TextMark[]; threads: TextMark[]; pending: boolean}
 export function segmentMarks(length: number, marks: TextMark[]): Segment[] {
   const valid = marks.filter(m => m.end > m.start && m.end > 0 && m.start < length);
@@ -42,7 +42,7 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
       const start=Math.max(n.start,s.start),end=Math.min(n.end,s.end);
       if(end<=start||(!s.highlights.length&&!s.threads.length&&!s.pending))continue;
       const span=block.ownerDocument.createElement('span');span.dataset.glossMark='';
-      if(s.highlights.length){span.classList.add('m-hl');span.dataset.h=s.highlights.map(h=>h.id).join(' ');span.dataset.c=s.highlights.at(-1)?.color||'yellow';}
+      if(s.highlights.length){span.classList.add('m-hl');span.dataset.h=s.highlights.map(h=>h.id).join(' ');const fill=s.highlights.filter(h=>markStyle(h.style)==='highlight').at(-1),line=s.highlights.filter(h=>markStyle(h.style)!=='highlight').at(-1);span.dataset.c=fill?.color||line?.color||'yellow';span.dataset.fill=String(!!fill);if(line){span.dataset.line=markStyle(line.style);span.dataset.lc=line.color||'yellow';}}
       if(s.threads.length){span.classList.add('m-gloss');span.dataset.g=s.threads.map(g=>g.id).join(' ');}
       if(s.pending)span.classList.add('m-pending');
       const ids=[...s.highlights,...s.threads].map(m=>m.id);
@@ -53,3 +53,5 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
     }
   }
 }
+
+export function railMagnification(distance:number,radius=52):number{return 1+1.25*Math.exp(-Math.pow(distance/Math.max(1,radius),2)*2);}

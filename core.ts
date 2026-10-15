@@ -1,8 +1,11 @@
 export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { text: string; start: number; end: number; number: number }
-export interface Message { role: 'user' | 'assistant'; content: string }
+export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string }
 export interface Thread { id: string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
-export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean }
+export type MarkStyle='highlight'|'underline'|'wavy';
+export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
+export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
+export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean; style?:MarkStyle }
 export interface Reading { highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
 export const freshReading = (): Reading => ({highlights: [], threads: [], progress: 0, draft: '', updated: Date.now()});
 export function makeAnchor(text: string, start: number, end: number): Anchor {
@@ -57,11 +60,19 @@ export function exportReading(path: string, data: Reading, vault: string): strin
   let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
   const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
-    md += `## 摘录\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
+    md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }
   for (const t of data.threads) {
     md += `## 阅读对话\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
-    for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'}\n\n${m.content}\n\n`;
+    for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
   }
   return md;
+}
+
+export function referenceTokens(text:string):{start:number;end:number;ids:string[]}[]{
+  const tokens:{start:number;end:number;ids:string[]}[]=[];
+  for(const match of text.matchAll(/\[¶\d+(?:\s*(?:[–—-]\s*¶?\d+|[,，、]\s*¶?\d+))*\]/g)){
+    const ids:string[]=[];for(const part of match[0].matchAll(/¶?(\d+)(?:\s*[–—-]\s*¶?(\d+))?/g)){const first=Number(part[1]),last=Number(part[2]||part[1]);if(first<1||last<first||last-first>100)continue;for(let n=first;n<=last;n++)ids.push(String(n));}
+    if(ids.length)tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});
+  }return tokens;
 }
