@@ -132,3 +132,8 @@
 .gloss-root .gloss-compose-close{flex:none;width:26px;height:28px;color:var(--ink-3)}
 .gloss-root .gloss-compose-close svg{width:13px;height:13px}
 .gloss-root .gloss-tools .is-active{color:var(--rubric);background:var(--bg-raised)}
+
+/* Obsidian sets an explicit dark caret even when the floating editor has light text. */
+.gloss-root :is(input,textarea){caret-color:var(--ink)}
+.gloss-root textarea.gloss-lens-input{caret-color:var(--lens-fg)}
+.gloss-root textarea.gloss-lens-input::selection{color:var(--lens-bg);background:var(--lens-fg)}

@@ -76,3 +76,9 @@ final result: passed
 - Do not activate an existing highlight/thread when a noncollapsed article selection is present.
 - Native UI verified actual keyboard input (not AX setValue), click-to-edit, toolbar and / opening, Esc closing and draft restoration. Runtime event check: composing Enter ignored, legacy 229 ignored, ordinary Enter handled exactly once. Build + 29 regression tests passed.
 - The reported intermittent failure did not reproduce consistently on the public fixture before the fix. Focus/selection handling was hardened; direct Chinese typing through the automation did not reliably inject Unicode, so the input-method guard was additionally verified through runtime composition events.
+
+## 0.4.2 follow-up: invisible caret confirmed
+
+- Root cause verified in the live paper-theme editor: text rgb(243,239,230), caret rgb(15,15,15), background rgb(29,27,24). Host textarea styling gave the dark floating editor a nearly black caret, which was missed by the earlier typing-only check.
+- Explicit caret-color on reader inputs, with the lens editor using --lens-fg. Its selection uses --lens-fg background and --lens-bg text so selected text is legible.
+- Computed styles verified inside the running Obsidian with temporary empty elements for paper, sepia, snow, night, ink. All five have matching text/caret and distinct background plus legible selection pairs. Temporary elements removed immediately; no user settings or document data changed for this check. TypeScript/build passed.
