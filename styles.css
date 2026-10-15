@@ -167,3 +167,16 @@
 @media(prefers-reduced-motion:reduce){.gloss-margin-card{transition:none}}
 
 .gloss-margin-column .gloss-thread-card.is-collapsed{cursor:pointer}
+
+/* Native window chrome follows the focused reader; released on exit/unload. */
+body.gloss-reading-chrome :is(.titlebar,.workspace-tabs.mod-top>.workspace-tab-header-container,.workspace-ribbon){
+ --titlebar-background:var(--gloss-chrome-bg);--titlebar-background-focused:var(--gloss-chrome-bg);--titlebar-text-color:var(--gloss-chrome-muted);--titlebar-text-color-focused:var(--gloss-chrome-ink);
+ --tab-container-background:var(--gloss-chrome-bg);--tab-background-active:var(--gloss-chrome-raised);--tab-outline-color:var(--gloss-chrome-rule);--tab-divider-color:var(--gloss-chrome-rule);--tab-text-color:var(--gloss-chrome-muted);--tab-text-color-focused:var(--gloss-chrome-muted);--tab-text-color-active:var(--gloss-chrome-ink);--tab-text-color-focused-active:var(--gloss-chrome-ink);--tab-text-color-focused-highlighted:var(--gloss-chrome-ink);
+ --icon-color:var(--gloss-chrome-muted);--icon-color-hover:var(--gloss-chrome-ink);--icon-color-focused:var(--gloss-chrome-ink);--background-modifier-hover:var(--gloss-chrome-hover);--background-modifier-border:var(--gloss-chrome-rule);
+ background:var(--gloss-chrome-bg)!important;color:var(--gloss-chrome-ink);border-color:var(--gloss-chrome-rule)!important;color-scheme:var(--gloss-chrome-scheme)
+}
+body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-container :is(.sidebar-toggle-button,.workspace-tab-header-new-tab,.workspace-tab-header-tab-list){background:transparent!important;color:var(--gloss-chrome-muted)}
+body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-container .workspace-tab-header{background:transparent!important;color:var(--gloss-chrome-muted)}
+body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-container .workspace-tab-header.is-active{background:var(--gloss-chrome-raised)!important;color:var(--gloss-chrome-ink)}
+body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-container :is(.workspace-tab-header-inner-title,.workspace-tab-header-inner-icon,.workspace-tab-header-inner-close-button,.clickable-icon){color:var(--gloss-chrome-muted)!important}
+body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-container .workspace-tab-header.is-active .workspace-tab-header-inner-title{color:var(--gloss-chrome-ink)!important}
