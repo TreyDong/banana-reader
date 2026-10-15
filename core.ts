@@ -1,6 +1,6 @@
 import type {ReadingBrief} from './brief';
-export interface Anchor { quote: string; start: number; prefix: string; suffix: string }
-export interface Passage { text: string; start: number; end: number; number: number }
+export interface Anchor { pdfPage?:number;pdfOffset?:number;quote: string; start: number; prefix: string; suffix: string }
+export interface Passage { source?:string;text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
 export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
 export interface Thread { id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
@@ -50,7 +50,7 @@ export function contextFor(passages: Passage[], anchor: Anchor | undefined, text
     const last = passages.findIndex(p => p.end >= start + anchor.quote.length);
     chosen = passages.slice(Math.max(0, first - 1), Math.min(passages.length, Math.max(first, last) + 2));
   }
-  const context = chosen.map(p => `[¶${p.number}] ${p.text}`).join('\n\n');
+  const context = chosen.map(p => `[¶${p.number}] ${p.source?"（"+p.source+"） ":""}${p.text}`).join('\n\n');
   if (context.length > maxChars) throw new Error(`本轮上下文超过 ${maxChars.toLocaleString()} 字符，请缩小选区或改为“选文及相邻段落”。`);
   return context;
 }
@@ -62,10 +62,10 @@ export function exportReading(path: string, data: Reading, vault: string): strin
   let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
   const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
-    md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
+    md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}${h.anchor.pdfPage?' · PDF 第 '+h.anchor.pdfPage+' 页':''}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }
   for (const t of data.threads.filter(t=>!t.removed)) {
-    md += `## 阅读对话${t.label?' · '+t.label:''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
+    md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
   }
   return md;
