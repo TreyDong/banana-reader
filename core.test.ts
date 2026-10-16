@@ -194,3 +194,18 @@ import {referenceTokens} from './core';
 test('citations preserve standalone, grouped and ranged references without unbounded expansion',()=>{
   const source='引用[¶1]，参见[¶11–13]、[¶2, ¶5]和[¶8–¶9]。';assert.deepEqual(referenceTokens(source).map(t=>t.ids),[['1'],['11','12','13'],['2','5'],['8','9']]);assert.equal(referenceTokens('[¶0] [¶1–999999] [¶9–2]').length,0);assert.equal(referenceTokens('普通 [1] 或代码').length,0);
 });
+
+import {uniqueReferences} from './core';
+test('hundreds of PDF paragraph references on one page produce one page link',()=>{
+ const citations=Object.fromEntries(Array.from({length:600},(_,i)=>[String(i+1),{...makeAnchor('source '+i,0,8),pdfPage:6}]));
+ const ids=Array.from({length:600},(_,i)=>String(i+1));assert.deepEqual(uniqueReferences([...ids,...ids],citations).map(r=>r.label),['第 6 页']);
+ citations['601']={...makeAnchor('next page',0,9),pdfPage:7};assert.deepEqual(uniqueReferences([...ids,'601','missing'],citations).map(r=>r.label),['第 6 页','第 7 页']);
+});
+test('text references preserve distinct locations while collapsing aliases',()=>{
+ const first=makeAnchor('one two one',0,3),second=makeAnchor('one two one',8,11);
+ assert.deepEqual(uniqueReferences(['1','2','3','1'],{'1':first,'2':{...first},'3':second}).map(r=>r.id),['1','3']);
+});
+
+test('adjacent reference groups share one navigable PDF page chip without swallowing surrounding prose',()=>{
+ const text='说明 [¶1][¶2] [¶3]。另一个结论 [¶4]';const refs=referenceTokens(text);assert.deepEqual(refs.map(r=>r.ids),[['1','2','3'],['4']]);assert.equal(text.slice(refs[0].start,refs[0].end),'[¶1][¶2] [¶3]');const citations=Object.fromEntries(['1','2','3'].map(id=>[id,{...makeAnchor('same page',0,9),pdfPage:6}]));assert.equal(uniqueReferences(refs[0].ids,citations).length,1);
+});

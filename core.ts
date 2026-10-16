@@ -80,10 +80,18 @@ export function referenceTokens(text:string):{start:number;end:number;ids:string
   const tokens:{start:number;end:number;ids:string[]}[]=[];
   for(const match of text.matchAll(/\[¶\d+(?:\s*(?:[–—-]\s*¶?\d+|[,，、]\s*¶?\d+))*\]/g)){
     const ids:string[]=[];for(const part of match[0].matchAll(/¶?(\d+)(?:\s*[–—-]\s*¶?(\d+))?/g)){const first=Number(part[1]),last=Number(part[2]||part[1]);if(first<1||last<first||last-first>100)continue;for(let n=first;n<=last;n++)ids.push(String(n));}
-    if(ids.length)tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});
+    if(ids.length){const previous=tokens.at(-1);if(previous&&/^\s*$/.test(text.slice(previous.end,match.index!))){previous.end=match.index!+match[0].length;previous.ids=[...new Set([...previous.ids,...ids])];}else tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});}
   }return tokens;
 }
 
 export function regenerationHistory(thread:Thread):Message[]{let index=thread.messages.length-1;while(index>=0&&thread.messages[index].role!=='user')index--;if(index<0)throw new Error('没有可重新生成的问题。');return thread.messages.slice(0,index+1).map(m=>({...m}));}
 export function tokenReceipt(usage?:TokenUsage){if(!usage)return'用量未返回';const n=(value:number)=>value.toLocaleString('zh-CN');const parts=[usage.input!==undefined?n(usage.input)+' 输入':'',usage.output!==undefined?n(usage.output)+' 输出':''].filter(Boolean);return parts.join(' · ')||(usage.total!==undefined?n(usage.total)+' tokens':'用量未返回');}
 export function tokenDetails(usage?:TokenUsage){if(!usage)return'该回答未保存服务返回的 token 用量';return[usage.input!==undefined?'输入 '+usage.input+' tokens（包含缓存）':'',usage.output!==undefined?'输出 '+usage.output+' tokens':'',usage.cacheRead!==undefined?'缓存读取 '+usage.cacheRead+' tokens':'',usage.cacheWrite!==undefined?'缓存写入 '+usage.cacheWrite+' tokens':'',usage.total!==undefined?'总计 '+usage.total+' tokens':''].filter(Boolean).join(' · ');}
+
+/** One navigable reference per PDF page or original text location. Missing IDs are not sources. */
+export function uniqueReferences(ids:string[],citations:Record<string,Anchor>={}):{id:string;anchor:Anchor;label:string}[]{
+ const seen=new Set<string>(),result:{id:string;anchor:Anchor;label:string}[]=[];
+ for(const id of ids){const anchor=citations[id];if(!anchor)continue;const key=anchor.pdfPage?'pdf:'+anchor.pdfPage:'text:'+anchor.start+':'+anchor.quote;
+  if(seen.has(key))continue;seen.add(key);result.push({id,anchor,label:anchor.pdfPage?'第 '+anchor.pdfPage+' 页':'¶'+id});
+ }return result;
+}

@@ -6,11 +6,11 @@ export class NativePdf {
  loaded=false;page=1;blocks:HTMLElement[]=[];text='';passages:Passage[]=[];
  private observer:MutationObserver;private resize:ResizeObserver;private frame=0;private closed=false;private observed?:Element;private pinned?:number;
  constructor(readonly host:HTMLElement,private changed:()=>void,private geometry:()=>void){
-  this.observer=new MutationObserver(()=>this.schedule());this.observer.observe(host,{childList:true,subtree:true,characterData:true});
+  this.observer=new MutationObserver(records=>{if(records.some(r=>r.type==='characterData'||[...Array.from(r.addedNodes),...Array.from(r.removedNodes)].some(n=>!(n instanceof Element&&n.matches('.gloss-pdf-overlay')))))this.schedule();});this.observer.observe(host,{childList:true,subtree:true,characterData:true});
   this.resize=new ResizeObserver(()=>{this.schedule();this.geometry();});this.resize.observe(host);host.addEventListener('scroll',this.scrolled,true);this.schedule();
  }
- private scrolled=()=>{this.pinned=undefined;this.schedule();this.geometry();};
- private schedule(){cancelAnimationFrame(this.frame);this.frame=requestAnimationFrame(()=>this.scan());}
+ private scrolled=()=>{this.pinned=undefined;this.schedule();};
+ private schedule(){cancelAnimationFrame(this.frame);this.frame=requestAnimationFrame(()=>{this.scan();this.geometry();});}
  get pages(){return Array.from(this.host.querySelectorAll<HTMLElement>('.page[data-page-number]'));}
  get total(){return Number(this.host.querySelector<HTMLInputElement>('.pdf-page-input')?.max)||0;}
  private scan(forced?:number){
@@ -32,8 +32,21 @@ export class NativePdf {
 
   let elapsed=0,last=Date.now(),visible=this.host.ownerDocument.visibilityState!=='hidden';while(elapsed<15000&&!this.closed){const now=Date.now(),current=this.host.ownerDocument.visibilityState!=='hidden';if(visible&&current)elapsed+=Math.min(1000,now-last);last=now;visible=current;const target=this.pages.find(p=>Number(p.dataset.pageNumber)===page);if(target){this.scan(page);if(this.rendered(target)&&target.querySelector(".textLayer .endOfContent")){this.scan(page);return;}}await new Promise(r=>setTimeout(r,80));}if(!this.closed)throw new Error('PDF 页面尚未加载，请稍后重试。');
  }
- paint(marks:PdfMark[]){this.host.querySelectorAll('.gloss-pdf-overlay').forEach(el=>el.remove());const page=this.pages.find(p=>Number(p.dataset.pageNumber)===this.page);if(!page)return;const origin=this.host.getBoundingClientRect(),box=(this.host.querySelector<HTMLElement>('.pdf-viewer-container')||this.host).getBoundingClientRect();if(!box.width||!box.height)return;const overlay=page.ownerDocument.createElement('div');overlay.className='gloss-pdf-overlay';Object.assign(overlay.style,{left:box.left-origin.left+'px',top:box.top-origin.top+'px',width:box.width+'px',height:box.height+'px'});this.host.append(overlay);
-  for(const mark of marks){const range=this.range(mark.anchor);if(!range)continue;const seen=new Set<string>();for(const r of Array.from(range.getClientRects())){if(!r.width||!r.height)continue;const key=[r.x,r.y,r.width,r.height].map(Math.round).join(',');if(seen.has(key))continue;seen.add(key);const el=overlay.ownerDocument.createElement('div');el.className='gloss-pdf-mark';el.dataset.kind=mark.kind;el.dataset.style=mark.style||'highlight';el.dataset.color=mark.color||'yellow';el.dataset.id=mark.id;if(mark.active)el.classList.add('is-active');Object.assign(el.style,{left:100*(r.left-box.left)/box.width+'%',top:100*(r.top-box.top)/box.height+'%',width:100*r.width/box.width+'%',height:100*r.height/box.height+'%'});overlay.append(el);}}
+ paint(marks:PdfMark[]){
+  // Attach each overlay to its own original page, so native scrolling moves text and marks together.
+  this.host.querySelectorAll('.gloss-pdf-overlay').forEach(el=>el.remove());
+  for(const page of this.pages){const pageMarks=marks.filter(m=>m.anchor.pdfPage===Number(page.dataset.pageNumber));if(!pageMarks.length)continue;
+   const blocks=Array.from(page.querySelectorAll<HTMLElement>('.textLayer span')).filter(s=>!!s.textContent?.trim()&&!s.querySelector('span'));
+   if(!blocks.length)continue;const ix=indexPassages(blocks.map(b=>b.textContent||'')),rect=page.getBoundingClientRect(),sx=rect.width/page.offsetWidth,sy=rect.height/page.offsetHeight;
+   const box={left:rect.left+page.clientLeft*sx,top:rect.top+page.clientTop*sy,width:page.clientWidth*sx,height:page.clientHeight*sy};if(!box.width||!box.height)continue;
+   const overlay=page.ownerDocument.createElement('div');overlay.className='gloss-pdf-overlay';Object.assign(overlay.style,{left:'0',top:'0',width:'100%',height:'100%'});
+   for(const mark of pageMarks){const range=anchorRange(blocks,ix.passages,ix.text,mark.anchor);if(!range)continue;const seen=new Set<string>();
+    for(const r of Array.from(range.getClientRects())){if(!r.width||!r.height)continue;const key=[r.x,r.y,r.width,r.height].map(Math.round).join(',');if(seen.has(key))continue;seen.add(key);
+     const el=overlay.ownerDocument.createElement('div');el.className='gloss-pdf-mark';el.dataset.kind=mark.kind;el.dataset.style=mark.style||'highlight';el.dataset.color=mark.color||'yellow';el.dataset.id=mark.id;if(mark.active)el.classList.add('is-active');
+     Object.assign(el.style,{left:100*(r.left-box.left)/box.width+'%',top:100*(r.top-box.top)/box.height+'%',width:100*r.width/box.width+'%',height:100*r.height/box.height+'%'});overlay.append(el);
+    }
+   }page.append(overlay);
+  }
  }
  reveal(anchor:Anchor){const r=this.range(anchor)?.getBoundingClientRect(),viewport=this.host.querySelector<HTMLElement>('.pdf-viewer-container');if(!r||!viewport)return;const box=viewport.getBoundingClientRect();const page=this.pages.find(p=>Number(p.dataset.pageNumber)===anchor.pdfPage),pageTop=page?viewport.scrollTop+page.getBoundingClientRect().top-box.top:0;viewport.scrollTo({top:Math.max(pageTop,viewport.scrollTop+r.top-box.top-box.height/2),behavior:'smooth'});}
  hit(x:number,y:number){return Array.from(this.host.querySelectorAll<HTMLElement>('.gloss-pdf-mark')).reverse().find(el=>{const r=el.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;})?.dataset.id;}
