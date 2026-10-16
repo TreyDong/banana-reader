@@ -224,7 +224,7 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 
 /* Compact new-question entry; model and network controls share the input line. */
 .gloss-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
-.gloss-composer{width:min(740px,calc(100% - 36px));padding:8px 9px 8px 13px;border-radius:19px}
+.gloss-composer{width:min(620px,calc(100% - 36px));padding:8px 9px 8px 13px;border-radius:19px}
 .gloss-compose-input{display:flex;align-items:center;gap:7px;min-width:0}
 .gloss-root .gloss-compose-input textarea.gloss-question{height:36px;min-height:36px;max-height:36px;line-height:24px;padding:6px 3px;font-size:15px;white-space:pre;overflow:auto;scrollbar-width:none;flex:1}
 .gloss-compose-model-row{padding:0;flex:none;min-width:0}.gloss-compose-model-row .gloss-model-picker{max-width:148px;height:34px;font-size:11px;border:1px solid var(--rule);border-radius:9px;padding:3px 8px;background:var(--bg-raised)}
@@ -241,3 +241,5 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 @container(max-width:719px){.gloss-compose-model-row .gloss-model-picker{max-width:100px}.gloss-compose-input{gap:5px}.gloss-root .gloss-key-hint{display:none}.gloss-compose-input .gloss-web-toggle span:last-child{display:none}.gloss-composer{padding:6px 7px 6px 10px}.gloss-root .gloss-compose-input textarea.gloss-question{font-size:13px}}
 
 .gloss-keys-modal{background:var(--bg-raised);color:var(--ink)}.gloss-keys-modal .gloss-key-row{border-color:var(--rule)}.gloss-keys-modal .gloss-key-row>span:last-child,.gloss-keys-modal .modal-close-button{color:var(--ink-3)}.gloss-keys-modal .gloss-key-row kbd{border-color:var(--rule);color:var(--ink-3)}
+
+.gloss-compose-selection{position:absolute;left:0;bottom:calc(100% + 9px);display:flex;align-items:center;gap:9px;max-width:100%;padding:5px 7px 5px 11px;border:1px solid var(--rule);border-radius:9px;background:var(--bg-raised);color:var(--ink-3);font:11px var(--font-sans);box-shadow:var(--shadow-pop)}.gloss-compose-selection>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gloss-compose-selection .gloss-icon{width:22px;height:22px}.gloss-compose-selection svg{width:12px;height:12px}.gloss-answer-stage{display:block;color:var(--ink-3);font:12px/1.6 var(--font-sans);margin-top:9px}.gloss-answer-stop{margin-left:auto}.gloss-root .gloss-send:disabled{opacity:.4;cursor:default}.gloss-composer:has(.gloss-compose-selection:not([hidden])) .gloss-question-suggestions{bottom:calc(100% + 50px)}

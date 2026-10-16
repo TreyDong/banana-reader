@@ -61,3 +61,23 @@ export class BookIndexCache {
  async save(index:BookIndex){await fs.mkdir(this.dir,{recursive:true});const tmp=this.file(index.stamp.path)+'.'+randomUUID()+'.tmp';try{await fs.writeFile(tmp,JSON.stringify(index),{mode:0o600});await fs.rename(tmp,this.file(index.stamp.path));}finally{await fs.rm(tmp,{force:true});}}
  async remove(path:string){await fs.rm(this.file(path),{force:true});}
 }
+
+/** Bounded whole-document evidence without embeddings. Display remains the original PDF. */
+export function wholeDocumentContext(sections:SourceSection[],question:string,budget:number){
+ const compact=(text:string)=>text.replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g,'$1');
+ const chunks=chunkSections(sections,1500,100);if(!chunks.length)throw new Error('文档没有可用于问答的文字；扫描 PDF 需要 OCR。');
+ const fullHeading='本轮针对整篇文档提问，没有选中文本。以下是完整文档的文字内容，请围绕文档整体回答。\n\n';
+ const fullSize=chunks.reduce((n,c)=>n+compact(c.text).length+c.label.length+35,fullHeading.length);
+ const partial=fullSize>budget,heading=partial?'本轮针对整篇文档提问，没有选中文本。以下从全书本地文字中选取问题相关证据，并覆盖开头、结尾及不同位置的概览片段；不是全部正文。请回答文档整体的问题，不要把某个片段当作用户选区，也不能声称已通读全书；证据不足时明确说明。\n\n':fullHeading;
+ let candidates=chunks;
+ if(partial){const tokens=terms(question).filter(t=>!['什么','这本','本书','内容','核心','文档','文章','一下','总结','主要'].includes(t)),ranked=chunks.map((c,i)=>({i,score:tokens.reduce((n,t)=>n+(compact(c.text).toLowerCase().includes(t)?1:0),0)})).filter(c=>c.score>0).sort((a,b)=>b.score-a.score),ids=new Set<number>();
+  // Interleave overview and relevant passages so a small budget still spans the book.
+  const broad=[0,1,2,3,...Array.from({length:12},(_,i)=>Math.round(i*(chunks.length-1)/11)),chunks.length-1];
+  for(let i=0;i<Math.max(broad.length,Math.min(10,ranked.length));i++){if(i<broad.length)ids.add(Math.min(chunks.length-1,broad[i]));if(i<10&&ranked[i])ids.add(ranked[i].i);}candidates=[...ids].map(i=>chunks[i]);
+ }
+ let used=heading.length;const chosen:BookChunk[]=[];for(const c of candidates){const cost=compact(c.text).length+c.label.length+35;if(used+cost>budget)continue;chosen.push(c);used+=cost;}
+ if(!chosen.length)throw new Error('上下文上限不足以容纳文档片段，请提高上限。');chosen.sort((a,b)=>chunks.indexOf(a)-chunks.indexOf(b));
+ let context=heading;const citations:Record<string,Anchor>={},sources:ContextInfo['sources']=[];
+ chosen.forEach((c,i)=>{const id=String(i+1);context+=`[¶${id}] （${c.label}）${compact(c.text)}\n\n`;citations[id]={...c.anchor};sources.push({id,label:c.label});});
+ return{context,citations,info:{label:partial?'整篇文档 · 全书检索与概览':'整篇文档 · 全文',sources} as ContextInfo};
+}

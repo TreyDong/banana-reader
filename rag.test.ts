@@ -26,3 +26,17 @@ test('atomic local cache reload retains index and clearing does not touch the bo
 test('exported retrieval receipts retain embedding identity and page-specific jump links',async()=>{const {exportReading}=await import('./core');const index=fixture(),r=retrievalContext(retrieve(index,'创造价值',[1,0],2),2000);const md=exportReading(stamp.path,{highlights:[],progress:0,draft:'',updated:1,threads:[{id:'rag-question',selection:false,created:1,contextInfo:{label:'整书检索',embeddingModel:settings.model,sources:r.sources},citations:r.citations,messages:[{role:'user',content:'如何创造价值？'},{role:'assistant',content:'原文说明 [¶1]。',model:'answer-model'}]}]},'公开验收库');assert.match(md,/Embedding：embedding-test/);assert.match(md,/PDF 第 25 页/);assert.match(md,/anchor=rag-question&citation=1/);assert.match(md,/answer-model/);});
 
 test('follow-up reuses unchanged source IDs and retains previously cited evidence',()=>{const index=fixture(),first=retrievalContext([index.chunks[1]],3000),thread={id:'t',created:1,citations:first.citations,messages:[{role:'assistant' as const,content:'依据 [¶1]。'}]};const reused=retrievalContext([index.chunks[1]],3000,2,thread.citations);assert.equal(reused.sources[0].id,'1');const next=retrievalContext([index.chunks[2]],3000,2,thread.citations),kept=retainPriorEvidence(next,thread,3000);assert.ok(kept.citations['1']);assert.ok(kept.citations['2']);assert.match(kept.context,/先前回答引用过的原文/);assert.ok(kept.context.length<=3000);});
+
+import {wholeDocumentContext} from './rag';
+test('document questions include every page of a small PDF with page citations and no selected anchor',()=>{
+ const sections=[{text:'第一页只有背景。',label:'PDF 第 1 页',pdfPage:1},{text:'第二页给出了全书核心原则。',label:'PDF 第 2 页',pdfPage:2}],r=wholeDocumentContext(sections,'核心内容是什么？',3000);
+ assert.match(r.context,/第一页/);assert.match(r.context,/第二页/);assert.match(r.info.label,/全文/);assert.deepEqual(Object.values(r.citations).map(a=>a.pdfPage),[1,2]);assert.match(r.context,/没有选中文本/);
+});
+test('long document overview spans distant pages and relevant evidence within a fixed budget',()=>{
+ const sections=Array.from({length:100},(_,i)=>({text:(i===79?'量子香蕉证据。':'普通章节背景。').repeat(80),label:'PDF 第 '+(i+1)+' 页',pdfPage:i+1})),r=wholeDocumentContext(sections,'量子香蕉如何实现？',12000),pages=Object.values(r.citations).map(a=>a.pdfPage!);
+ assert.ok(pages.includes(80));assert.ok(pages.some(n=>n<10));assert.ok(pages.some(n=>n>90));assert.ok(r.context.length<=12000);assert.match(r.context,/不是全部正文/);assert.match(r.info.label,/全书检索与概览/);
+ for(const a of Object.values(r.citations))assert.equal(sections[a.pdfPage!-1].text.slice(a.start,a.start+a.quote.length),a.quote);
+});
+test('PDF glyph whitespace compaction does not change stored original quote anchors',()=>{
+ const source='全\n\n书\n\n主\n\n旨',r=wholeDocumentContext([{text:source,label:'PDF 第 6 页',pdfPage:6}],'主旨',3000);assert.match(r.context,/全书主旨/);assert.equal(r.citations['1'].quote,source);assert.throws(()=>wholeDocumentContext([],'问题',3000),/没有可用于问答/);assert.throws(()=>wholeDocumentContext([{text:'内容'.repeat(1000),label:'章节'}],'问题',100),/上限不足/);
+});
