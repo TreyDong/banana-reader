@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newService,migrateSetup,resolveModel,serviceSettings,pruneAssignments,type ModelSetup} from './services';
-import {parsePiLine,cliConfig,askAgent,discoverPiModels} from './agent';
+import {newService,migrateSetup,resolveModel,serviceSettings,pruneAssignments,serviceChoices,resolveEmbeddingModel,setModelType,migrateEmbeddingModel,type ModelSetup} from './services';
+import {parsePiLine,cliConfig,askAgent,discoverPiModels,normalizeModels,mergeModels} from './agent';
 import {promises as fs} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -35,3 +35,29 @@ test('missing and invalid usage is not converted to invented zeros',()=>{assert.
 test('regeneration reuses the latest question and prior context without duplicating questions or mutating old answers',()=>{const t={id:'q',created:1,messages:[{role:'user' as const,content:'q1'},{role:'assistant' as const,content:'a1'},{role:'user' as const,content:'q2'},{role:'assistant' as const,content:'old',usage:{input:100,output:10}}]};const before=JSON.stringify(t);const history=regenerationHistory(t);assert.deepEqual(history.map(m=>m.content),['q1','a1','q2']);history[0].content='change copy';assert.equal(JSON.stringify(t),before);assert.throws(()=>regenerationHistory({id:'empty',created:1,messages:[]}),/没有可/);});
 test('soft-deleted questions disappear from notebook and export and recover without losing content',()=>{const r=freshReading();r.threads=[{id:'q',created:1,removed:true,messages:[{role:'user',content:'hidden question'},{role:'assistant',content:'preserved answer'}]}];assert.equal(notebookCounts(r).questions,0);assert.deepEqual(notebookEntries(r),[]);assert.ok(!exportReading('公开.md',r,'库').includes('hidden question'));r.threads[0].removed=false;assert.equal(notebookCounts(r).questions,1);assert.ok(exportReading('公开.md',r,'库').includes('preserved answer'));});
 test('OpenAI streamed final usage is captured even when the usage event has no text choices',async()=>{let sent:any;const server=http.createServer((req,res)=>{let body='';req.on('data',b=>body+=b);req.on('end',()=>{sent=JSON.parse(body);res.writeHead(200,{'Content-Type':'text/event-stream'});res.write('data: '+JSON.stringify({choices:[{delta:{content:'answer [¶1]'}}]})+'\n\n');res.end('data: '+JSON.stringify({choices:[],usage:{prompt_tokens:35,completion_tokens:7,total_tokens:42,prompt_tokens_details:{cached_tokens:10}}})+'\n\ndata: [DONE]\n\n');});});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));try{const settings={...base,apiBase:'http://127.0.0.1:'+(server.address()as any).port,apiModel:'test'},usages:TokenUsage[]=[];const answer=await askAgent({settings,context:'[¶1] public',messages:[{role:'user',content:'q',usage:{total:999}}],signal:new AbortController().signal,onText:()=>{},onUsage:u=>usages.push(u)});assert.equal(answer,'answer [¶1]');assert.deepEqual(usages.at(-1),{input:35,output:7,cacheRead:10,total:42});assert.deepEqual(sent.stream_options,{include_usage:true});assert.equal(sent.messages.at(-1).usage,undefined);}finally{server.closeAllConnections();server.close();}});
+
+
+test('saved model types survive discovery merge, normalization and service reload',()=>{
+ const existing=normalizeModels([{id:'embed',name:'My vectors',type:'embedding'},{id:'chat',name:'Chat'},{id:'bad',type:'other'}]);
+ assert.equal(existing[0].type,'embedding');assert.equal(existing[1].type,undefined);assert.equal(existing[2].type,undefined);
+ const models=mergeModels(existing,[{id:'embed',name:'Remote name'},{id:'new',name:'New'}]);assert.equal(models[0].type,'embedding');assert.equal(models[0].name,'My vectors');
+ const result=migrateSetup({...base,services:[{...newService('api','api'),models}],taskModels:{embedding:{serviceId:'api',modelId:'embed'}}});assert.equal(resolveEmbeddingModel(result).model.type,'embedding');
+});
+test('chat and embedding choices are filtered by model type and transport without changing task defaults',()=>{
+ const s=setup();s.services[0].models.push({id:'vec',name:'Vectors',type:'embedding'});s.services.push({...newService('claude','cli'),models:[{id:'invalid',name:'Invalid',type:'embedding'}]});s.taskModels.embedding={serviceId:'one',modelId:'vec'};
+ assert.deepEqual(serviceChoices(s,'embedding').map(m=>m.id),['vec']);assert.deepEqual(serviceChoices(s).map(m=>m.id),['same','same']);assert.equal(resolveModel(s,'translate').service.id,'two');assert.equal(resolveEmbeddingModel(s).service.id,'one');
+ assert.throws(()=>resolveModel(s,'default',s.taskModels.embedding!),/不能用于聊天/);delete s.taskModels.embedding;assert.throws(()=>resolveEmbeddingModel(s),/选择嵌入模型/);
+});
+test('changing model type clears only assignments that are no longer compatible',()=>{
+ const s=setup(),service=s.services[0],model=service.models[0];s.taskModels.summary={serviceId:'two',modelId:'same'};setModelType(s,service,model,'embedding');assert.equal(s.taskModels.default,undefined);assert.equal(s.taskModels.translate?.serviceId,'two');assert.equal(s.taskModels.summary?.serviceId,'two');s.taskModels.embedding={serviceId:'one',modelId:'same'};setModelType(s,service,model,'chat');assert.equal(s.taskModels.embedding,undefined);assert.equal(s.taskModels.default,undefined);
+ assert.throws(()=>setModelType(s,newService('claude','c'),{id:'x',name:'x'},'embedding'),/兼容 API/);
+});
+test('legacy embedding config reuses matching credentials and preserves independent chat defaults',()=>{
+ const s=setup();const before=JSON.stringify(s.taskModels);const result=migrateEmbeddingModel(s,{base:'https://one.test/v1/',model:'vec'},service=>service.id==='one');assert.equal(result?.created,false);assert.equal(result?.service.id,'one');assert.equal(resolveEmbeddingModel(s).model.id,'vec');assert.deepEqual({...s.taskModels,embedding:undefined},{...JSON.parse(before),embedding:undefined});assert.equal(migrateEmbeddingModel(s,{base:'https://one.test/v1',model:'vec'}),null);assert.equal(s.services.length,2);
+});
+test('legacy embedding config with different credentials gets a separate service, blank config adds nothing',()=>{
+ const s=setup();assert.equal(migrateEmbeddingModel(s,{base:'https://one.test/v1',model:''}),null);assert.equal(s.services.length,2);const result=migrateEmbeddingModel(s,{base:'https://one.test/v1',model:'vec'},()=>false);assert.equal(result?.created,true);assert.equal(result?.service.id,'legacy-embedding');assert.equal(resolveModel(s).service.id,'one');assert.equal(resolveEmbeddingModel(s).service.id,'legacy-embedding');assert.equal(result?.service.base,'https://one.test/v1');
+});
+test('changing embedding transport removes embedding assignment but leaves unrelated routes intact',()=>{
+ const s=setup(),service=s.services[0];service.models.push({id:'vec',name:'Vectors',type:'embedding'});s.taskModels.embedding={serviceId:'one',modelId:'vec'};service.protocol='anthropic';pruneAssignments(s);assert.equal(s.taskModels.embedding,undefined);assert.equal(resolveModel(s,'translate').service.id,'two');service.protocol='responses';assert.equal(serviceChoices(s,'embedding').length,1);
+});

@@ -107,10 +107,11 @@ async function askAPI(r:AskRequest):Promise<string>{
   });
 }
 
-export interface ModelOption {id:string;name:string}
+export type ModelType='chat'|'embedding';
+export interface ModelOption {id:string;name:string;type?:ModelType}
 export function normalizeModels(items:unknown):ModelOption[]{
   if(!Array.isArray(items))return[];const seen=new Set<string>();const result:ModelOption[]=[];
-  for(const item of items){const id=typeof item==='string'?item:typeof item?.id==='string'?item.id:'';if(!id.trim()||id.length>160||/[\s\x00-\x1f]/.test(id)||seen.has(id))continue;seen.add(id);result.push({id,name:typeof item?.name==='string'?item.name.slice(0,100):id});if(result.length>=100)break;}return result;
+  for(const item of items){const id=typeof item==='string'?item:typeof item?.id==='string'?item.id:'';if(!id.trim()||id.length>160||/[\s\x00-\x1f]/.test(id)||seen.has(id))continue;seen.add(id);result.push({id,name:typeof item?.name==='string'?item.name.slice(0,100):id,...(item?.type==='embedding'||item?.type==='chat'?{type:item.type}:{})});if(result.length>=100)break;}return result;
 }
 export function mergeModels(...lists:ModelOption[][]):ModelOption[]{return normalizeModels(lists.flat());}
 export async function discoverCodexModels(cache=join(homedir(),'.codex','models_cache.json')):Promise<ModelOption[]>{
