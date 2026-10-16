@@ -1,9 +1,10 @@
+import type {ContextInfo} from './rag';
 import type {ReadingBrief} from './brief';
 export interface Anchor { pdfPage?:number;pdfOffset?:number;quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { source?:string;text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
 export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
-export interface Thread { id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Thread { selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
@@ -66,6 +67,8 @@ export function exportReading(path: string, data: Reading, vault: string): strin
   }
   for (const t of data.threads.filter(t=>!t.removed)) {
     md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
+    if(t.contextInfo)md+='上下文：'+t.contextInfo.label+(t.contextInfo.embeddingModel?' · Embedding：'+t.contextInfo.embeddingModel:'')+'\n\n';
+    if(t.contextInfo?.embeddingModel){md+='### 检索来源\n\n';for(const [id,anchor]of Object.entries(t.citations||{})){const label=anchor.pdfPage?'PDF 第 '+anchor.pdfPage+' 页':t.contextInfo.sources.find(s=>s.id===id)?.label||'原文片段';md+='- [¶'+id+'] ['+label+']('+back(t.id)+'&citation='+encodeURIComponent(id)+')\n';}md+='\n';}
     for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
   }
   return md;
