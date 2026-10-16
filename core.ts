@@ -6,7 +6,7 @@ export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cach
 export interface WebSource {title:string;url:string;snippet:string}
 export interface WebReceipt {provider?:string;query:string;sources:WebSource[]}
 export interface Message { web?:WebReceipt; role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
-export interface Thread { translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Thread { interrupted?:boolean;followupDraft?:string;translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
@@ -94,4 +94,13 @@ export function uniqueReferences(ids:string[],citations:Record<string,Anchor>={}
  for(const id of ids){const anchor=citations[id];if(!anchor)continue;const key=anchor.pdfPage?'pdf:'+anchor.pdfPage:'text:'+anchor.start+':'+anchor.quote;
   if(seen.has(key))continue;seen.add(key);result.push({id,anchor,label:anchor.pdfPage?'第 '+anchor.pdfPage+' 页':'¶'+id});
  }return result;
+}
+
+/** A card follow-up keeps its source/history; the bottom composer always starts another thread. */
+export function followupHistory(thread:Thread,question:string):Message[]{
+ if(thread.removed)throw new Error('这条问答已删除。');const text=question.trim();if(!text)throw new Error('请输入追问。');
+ return[...thread.messages.filter(m=>m.content.trim()).map(m=>({...m})),{role:'user',content:text}];
+}
+export function visibleThreadError(thread:Thread):string|undefined{
+ const error=thread.error;if(!error||/^(?:已停止|已取消|用户取消|AbortError|The operation was aborted|This operation was aborted|aborted|cancelled|canceled)[。.！!]*(?:（已保留原(?:回答|译文)）)?$/i.test(error.trim()))return;return error;
 }

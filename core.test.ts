@@ -209,3 +209,12 @@ test('text references preserve distinct locations while collapsing aliases',()=>
 test('adjacent reference groups share one navigable PDF page chip without swallowing surrounding prose',()=>{
  const text='说明 [¶1][¶2] [¶3]。另一个结论 [¶4]';const refs=referenceTokens(text);assert.deepEqual(refs.map(r=>r.ids),[['1','2','3'],['4']]);assert.equal(text.slice(refs[0].start,refs[0].end),'[¶1][¶2] [¶3]');const citations=Object.fromEntries(['1','2','3'].map(id=>[id,{...makeAnchor('same page',0,9),pdfPage:6}]));assert.equal(uniqueReferences(refs[0].ids,citations).length,1);
 });
+
+import {followupHistory,visibleThreadError} from './core';
+test('card follow-up appends one question, preserves the original conversation and sources',()=>{
+ const t={id:'same-card',created:1,selection:false,context:'whole document',citations:{'1':makeAnchor('source',0,6)},messages:[{role:'user' as const,content:'主题？'},{role:'assistant' as const,content:'主题与依据 [¶1]',model:'original-model'}]},before=JSON.stringify(t),h=followupHistory(t,'  举个例子？  ');
+ assert.deepEqual(h.map(m=>m.content),['主题？','主题与依据 [¶1]','举个例子？']);assert.equal(h[1].model,'original-model');assert.equal(JSON.stringify(t),before);assert.notEqual(h[0],t.messages[0]);assert.throws(()=>followupHistory({...t,removed:true},'继续'),/已删除/);assert.throws(()=>followupHistory(t,' '),/请输入/);
+});
+test('interrupted partial answers remain useful history and cancellation is quiet',()=>{
+ const t={id:'partial',created:1,interrupted:true,error:'已停止',messages:[{role:'user' as const,content:'请解释'},{role:'assistant' as const,content:'先看第一点'}]};assert.deepEqual(followupHistory(t,'继续').map(m=>m.content),['请解释','先看第一点','继续']);assert.equal(visibleThreadError(t),undefined);assert.equal(visibleThreadError({...t,error:'已停止（已保留原回答）'}),undefined);assert.equal(visibleThreadError({...t,error:'网络连接失败'}),'网络连接失败');
+});
