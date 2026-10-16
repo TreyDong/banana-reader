@@ -196,3 +196,16 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gloss-pdf .gloss-article{position:relative}.gloss-pdf-overlay{inset:auto;overflow:hidden}
 
 .gloss-pdf .gloss-native-pdf{height:100%;width:100%;min-height:0;border:1px solid var(--rule);border-radius:8px;overflow:hidden}.gloss-pdf .gloss-native-pdf>.view-header{display:none}.gloss-pdf .gloss-native-pdf>.view-content{height:100%;padding:0;display:block}.gloss-pdf .gloss-native-pdf .pdf-container{height:calc(100% - 42px)!important}
+
+/* Continuous PDF pages share the article surface; native controls stay outside the reading flow. */
+.gloss-pdf .gloss-native-pdf{border:0;border-radius:0;background:transparent!important;box-shadow:none}
+.gloss-pdf .gloss-native-pdf :is(.view-content,.pdf-container,.pdf-content-container,.pdf-viewer-container,.pdfViewer){background:transparent!important}
+.gloss-pdf .gloss-native-pdf .pdf-toolbar:not(.pdf-findbar),.gloss-pdf .gloss-native-pdf .pdf-sidebar-container{display:none!important}
+.gloss-pdf .gloss-native-pdf .pdf-container{height:100%!important}
+.gloss-pdf .gloss-native-pdf .pdf-content-container{left:0!important;width:100%!important}
+.gloss-pdf .gloss-native-pdf .pdf-viewer-container{top:0!important;bottom:0!important;height:100%;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--rule-strong) transparent;overscroll-behavior:contain}
+.gloss-pdf .gloss-native-pdf .pdfViewer{padding:28px 0 56px}
+.gloss-pdf .gloss-native-pdf .pdfViewer .page{margin:0 auto 28px;border:0;box-shadow:none;background:transparent}
+.gloss-pdf:is([data-theme=paper],[data-theme=sepia],[data-theme=snow]) .gloss-native-pdf .page{background:var(--bg)!important}
+.gloss-pdf:is([data-theme=paper],[data-theme=sepia],[data-theme=snow]) .gloss-native-pdf .canvasWrapper{mix-blend-mode:multiply}
+.gloss-pdf .gloss-native-pdf .pdf-findbar{background:var(--bg-raised)!important;border-color:var(--rule);border-radius:10px;box-shadow:0 6px 24px #0001}
