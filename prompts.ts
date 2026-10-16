@@ -2,10 +2,10 @@ export interface ReadingCommand {id:string;name:string;prompt:string;builtin?:bo
 export const MAX_COMMANDS=8;
 export const DEFAULT_COMMANDS:ReadingCommand[]=[
   {id:'explain',name:'解释',prompt:'请解释这段话在文中的含义和作用。',builtin:true},
-  {id:'define',name:'释义',prompt:'请解释选文中的概念或用词，并给出具体例子。',builtin:true},
-  {id:'simplify',name:'简化',prompt:'请用更简单的语言解释选文。',builtin:true},
+  {id:'define',name:'释义',prompt:'请解释选中文本中的概念或用词，并给出具体例子。',builtin:true},
+  {id:'simplify',name:'简化',prompt:'请用更简单的语言解释选中文本。',builtin:true},
   {id:'counter',name:'反例',prompt:'这个判断有哪些前提和反例？',builtin:true},
-  {id:'translate',name:'翻译',prompt:'请翻译选文：英文译中文，中文译英文。',builtin:true},
+  {id:'translate',name:'翻译',prompt:'请翻译选中文本：英文译中文，中文译英文。',builtin:true},
 ];
 export function normalizeCommands(value:unknown):ReadingCommand[]{
   if(!Array.isArray(value))return DEFAULT_COMMANDS.map(c=>({...c}));

@@ -12,7 +12,7 @@ async function cancellable<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
 }
 /** Only the explicit selection is sent. One detected target applies to all chunks. */
 export async function googleTranslate(text:string,target:string,signal:AbortSignal,request:GoogleRequest):Promise<{text:string;target:string}>{
- if(signal.aborted)throw new Error('已停止');if(!text.trim())throw new Error('请先选择需要翻译的文字。');if(text.length>24000)throw new Error('单次翻译最多 24,000 字符，请缩小选文。');if(!TRANSLATION_LANGUAGES[target])target='zh-CN';const chunks=translationChunks(text);let used=target;
+ if(signal.aborted)throw new Error('已停止');if(!text.trim())throw new Error('请先选择需要翻译的文字。');if(text.length>24000)throw new Error('单次翻译最多 24,000 字符，请缩小选中文本。');if(!TRANSLATION_LANGUAGES[target])target='zh-CN';const chunks=translationChunks(text);let used=target;
  const run=async(chunk:string)=>{if(signal.aborted)throw new Error('已停止');const url=new URL('https://translate.googleapis.com/translate_a/single');url.search=new URLSearchParams({client:'gtx',sl:'auto',tl:used,dt:'t',q:chunk}).toString();let payload:unknown;try{payload=await cancellable(request(url.href,signal),signal);}catch(e){if(signal.aborted)throw new Error('已停止');if((e as Error).message==='谷歌翻译请求过于频繁，请稍后重试。')throw e;throw new Error('谷歌翻译连接失败，请检查网络后重试。');}return translationPayload(payload);};
  let first=await run(chunks[0]);if(language(first.source)===language(used)){used=language(used).startsWith('zh')?'en':'zh-CN';first=await run(chunks[0]);}let result=first.text;for(const chunk of chunks.slice(1))result+=(await run(chunk)).text;if(signal.aborted)throw new Error('已停止');return{text:result.trim(),target:used};
 }

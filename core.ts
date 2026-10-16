@@ -3,7 +3,9 @@ import type {ReadingBrief} from './brief';
 export interface Anchor { pdfPage?:number;pdfOffset?:number;quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { source?:string;text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
-export interface Message { role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
+export interface WebSource {title:string;url:string;snippet:string}
+export interface WebReceipt {provider?:string;query:string;sources:WebSource[]}
+export interface Message { web?:WebReceipt; role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
 export interface Thread { translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
@@ -46,13 +48,13 @@ export function contextFor(passages: Passage[], anchor: Anchor | undefined, text
   let chosen = passages;
   if (!whole && anchor) {
     const start = resolveAnchor(text, anchor);
-    if (start === null) throw new Error('原文已变化，无法可靠定位选文。请重新选择。');
+    if (start === null) throw new Error('原文已变化，无法可靠定位选中文本。请重新选择。');
     const first = passages.findIndex(p => p.end > start);
     const last = passages.findIndex(p => p.end >= start + anchor.quote.length);
     chosen = passages.slice(Math.max(0, first - 1), Math.min(passages.length, Math.max(first, last) + 2));
   }
   const context = chosen.map(p => `[¶${p.number}] ${p.source?"（"+p.source+"） ":""}${p.text}`).join('\n\n');
-  if (context.length > maxChars) throw new Error(`本轮上下文超过 ${maxChars.toLocaleString()} 字符，请缩小选区或改为“选文及相邻段落”。`);
+  if (context.length > maxChars) throw new Error(`本轮上下文超过 ${maxChars.toLocaleString()} 字符，请缩小选区或改为“选中文本及相邻段落”。`);
   return context;
 }
 export function blockedPath(path: string): boolean {
@@ -69,7 +71,7 @@ export function exportReading(path: string, data: Reading, vault: string): strin
     md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     if(t.contextInfo)md+='上下文：'+t.contextInfo.label+(t.contextInfo.embeddingModel?' · Embedding：'+t.contextInfo.embeddingModel:'')+'\n\n';
     if(t.contextInfo?.embeddingModel){md+='### 检索来源\n\n';for(const [id,anchor]of Object.entries(t.citations||{})){const label=anchor.pdfPage?'PDF 第 '+anchor.pdfPage+' 页':t.contextInfo.sources.find(s=>s.id===id)?.label||'原文片段';md+='- [¶'+id+'] ['+label+']('+back(t.id)+'&citation='+encodeURIComponent(id)+')\n';}md+='\n';}
-    for (const m of t.messages) md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;
+    for (const m of t.messages){md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;if(m.web?.sources.length){md+='网络来源（'+(m.web.provider||'网页')+' 搜索摘要）：\n\n';for(const source of m.web.sources)md+='- ['+source.title.replace(/[\[\]\n]/g,' ')+'](<'+source.url+'>)\n';md+='\n';}}
   }
   return md;
 }
