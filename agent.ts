@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as https from 'node:https';
 import * as http from 'node:http';
 import type { Message,TokenUsage } from './core';
-export interface AgentSettings { provider: string; codexPath: string; codexModel: string; apiBase: string; apiModel: string; apiKey: string; serviceId?:string; serviceName?:string; piPath?:string; piModel?:string; claudePath?:string; claudeModel?:string; apiProtocol?:ApiProtocol }
+export interface AgentSettings { systemPrompt?:string; provider: string; codexPath: string; codexModel: string; apiBase: string; apiModel: string; apiKey: string; serviceId?:string; serviceName?:string; piPath?:string; piModel?:string; claudePath?:string; claudeModel?:string; apiProtocol?:ApiProtocol }
 export type ApiProtocol="openai"|"responses"|"anthropic"|"gemini";
 export const API_DEFAULTS:Record<ApiProtocol,string>={openai:"https://api.openai.com/v1",responses:"https://api.openai.com/v1",anthropic:"https://api.anthropic.com/v1",gemini:"https://generativelanguage.googleapis.com/v1beta"};
 export interface AskRequest { settings: AgentSettings; context: string; quote?: string; messages: Message[]; signal: AbortSignal; onText: (text: string) => void; onUsage?:(usage:TokenUsage)=>void }
@@ -28,7 +28,7 @@ export function parseCodexLine(line: string): {text?: string; error?: string} {
 }
 function payload(r: AskRequest): Message[] {
   return [
-    {role: 'user', content: `${SYSTEM}\n\n<reading_context>\n${r.context}\n</reading_context>\n${r.quote ? '\n本轮选文：\n' + r.quote : ''}`},
+    {role: 'user', content: `${r.settings.systemPrompt||SYSTEM}\n\n<reading_context>\n${r.context}\n</reading_context>\n${r.quote ? '\n本轮选文：\n' + r.quote : ''}`},
     ...r.messages.map(({role,content})=>({role,content})),
   ];
 }
@@ -76,9 +76,9 @@ export function apiEndpoint(base:string,protocol:ApiProtocol='openai',model=''):
 export function apiRequest(r:AskRequest):{url:URL;body:any;headers:Record<string,string>;protocol:ApiProtocol}{
   if(!r.settings.apiModel.trim())throw new Error('请先填写模型 ID。');const protocol=r.settings.apiProtocol||'openai',url=apiEndpoint(r.settings.apiBase,protocol,r.settings.apiModel),messages=payload(r),key=r.settings.apiKey;
   const headers:Record<string,string>={'Content-Type':'application/json',Accept:'text/event-stream'};let body:any;
-  if(protocol==='anthropic'){if(key)headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';body={model:r.settings.apiModel,system:SYSTEM,messages,max_tokens:4096,stream:true};}
-  else if(protocol==='gemini'){if(key)headers['x-goog-api-key']=key;body={systemInstruction:{parts:[{text:SYSTEM}]},contents:messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};}
-  else{if(key)headers.Authorization='Bearer '+key;body=protocol==='responses'?{model:r.settings.apiModel,instructions:SYSTEM,input:messages,stream:true,store:false}:{model:r.settings.apiModel,messages:[{role:'system',content:SYSTEM},...messages],stream:true,stream_options:{include_usage:true}};}
+  if(protocol==='anthropic'){if(key)headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';body={model:r.settings.apiModel,system:r.settings.systemPrompt||SYSTEM,messages,max_tokens:4096,stream:true};}
+  else if(protocol==='gemini'){if(key)headers['x-goog-api-key']=key;body={systemInstruction:{parts:[{text:r.settings.systemPrompt||SYSTEM}]},contents:messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};}
+  else{if(key)headers.Authorization='Bearer '+key;body=protocol==='responses'?{model:r.settings.apiModel,instructions:r.settings.systemPrompt||SYSTEM,input:messages,stream:true,store:false}:{model:r.settings.apiModel,messages:[{role:'system',content:r.settings.systemPrompt||SYSTEM},...messages],stream:true,stream_options:{include_usage:true}};}
   return{url,body,headers,protocol};
 }
 export function parseApiEvent(protocol:ApiProtocol,e:any):{delta?:string;final?:string;error?:boolean}{
