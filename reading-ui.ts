@@ -1,13 +1,13 @@
 // Margin geometry and mark segmentation adapted for Obsidian from Nutlope/gloss.
 // References: components/reader/Margin.tsx, Block.tsx, lib/anchor.ts (54b13b8).
-import {resolveAnchor, type Anchor, type Passage, type MarkStyle, markStyle} from './core';
-export interface MarginItem {id: string; desired: number; height: number; created: number}
+import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
+export interface MarginItem {id: string; desired: number; height: number; created: number; mini?:boolean; sourceY?:number; note?:boolean}
 export function placeMarginItems(items: MarginItem[], active?: string): Record<string, number> {
   if (!items.length) return {};
-  const tops = items.map(i => i.desired), ai = items.findIndex(i => i.id === active), gap = 16;
-  const forward = (from: number) => {for (let i = Math.max(1, from); i < items.length; i++) tops[i] = Math.max(tops[i], tops[i - 1] + items[i - 1].height + gap);};
+  const tops = items.map(i => i.desired), ai = items.findIndex(i => i.id === active), gap = (i:number) => items[i-1].mini&&items[i].mini?4:16;
+  const forward = (from: number) => {for (let i = Math.max(1, from); i < items.length; i++) tops[i] = Math.max(tops[i], tops[i - 1] + items[i - 1].height + gap(i));};
   if (ai < 0) {tops[0] = Math.max(0, tops[0]); forward(1);}
-  else {forward(ai + 1); for (let i = ai - 1; i >= 0; i--) tops[i] = Math.min(tops[i], tops[i + 1] - gap - items[i].height); if (tops[0] < 0) {tops[0] = 0; forward(1);}}
+  else {forward(ai + 1); for (let i = ai - 1; i >= 0; i--) tops[i] = Math.min(tops[i], tops[i + 1] - gap(i+1) - items[i].height); if (tops[0] < 0) {tops[0] = 0; forward(1);}}
   return Object.fromEntries(items.map((item, i) => [item.id, tops[i]]));
 }
 export interface TextMark {id: string; start: number; end: number; kind: 'highlight' | 'thread' | 'pending'; color?: string; note?: boolean; style?:MarkStyle}
@@ -55,3 +55,14 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
 }
 
 export function railMagnification(distance:number,radius=52):number{return 1+1.25*Math.exp(-Math.pow(distance/Math.max(1,radius),2)*2);}
+
+/** Crowding depends on source positions, never the changing height or placed top of a card. */
+export function compactMarginIds(items:MarginItem[],active?:string):Set<string>{
+ const ordered=items.filter(i=>Number.isFinite(i.sourceY??i.desired)).slice().sort((a,b)=>(a.sourceY??a.desired)-(b.sourceY??b.desired));
+ return new Set(ordered.filter((item,i)=>item.id!==active&&!item.note&&[ordered[i-1],ordered[i+1]].some(other=>other&&Math.abs((item.sourceY??item.desired)-(other.sourceY??other.desired))<88)).map(i=>i.id));
+}
+/** An absent active id and absent reference are not a matching reference. */
+export function annotationAnchor(threads:Thread[],id?:string,reference?:{threadId:string;anchor:Anchor}):Anchor|undefined{
+ if(!id)return;if(reference?.threadId===id)return reference.anchor;
+ const thread=threads.find(t=>t.id===id&&!t.removed);return thread?.selection===false?undefined:thread?.anchor;
+}

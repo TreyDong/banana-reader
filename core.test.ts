@@ -218,3 +218,18 @@ test('card follow-up appends one question, preserves the original conversation a
 test('interrupted partial answers remain useful history and cancellation is quiet',()=>{
  const t={id:'partial',created:1,interrupted:true,error:'已停止',messages:[{role:'user' as const,content:'请解释'},{role:'assistant' as const,content:'先看第一点'}]};assert.deepEqual(followupHistory(t,'继续').map(m=>m.content),['请解释','先看第一点','继续']);assert.equal(visibleThreadError(t),undefined);assert.equal(visibleThreadError({...t,error:'已停止（已保留原回答）'}),undefined);assert.equal(visibleThreadError({...t,error:'网络连接失败'}),'网络连接失败');
 });
+
+
+import {compactMarginIds,annotationAnchor} from './reading-ui';
+test('only nearby source anchors form compact notes, independent of card height or active expansion',()=>{
+ const items=[{id:'isolated',desired:800,height:800,created:1},{id:'same-a',desired:100,height:350,created:2},{id:'same-b',desired:100,height:30,created:3},{id:'nearby',desired:187,height:400,created:4},{id:'separate',desired:400,height:20,created:5}];
+ assert.deepEqual([...compactMarginIds(items)].sort(),['nearby','same-a','same-b']);assert.deepEqual([...compactMarginIds(items,'same-a')].sort(),['nearby','same-b']);assert.deepEqual([...compactMarginIds(items.map(i=>({...i,height:9999})))].sort(),['nearby','same-a','same-b']);
+ assert.equal(compactMarginIds([{id:'a',desired:0,height:10,created:1},{id:'b',desired:88,height:10,created:2}]).size,0);assert.equal(compactMarginIds([{id:'stale',desired:0,sourceY:NaN,height:10,created:1},{id:'valid',desired:0,height:10,created:2}]).size,0);
+});
+test('compact rows use a small gap while normal previews retain their spacing',()=>{
+ assert.deepEqual(placeMarginItems([{id:'a',desired:10,height:30,created:1,mini:true},{id:'b',desired:10,height:30,created:2,mini:true},{id:'preview',desired:10,height:90,created:3}]),{a:10,b:44,preview:90});
+});
+test('collapsing with no focused reference safely clears the source, without inventing a whole-document anchor',()=>{
+ const a=makeAnchor('source',0,6),threads=[{id:'selected',created:1,anchor:a,messages:[]},{id:'whole',created:2,selection:false,anchor:a,messages:[]}];
+ assert.equal(annotationAnchor(threads),undefined);assert.equal(annotationAnchor(threads,undefined,undefined),undefined);assert.equal(annotationAnchor(threads,'whole'),undefined);assert.equal(annotationAnchor(threads,'selected'),a);assert.equal(annotationAnchor(threads,'whole',{threadId:'whole',anchor:a}),a);assert.equal(annotationAnchor(threads,'whole',{threadId:'selected',anchor:a}),undefined);assert.equal(annotationAnchor([{...threads[0],removed:true}],'selected'),undefined);
+});

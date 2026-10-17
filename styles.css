@@ -259,3 +259,15 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gloss-root .gloss-followup{display:flex;align-items:center;gap:7px;margin-top:14px;padding:5px 7px 5px 10px;border:1px solid var(--rule);border-radius:11px;background:var(--bg);box-shadow:none}.gloss-root .gloss-followup-input{flex:1;min-width:0;width:100%;height:29px;padding:3px 0;font:13px/1.5 var(--font-sans);color:var(--ink);border:0;background:transparent;box-shadow:none;outline:none}.gloss-followup-input::placeholder{color:var(--ink-4)}.gloss-root .gloss-followup-send{flex:none;width:27px;height:27px;border-radius:7px;background:var(--ink);color:var(--bg)}.gloss-followup-send svg{width:17px;height:17px}.gloss-root .gloss-followup-send:disabled{opacity:.22}.gloss-followup:focus-within{border-color:var(--rule-strong)}
 .gloss-root:not(.gloss-pdf) .gloss-passage.gloss-associated{background-color:var(--rubric-wash);box-shadow:0 0 0 7px var(--rubric-wash);border-radius:7px;transition:background-color .18s ease,box-shadow .18s ease}
 @media(prefers-reduced-motion:reduce){.gloss-root:not(.gloss-pdf) .gloss-passage.gloss-associated{transition:none}}
+
+/* Only notes at nearby source positions become one-line rows; isolated notes keep three answer lines. */
+.gloss-margin-column .gloss-thread-card.is-collapsed{padding:10px 13px 11px 14px;border-radius:0 9px 9px 0;cursor:default}
+.gloss-margin-column .gloss-thread-card.is-collapsed.is-mini{padding:0 0 0 13px;border-radius:0;min-height:30px}
+.gloss-root .gloss-collapsed-row{display:flex;align-items:center;gap:7px;min-height:24px;font:13px/1.5 var(--font-sans);color:var(--ink-2)}
+.gloss-root button.gloss-collapsed-open{display:flex;align-items:baseline;gap:5px;flex:1;min-width:0;width:0;height:26px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--ink-2);font:13px/1.5 var(--font-sans);text-align:left;cursor:pointer}
+.gloss-collapsed-open:focus-visible{outline:2px solid var(--rubric);outline-offset:3px}.gloss-collapsed-follow,.gloss-followup-count{flex:none;color:var(--ink-4);font:11px/1.4 var(--font-sans);white-space:nowrap}
+.gloss-root button.gloss-collapsed-source{flex:none;width:auto;height:auto;margin:0;padding:1px 4px;border:0;border-radius:5px;background:var(--bg-sunk);box-shadow:none;color:var(--ink-3);font:11px/1.4 var(--font-sans)}
+.gloss-root .gloss-card-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;margin:5px 0 0;font:13px/1.55 var(--font-sans);color:var(--ink-3);cursor:pointer}
+.gloss-root .gloss-card-preview>:first-child{margin-top:0}.gloss-root .gloss-card-preview>:last-child{margin-bottom:0}.gloss-root .gloss-card-preview p{margin:0}.gloss-thread-card.is-mini .gloss-card-preview{display:none}
+.gloss-article::highlight(gloss-reference){background-color:var(--rubric-wash-strong);text-decoration:underline;text-decoration-color:var(--rubric)}
+.gloss-root.gloss-pdf .gloss-article::highlight(gloss-reference){background-color:#9bbfe88c;text-decoration:none}
