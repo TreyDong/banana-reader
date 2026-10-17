@@ -104,3 +104,11 @@ export function followupHistory(thread:Thread,question:string):Message[]{
 export function visibleThreadError(thread:Thread):string|undefined{
  const error=thread.error;if(!error||/^(?:已停止|已取消|用户取消|AbortError|The operation was aborted|This operation was aborted|aborted|cancelled|canceled)[。.！!]*(?:（已保留原(?:回答|译文)）)?$/i.test(error.trim()))return;return error;
 }
+
+/** Report saved facts; legacy records must never inherit the current model or estimated tokens. */
+export function answerReceipt(message:Message,modelName?:string):{model:string;usage?:string;detail:string}{
+ const google=message.provider==='Google Translate',model=modelName?.trim()||message.model?.trim()||(google?'Google Translate':'模型未记录');
+ const usage=google?undefined:message.usage?tokenReceipt(message.usage):message.model?.trim()?'用量未返回':'用量未记录';
+ const detail=google?'谷歌翻译 · 内置':[message.provider,message.model,message.usage?tokenDetails(message.usage):message.model?'服务未返回本轮用量':'这条历史记录没有保存模型或用量，无法补算。'].filter(Boolean).join(' · ');
+ return{model,usage,detail};
+}

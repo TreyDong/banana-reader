@@ -233,3 +233,14 @@ test('collapsing with no focused reference safely clears the source, without inv
  const a=makeAnchor('source',0,6),threads=[{id:'selected',created:1,anchor:a,messages:[]},{id:'whole',created:2,selection:false,anchor:a,messages:[]}];
  assert.equal(annotationAnchor(threads),undefined);assert.equal(annotationAnchor(threads,undefined,undefined),undefined);assert.equal(annotationAnchor(threads,'whole'),undefined);assert.equal(annotationAnchor(threads,'selected'),a);assert.equal(annotationAnchor(threads,'whole',{threadId:'whole',anchor:a}),a);assert.equal(annotationAnchor(threads,'whole',{threadId:'selected',anchor:a}),undefined);assert.equal(annotationAnchor([{...threads[0],removed:true}],'selected'),undefined);
 });
+
+
+import {answerReceipt} from './core';
+test('legacy answer receipts explain missing metadata without borrowing a current model or estimating usage',()=>{
+ const legacy={role:'assistant' as const,content:'旧回答'},before=JSON.stringify(legacy),receipt=answerReceipt(legacy);assert.equal(receipt.model,'模型未记录');assert.equal(receipt.usage,'用量未记录');assert.match(receipt.detail,/无法补算/);assert.equal(JSON.stringify(legacy),before);
+ const missing=answerReceipt({...legacy,model:'actual-model',serviceId:'saved-service'},'实际模型');assert.equal(missing.model,'实际模型');assert.equal(missing.usage,'用量未返回');
+});
+test('answer receipts preserve actual zero usage, returned totals and built-in translation semantics',()=>{
+ const message={role:'assistant' as const,content:'回答',model:'actual',usage:{input:0,output:12}};assert.equal(answerReceipt(message).usage,'0 输入 · 12 输出');assert.equal(answerReceipt({...message,usage:{total:48}}).usage,'48 tokens');
+ const translated=answerReceipt({role:'assistant',content:'译文',provider:'Google Translate',model:'Google Translate · 简体中文'});assert.equal(translated.usage,undefined);assert.equal(translated.model,'Google Translate · 简体中文');assert.equal(translated.detail,'谷歌翻译 · 内置');
+});
