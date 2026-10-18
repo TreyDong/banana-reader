@@ -77,12 +77,12 @@ export default class GlossPlugin extends Plugin {
 
     // Reader tabs are opt-in sessions; restored workspaces return to native files.
     this.app.workspace.onLayoutReady(()=>{const restored=this.app.workspace.getLeavesOfType(VIEW);requestAnimationFrame(()=>{if(this.unloading)return;for(const leaf of restored){const path=leaf.getViewState().state?.path;if(typeof path==='string'&&this.app.vault.getAbstractFileByPath(path) instanceof TFile)void leaf.openFile(this.app.vault.getAbstractFileByPath(path) as TFile,{active:false}).catch(showError);}});});
-    this.addRibbonIcon('book-open-text', '进入沉浸阅读', () => {void this.openCurrent().catch(showError);});
+    this.addRibbonIcon('book-open-text', '打开 Banana Reader', () => {void this.openCurrent().catch(showError);});
     this.addCommand({id: 'open-reader', name: '进入沉浸阅读', callback: () => {void this.openCurrent().catch(showError);}});
     this.addCommand({id:'toggle-question',name:'显示 / 收起提问框',checkCallback:checking=>{const v=this.app.workspace.getActiveViewOfType(GlossView);if(!v)return false;if(!checking)v.toggleComposer();return true;}});
     this.addCommand({id: 'choose-document', name: '选择文档开始阅读', callback: () => this.choose()});
     this.addCommand({id: 'toggle-focus', name: '切换沉浸式阅读', checkCallback: checking => {const v = this.app.workspace.getActiveViewOfType(GlossView); if (!v) return false; if (!checking) void v.exitReader().catch(showError); return true;}});
-    this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && readableExtension(file.extension) && !blockedPath(file.path)) menu.addItem(i => i.setTitle('进入沉浸阅读').setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
+    this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && readableExtension(file.extension) && !blockedPath(file.path)) menu.addItem(i => i.setTitle('用 Banana Reader 阅读').setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
       // A rename moves the same document state; do not silently overwrite an existing record.
       for (const key of Object.keys(this.store.documents)) {
@@ -139,7 +139,7 @@ class DocumentPicker extends FuzzySuggestModal<TFile> {
 class EpubFileView extends FileView {
  constructor(leaf:WorkspaceLeaf,private plugin:GlossPlugin){super(leaf);}
  getViewType(){return EPUB_VIEW;}getDisplayText(){return this.file?.basename||'EPUB 电子书';}getIcon(){return 'book-open-text';}canAcceptExtension(ext:string){return ext.toLowerCase()==='epub';}
- async onLoadFile(file:TFile){this.contentEl.empty();const pane=this.contentEl.createDiv({cls:'gloss-import-state'});pane.createEl('h2',{text:file.basename});pane.createEl('p',{text:'EPUB 电子书'});button(pane,'进入沉浸阅读',()=>this.plugin.openFile(file).then(()=>{}),'mod-cta');}
+ async onLoadFile(file:TFile){this.contentEl.empty();const pane=this.contentEl.createDiv({cls:'gloss-import-state'});pane.createEl('h2',{text:file.basename});pane.createEl('p',{text:'EPUB 电子书'});button(pane,'用 Banana Reader 阅读',()=>this.plugin.openFile(file).then(()=>{}),'mod-cta');}
  async onUnloadFile(){this.contentEl.empty();}
 }
 class NoteModal extends Modal {
@@ -235,7 +235,7 @@ class GlossView extends ItemView {
   loadError='';
   constructor(leaf: WorkspaceLeaf, readonly plugin: GlossPlugin) {super(leaf);}
   getViewType() {return VIEW;}
-  getDisplayText() {return this.path ? `阅读 · ${this.path.split('/').pop()?.replace(/\.md$/, '')}` : '沉浸阅读';}
+  getDisplayText() {return this.path ? `阅读 · ${this.path.split('/').pop()?.replace(/\.md$/, '')}` : 'Banana Reader';}
   getIcon() {return 'book-open-text';}
   getState() {return {path:this.path};}
   async setState(state:{path?:string}, result:any) {if(state?.path)await this.loadDocument(state.path);await super.setState(state,result);}
@@ -798,8 +798,8 @@ class GlossSettings extends PluginSettingTab {
     this.test?.abort();this.test=undefined;
     const el=this.containerEl;el.empty();el.addClass('gr-settings');const s=this.plugin.store.settings;
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
-    identity.createSpan({cls:'gr-settings-name',text:'沉浸阅读'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
-    const tabs=head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':'沉浸阅读设置'}});
+    identity.createSpan({cls:'gr-settings-name',text:'Banana Reader'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
+    const tabs=head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':'Banana Reader 设置'}});
     for(const[key,label,icon]of [['reading','外观配置','book-open'],['models','模型服务','plug'],['commands','指令配置','wand-sparkles']]){
       const b=button(tabs,'',()=>{this.tab=key;this.display();},'gr-settings-tab');const mark=b.createSpan();setIcon(mark,icon);b.createSpan({text:label});b.classList.toggle('is-active',this.tab===key);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(this.tab===key));b.id='gr-tab-'+key;b.setAttribute('aria-controls','gr-settings-panel');
     }
