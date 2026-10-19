@@ -1,12 +1,29 @@
 # Banana Reader for Obsidian
 
-在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的桌面插件。版本 0.12.1。
+Read Markdown, original PDF pages and EPUB books with configurable AI, anchored highlights, margin notes and Markdown export. **Desktop only, Obsidian 1.11.4 or later. The interface is currently in Chinese.**
+
+## Installation
+
+Download `main.js`, `manifest.json` and `styles.css` from the same [GitHub Release](https://github.com/TreyDong/banana-reader/releases), and place them in `<vault>/.obsidian/plugins/gloss-reader/`. Enable **Banana Reader** in Obsidian Settings → Community plugins. Preserve your existing `data.json` and `indices/` when updating. Do not copy source folders or another user's plugin data into your vault. The community directory submission status is recorded in the [release audit](notes/community-release-audit.md).
+
+## Usage
+
+1. Open a Markdown, PDF or EPUB file, then select the **Open Banana Reader** ribbon icon or run **Banana Reader: 进入沉浸阅读** from the command palette.
+2. In plugin settings, add your own API connection or an already installed and authenticated Codex, Claude or Pi CLI. Assign question, translation and article-summary models independently. No model request starts merely by enabling the plugin.
+3. Select a passage to ask a question, translate, highlight, underline or add a note. Responses show their actual model and available usage. Click a paragraph or PDF-page citation to return to the source.
+4. Open the notebook to review annotations or export a new Markdown note. Original documents are not rewritten. Select **返回文档** to leave immersive reading.
+
+AI providers may require accounts and charge for usage. Requests send the selected document context to the chosen service. Built-in Google translation and optional DuckDuckGo search also use the network. CLI discovery, temporary workspaces and optional book indexes use local files; details and storage locations are explained below. The plugin has no author-operated server or client-side telemetry. Model lists do not guarantee account entitlement. Licenses for the bundled fonts and dependency are included in the installation files.
+
+## 中文说明
+
+在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的桌面插件。版本 0.12.2。
 
 使用 Obsidian 原生视图、MarkdownRenderer 与本地文档数据，提供选文问答、页边理解和沉浸阅读。问答、翻译与文章解读分别选择模型；现有配置、划线、问答和导出格式保持兼容。
 
 ## 社区发布状态（2026-10-19）
 
-正在准备首次社区发行。已逐模块核实历史参考与实际源码，替换已识别的页边排列函数、EPUB 路径辅助函数，以及阅读样式和纸张纹理；字体按 OFL 保留。发行前仍需完成临时库原生验收和官方审核，不把构建通过视为已上架。具体证据、通用匹配和核查局限见 [发布审计](notes/community-release-audit.md)。
+已公开发行并提交官方目录，目前条目仍为草稿。已逐模块核实历史参考与实际源码，替换已识别的页边排列函数、EPUB 路径辅助函数，以及阅读样式和纸张纹理；字体按 OFL 保留。109 项回归和临时库原生验收已通过，0.12.1 官方审核已完成且构建逐字节复现。0.12.2 补齐英文说明后等待复核及公开发布，不将发行包发布视为已上架。具体证据、通用匹配和核查局限见 [发布审计](notes/community-release-audit.md)。
 
 ## 账号、网络与外部文件访问
 
@@ -105,7 +122,9 @@ npm test
 
 本插件不是上述项目或 Obsidian 的官方版本，不包含 Gloss 的账户、云端书架、网页导入和 Together 专用服务。界面目前使用中文；字体本地内嵌，中文正文使用系统字体回退。
 
-## 0.12.1
+## 0.12.2
+
+- 根据社区审核补齐英文介绍、安装与使用说明；运行代码与 0.12.1 已验收构建保持一致。
 
 - 来源修复只涉及两个小辅助函数与已识别的阅读样式/纹理，不重做阅读器、模型接入、数据存储、PDF/EPUB、索引或导出。
 - 修复后的纸张、标记与浮层配色保留原有主题种类和操作入口；字体文件保持不变。
