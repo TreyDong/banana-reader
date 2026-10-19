@@ -1,109 +1,67 @@
 # Banana Reader for Obsidian
 
-Read Markdown, original PDF pages and EPUB books with configurable AI, anchored highlights, margin notes and Markdown export. **Desktop only, Obsidian 1.11.4 or later. The interface is currently in Chinese.**
+Read Markdown, original PDF pages and EPUB books with configurable AI, anchored highlights, margin notes and Markdown export.
+
+**Desktop only. Requires Obsidian 1.11.4 or later. The plugin interface is currently in Chinese.** Version 0.12.3.
+
+[完整中文说明](README.zh-CN.md) · [Releases](https://github.com/TreyDong/banana-reader/releases) · [Community listing](https://community.obsidian.md/plugins/gloss-reader)
 
 ## Installation
 
-Download `main.js`, `manifest.json` and `styles.css` from the same [GitHub Release](https://github.com/TreyDong/banana-reader/releases), and place them in `<vault>/.obsidian/plugins/gloss-reader/`. Enable **Banana Reader** in Obsidian Settings → Community plugins. Preserve your existing `data.json` and `indices/` when updating. Do not copy source folders or another user's plugin data into your vault. The community directory submission status is recorded in the [release audit](notes/community-release-audit.md).
+Open the [community listing](https://community.obsidian.md/plugins/gloss-reader) and choose **Add to Obsidian**, then enable Banana Reader in Settings → Community plugins.
+
+For manual installation, download `main.js`, `manifest.json` and `styles.css` from the same [GitHub Release](https://github.com/TreyDong/banana-reader/releases). Place all three files in `<vault>/.obsidian/plugins/gloss-reader/` and enable the plugin. When updating, preserve your existing `data.json` and `indices/`. Do not copy source folders or another user's plugin data into your vault.
 
 ## Usage
 
-1. Open a Markdown, PDF or EPUB file, then select the **Open Banana Reader** ribbon icon or run **Banana Reader: 进入沉浸阅读** from the command palette.
-2. In plugin settings, add your own API connection or an already installed and authenticated Codex, Claude or Pi CLI. Assign question, translation and article-summary models independently. No model request starts merely by enabling the plugin.
-3. Select a passage to ask a question, translate, highlight, underline or add a note. Responses show their actual model and available usage. Click a paragraph or PDF-page citation to return to the source.
-4. Open the notebook to review annotations or export a new Markdown note. Original documents are not rewritten. Select **返回文档** to leave immersive reading.
+1. Open a Markdown, PDF or EPUB file. Click the **打开 Banana Reader** ribbon icon or run **Banana Reader: 进入沉浸阅读** from the command palette. You can also use the file context menu.
+2. In plugin settings, add your own API connection or an already installed and authenticated Codex, Claude or Pi CLI. Select the models you want to use. Assign question, translation and article-summary models independently.
+3. Select a passage to ask a question, translate, highlight, underline or add a note. Selecting text does not send a request. Submit the question to call the chosen service.
+4. Responses show the actual model and available usage. Click a paragraph or PDF-page citation to return to the source. Continue a conversation inside its existing card, or start an independent question from the bottom input.
+5. Open the notebook to review annotations. Choose **导出笔记** to create a new Markdown note in `收集箱/`, including excerpts, annotations, conversations and source links. Original documents are not rewritten and existing exports are not overwritten.
+6. Choose **返回文档** to leave immersive reading. Reading controls adjust the theme, font, text size, line spacing and contents navigation. Narrow panes show conversations in the notebook; wider panes also show margin cards.
 
-AI providers may require accounts and charge for usage. Requests send the selected document context to the chosen service. Built-in Google translation and optional DuckDuckGo search also use the network. CLI discovery, temporary workspaces and optional book indexes use local files; details and storage locations are explained below. The plugin has no author-operated server or client-side telemetry. Model lists do not guarantee account entitlement. Licenses for the bundled fonts and dependency are included in the installation files.
+## Reading and annotation features
 
-## 中文说明
+Markdown uses Obsidian's native rendering. Selection tools support questions, configurable text instructions, translation, straight or wavy underlines, highlights and written annotations. There are four built-in mark colors. Selections remain visible while composing a question. Questions and marks persist across reloads.
 
-在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的桌面插件。版本 0.12.2。
+PDF files retain the original page layout through Obsidian's native PDF view. Pages scroll continuously; text selections can be questioned or marked. Conversations, notebook entries and exports retain real page numbers. Page links return to the cited page. Fonts and reading text-size controls do not reflow PDF pages. Scanned pages remain readable, but this release has no OCR and cannot select text that is absent from the source. Cross-page selections and full-book PDF summaries are not provided.
 
-使用 Obsidian 原生视图、MarkdownRenderer 与本地文档数据，提供选文问答、页边理解和沉浸阅读。问答、翻译与文章解读分别选择模型；现有配置、划线、问答和导出格式保持兼容。
+EPUB text is read in spine order with chapter navigation and local raster images. Book scripts are not executed and remote images are not loaded. DRM, image-only books, audio/video, SVG illustrations and original fixed-layout styling are not supported. Limits include 40 MB compressed size, 64 MB expanded size, 4 MB per chapter, 600 chapter files and two million characters.
 
-## 社区发布状态（2026-10-19）
+Article briefs provide structured claims, caveats and paragraph citations. Brief generation uses its independently assigned model, or the configured default when no specific model is assigned. Translation can use the built-in Google translation connection or an independently selected language model. Model errors are displayed; the plugin does not silently choose another model.
 
-已公开发行并提交官方目录，目前条目仍为草稿。已逐模块核实历史参考与实际源码，替换已识别的页边排列函数、EPUB 路径辅助函数，以及阅读样式和纸张纹理；字体按 OFL 保留。109 项回归和临时库原生验收已通过，0.12.1 官方审核已完成且构建逐字节复现。0.12.2 补齐英文说明后等待复核及公开发布，不将发行包发布视为已上架。具体证据、通用匹配和核查局限见 [发布审计](notes/community-release-audit.md)。
+## Optional book retrieval
 
-## 账号、网络与外部文件访问
+Configure an OpenAI-compatible embedding service in model settings, mark an added model as an embedding model, and select it for indexing. Inside the reader, use **索引** → **建立索引** to build an index for the current document. A question without a text selection can then retrieve passages across the indexed book. Answers keep source and PDF-page references.
 
-- 插件本身未接入收费、广告、遥测或作者服务器。AI 功能需要用户自行配置已登录的 Codex / Claude / Pi，或自定义 API；第三方账户、订阅或 API 额度可能收费。CLI 在本机运行也会使用所选服务的网络。
-- 提问、文章解读、模型翻译和开启的问题建议会向所选模型发送对应文档上下文、问题和必要对话。建立索引会向所选嵌入服务发送当前文档片段；查询会发送问题。自动索引与问题建议默认关闭，开启后可在进入阅读或展开提问栏时触发相应请求。
-- 内置 Google 翻译将选中文本发到 `translate.googleapis.com`；可选联网搜索把生成的检索词发到 `html.duckduckgo.com`，并将摘要交给所选模型。具体第三方数据处理以所选服务政策为准；本插件无独立云端存储服务。
-- 为发现和启动本机 CLI，会检查用户配置的可执行文件及常见安装路径，读取 `~/.codex/models_cache.json`，复用 CLI 自身认证。问答与模型发现使用系统临时目录，结束后清理；不将库目录作为 CLI 工作目录。自定义 API 密钥使用 Obsidian SecretStorage，旧版缺失该接口时只保留内存会话密钥。
-- `data.json`、`indices/`、草稿和上下文快照是私人数据，不属于发行包；同步插件目录可能同步这些内容。字体内嵌，无运行时字体 CDN 请求。
+Indexing sends document chunks to the selected embedding provider; searching sends the question to that provider and matched passages to the selected answer model. Automatic indexing is off by default. Enabling it can start requests when entering a document. Indexing can be stopped, and a failed rebuild preserves the previous complete index. Limits are 3,000 pages, five million characters, 8,000 chunks and three million vector values. Retrieval is not a complete reading or summary of every page. Images and scanned-page content are not indexed.
 
-## 使用
+## Accounts, costs and network access
 
-- 文件默认照常用 Obsidian 打开。点击左侧 `打开 Banana Reader` 图标，或运行命令 `Banana Reader: 进入沉浸阅读`，才进入沉浸模式；文件右键也可进入。
-- 选中正文：提问、全部已配置指令、写批注、复制、管理指令；标记工具放在末尾。支持直线、波浪线、荧光笔与黄/绿/蓝/粉四种颜色。输入问题或批注时，原文选区持续高亮。选中不会自动发送。
-- 底部提问栏默认收起，选择文字或点击已有划线时自动显示；也可点击气泡或按 / 打开。单行输入旁可切换模型及联网，Enter 发送；发送后清空，每次在右侧建立独立回答，翻译与提问分别保存。按 Esc 收起，未发送草稿保留。右侧页边卡片内的“继续追问”延续这张卡片的历史、原文依据与原回答模型，不清空底部新问题的草稿；笔记本只展示与管理记录，不显示追问框。普通卡片收起后显示三行回答预览，原文锚点相距不足 88 px 的邻近注解才压缩为单行。回答可展开、停止、重新生成、删除或复制，完成后显示模型与实际用量；引用以内嵌标签回跳，不额外追加来源列表或停止文案。窄分栏通过笔记本查看回答。
-- 回答中的 `[¶n]` 返回对应原文。每条对话保留开始时的上下文与引用锚点；原文变化后用摘录重新定位，无法可靠匹配会明确提示。
-- Esc 先收起当前回答或输入层，再退出阅读；工具栏“返回文档”直接回到原来的普通文档；/ 新建文档提问（已有索引时检索整书）；可为“显示 / 收起提问框”命令自定义快捷键。工具栏可调整纸张、字体、字号、行距，或打开目录；左侧段落缩略轨道支持点击与拖动。沉浸模式仍可选中文本和与 Agent 交互。
-- “导出笔记”会在 `收集箱/` 新建 Markdown，含摘录、批注、完整对话与原文回跳链接。不会覆盖旧笔记。
+The plugin has no author-operated server, advertising, billing or client-side telemetry. AI services require your own account, subscription or API credits and may charge for usage. Model discovery or a cached model name does not establish account entitlement. Requests can fail because of provider access, network conditions or account limits.
 
-## PDF 与 EPUB
+Questions, article briefs and model translation send the necessary document context, question and conversation to your chosen model service. Optional question suggestions and automatic indexing are off by default; enabling them can trigger model requests during their documented reading actions. Enabling the plugin alone does not start a model request.
 
-- **PDF**：直接复用 Obsidian 完整原生 PDF 阅读视图显示原版页面，保留字体、图片、表格和版式，不转换成 Markdown。正文直接连续展示，隐藏 PDF 工具栏、侧栏、边框与灰底；浅色纸张主题同步到书页。滚动连续阅读，插件目录可跳页，选中文本后可提问、划线或批注。选中文本提问使用原文及附近文字；没有选区时面向整篇文档，优先检索已有索引，未索引时按全文容量准备原文。回答与标记保存 PDF 页码，笔记本和导出保留页码及回跳。
-- PDF 书页不会跟随阅读字体/字号重排。扫描页仍可原版阅读，但本版不含 OCR，缺少文字层时不能选中文本问答或做文字标记；加密 PDF 由原生阅读器处理。当前不提供通读整本 PDF 的总结或跨页选择；整书提问可使用下述检索功能。
-- **EPUB**：按书内 spine 顺序重排章节，显示标题、作者、正文、代码块和本地栅格插图；使用现有主题、字体、章节目录、问答和笔记本。正文不会执行书内脚本或加载远程图片。保留章节来源供模型引用。
-- EPUB 限 40 MB、解压后 64 MB、单个资源 12 MB、单章 4 MB、600 个章节文件及 200 万字符；超限明确提示。暂不支持 DRM、纯图片书、音视频、SVG 插画或原书 CSS/固定版式复原。
-- PDF 默认仍以原生 Obsidian 打开；主动点击插件进入沉浸阅读。没有其他 EPUB 阅读器注册时，EPUB 先打开一个阅读入口，再点击进入。
+Built-in Google translation sends selected text to `translate.googleapis.com`. Optional web search sends generated search terms to `html.duckduckgo.com` and passes returned snippets to the chosen model. Fonts are bundled locally; there are no runtime font-CDN requests. Data processing by a chosen provider is subject to that provider's policies.
 
-## 整书检索（RAG）
+## Local files, CLI access and privacy
 
-1. 在设置 → **模型服务**添加或编辑一个 OpenAI 兼容 API 服务，填写地址与密钥，获取或手动添加模型，并把模型类型设为 **嵌入**。现有模型右侧的编辑按钮也能修改类型。随后在同页模型列表下方的 **嵌入 → 索引模型**下拉框选择这个模型，复用该服务的地址、密钥与模型 ID，并可测试连接；不再填写第二份 API 配置。OpenAI 兼容与 Responses 服务均通过 `/embeddings` 请求嵌入，HTTPS 或本机 HTTP 均可。CLI、Anthropic 与 Gemini 服务暂不提供此兼容嵌入接口。统一使用模型默认维度，不再配置嵌入维度；曾使用自定义维度的旧索引需要重建。问答、总结和模型翻译在指令配置中选择模型，只列出聊天模型；翻译也可切换为内置谷歌。
-2. 打开一本书，点击阅读工具栏的 **索引**按钮 → **建立索引**；索引按钮仅在进入沉浸阅读后显示，普通 PDF 标题栏不再添加按钮。仅当前书的文字分批发送至所配置的 Embedding 服务；PDF 保留原页，文字只在后台用于检索。扫描或没有文字的页面会被计数并提示，本版不做 OCR。
-3. 打开底部提问栏，没有选区时面向整篇文档；有可用索引时自动使用整书检索。先结合语义向量与关键词查找相关片段，再把片段及原文引用交给问答模型。默认命中 6 处，可配置 4–12 处；检索正文受 16,000 字符及用户上下文上限约束，不把整本书发给问答模型。历史对话连同检索正文超限会明确提示新建问题，不静默丢弃。
-4. 回答中的引用标签可跳回原文或真实 PDF 页码，跨页查看引用时保留整篇回答。卡片追问沿用该对话保存的原文上下文与引用编号；重新生成也沿用已保存的上下文。需要查找新的主题时，在底部发起独立问题重新检索。检索模型、来源和未索引页数保存在问答记录中，导出保留这些信息，回答底部不再展开来源列表。
+To discover and run local CLIs, the plugin checks configured executables and common installation paths and reads `~/.codex/models_cache.json`. It reuses the CLI's existing authentication. Questions and model discovery use temporary workspaces instead of the vault as the CLI working directory; temporary workspaces are cleaned up when finished. CLI tools, extensions and session persistence are disabled where the supported CLI protocol permits. A local CLI can still send requests to its remote model service.
 
-索引保存在 `<vault>/.obsidian/plugins/gloss-reader/indices/`，含原文片段、向量与页码，不含密钥。默认仅手动建立索引；开启 **自动建立索引**后，进入沉浸阅读时会为当前文档建立或更新索引，有效缓存直接复用。退出阅读或关闭自动开关会取消自动索引；关闭进度弹窗不会取消后台自动任务，也可在索引弹窗中手动停止。不会扫描整个笔记库。建立索引时才发送书籍文字；点击提问时还会把问题发送至 Embedding 服务进行查询向量化。密钥存在 Obsidian SecretStorage。若同步 `.obsidian`，本地索引也可能随同步传走。
+Custom API keys use Obsidian SecretStorage; the compatibility path for an unavailable secret-storage API retains keys only in memory. Plugin data stores service identifiers and secret references, not the API key itself.
 
-文件路径、修改时间、大小、接口地址、模型 ID 或维度变化后需重建索引；单纯调整命中数不必重建。可清除本书索引，原书和批注保持不变。建立过程可停止，失败不会替换上一次完整索引。当前容量为最多 3,000 页、500 万字符、8,000 个片段和 300 万个向量数值；超过限制明确提示降低维度或拆分文档。
+Annotations, conversations, drafts, context snapshots and reading progress are stored in `<vault>/.obsidian/plugins/gloss-reader/data.json`. Optional indexes are stored in the adjacent `indices/` directory and contain text excerpts, embeddings and page references. These files are private user data, not release assets. If you synchronize `.obsidian`, your sync tool may also synchronize these files. The plugin does not provide a separate cloud-sync service.
 
-整书检索不等于通读全书，不能保证检索到每个相关论述，也不以少量命中片段冒充完整全书总结。图表、图片和扫描页不进入此版文字检索。
+The reader processes documents you explicitly open. It does not recursively ingest the whole vault or automatically expand embedded notes into model context. It excludes configured private diary, company and investment-data paths. The public source and release contain no books, personal notes, credentials, plugin data, indexes or model caches.
 
-## Agent
+## Compatibility and limitations
 
-在“模型服务”中点击“添加服务”，选择 Codex、Claude、Pi 或自定义 API；同一类型可添加多个独立命名的服务。保存连接后获取模型，勾选并添加；也能手动输入模型 ID。每个服务分别保存地址、协议、模型列表和密钥引用。
+The plugin ID remains `gloss-reader` so existing installations retain their commands, annotations, data paths and credential references. The display name is Banana Reader. Removing a service does not automatically assign another default service, and existing conversation records keep their original model information.
 
-- **Codex**：读取本机 Codex 模型缓存；使用本机登录，独立临时目录与只读模式。
-- **Claude**：提供 sonnet / opus / haiku 常用别名，可手动填写完整 ID；别名列表不代表账户一定有权限。保留登录，关闭工具、自定义配置和会话持久化。
-- **Pi**：通过本机 Pi RPC 获取已配置且可用的模型，模型 ID 含 provider 前缀，避免不同提供商同名模型冲突。问答使用 JSON 流；关闭工具、扩展、技能、Prompt 模板、上下文文件和会话保存，复用本机 Pi 的认证。
-- **自定义 API**：支持下表四种协议，可添加多个同协议不同地址的服务。Key 存在 Obsidian 密钥存储中，插件数据只保存服务 ID；不会写入源码或插件 data.json。最低 Obsidian 版本为 1.11.4。获取模型只访问当前服务的模型列表接口。模型列表或本机缓存不代表账户一定有调用权限；真实请求失败会提示，不自动换用其他模型。
+This release is desktop-only and its interface is Chinese. Mobile, web import, a cloud bookshelf and text-to-speech are not implemented. Dynamic content from third-party Markdown renderers may not support reliable selection anchoring. Context-size limits produce an explicit error instead of silently truncating input. See the [Chinese reference](README.zh-CN.md) for detailed settings, capacity limits and migration behavior.
 
-在“指令配置 → 阅读提示词”编辑 **默认问答、文章解读** 的提示词与模型；文章解读未单独分配时跟随默认问答。每条自定义选中文本指令也可在原编辑器中单独选模型。阅读中临时切换影响当前问答及未单独分配的指令；文章解读优先使用自身模型。
-
-**翻译**支持 Google Translate 与模型翻译：在指令编辑窗口选择翻译方式、目标语言、提示词和模型。模型未单独设置时显示“默认”，使用默认问答模型；翻译不继承阅读中临时选择的模型。Google Translate 无需密钥或聊天模型。只向 Google 发送实际选中文字，长选中文本分段（最多 24,000 字符）；源语言与目标相同时，中文换译英语，其他语言换译中文。译文保存为原文旁的卡片，支持重新生成、复制和删除；不虚构 token 用量。停止翻译会忽略尚未返回的结果并停止后续分段，已发出的当前网络请求可能仍会结束。Google 的兼容翻译接口可能限流或因网络不可达而失败，届时显示错误并支持重试，不静默改用聊天模型。每条回答显示实际服务与模型。
-
-旧版配置按原服务与协议迁移，批注与笔记不变。删除服务或模型时清除相关用途分配，不自动替用户选择另一默认服务；原有问答保留。新安装从空服务列表开始。
-
-| 协议 | 基础地址示例 | 请求路径 |
-| --- | --- | --- |
-| OpenAI Chat Completions | `https://api.openai.com/v1` | `/chat/completions` |
-| OpenAI Responses | `https://api.openai.com/v1` | `/responses` |
-| Anthropic Messages | `https://api.anthropic.com/v1` | `/messages` |
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `/models/{model}:streamGenerateContent?alt=sse` |
-
-## 选中文本指令
-
-- “选中文本指令”最多8条，内置与自定义合计。默认提供解释、释义、简化、反例、翻译。
-- 每条均可编辑名称与 Prompt、调整顺序、删除。内置指令编辑器可以恢复默认内容，删掉的内置指令也能单独恢复。
-- 名称最多16字符，Prompt 最多8,000字符。可使用 `{{selection}}`（选中文本）与 `{{title}}`（文档名）；变量按文字替换，不执行代码。上下文与引用仍由阅读器提供。
-- 工具条同时显示全部已配置指令（最多 8 条），窄窗口自动换行，不折叠。“提问”、标记、文字批注、复制属于固定工具，不占8条指令名额。
-- 原文、批注与问答记录不因编辑指令而改变。
-
-设置中获取模型不会发送笔记。点击发送才调用模型；正文会由该模型服务处理。本地 CLI 运行不代表模型离线。此版是阅读问答伴侣，不提供让 Agent 修改库文件或执行任意任务的入口。
-
-## 数据和边界
-
-文档不被修改。批注、对话、上下文快照、草稿与阅读进度保存在 `<vault>/.obsidian/plugins/gloss-reader/data.json`。问答与高亮采用软移除，笔记本不再提供恢复入口。文件/文件夹重命名时保留批注；目标路径已有记录时保留两份而不覆盖。插件没有独立云同步；若用户同步 `.obsidian`，数据也可能由同步工具传走。
-
-`日记/`、`60_工作库/`、`20_投资库/`、`A1_交易数据/` 不进入阅读器或 AI 上下文。其他笔记的嵌入不会自动展开给模型，正文中的本地图片正常显示。仅处理用户明确打开的文档，不递归读取整个库。
-
-目前支持 Markdown、原版 PDF 与文字型 EPUB。网页导入、书架、朗读、移动端未实现。联网功能使用 DuckDuckGo 网页摘要辅助回答，并非模型自行浏览网页全文。复杂第三方 Markdown 渲染器动态产生的内容不保证可选中文本定位。超出上下文字符上限会提示，不静默截断。
-
-## 构建和安装
+## Build from source
 
 ```sh
 npm ci
@@ -111,22 +69,16 @@ npm run build
 npm test
 ```
 
-将同一版本 Release 中的 `main.js`、`styles.css`、`manifest.json` 三个文件放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。构建会将 MIT、字体 OFL 和 fflate 许可内嵌到 `main.js`，标准三文件安装即可携带完整许可；不需要额外复制源码或其他人的 `data.json`。
+Use the three generated installation files described above. Build output and dependencies are not tracked in Git. The build embeds the project license and complete third-party notices into `main.js`, so the standard three-file installation carries those notices.
 
-## 许可、参考与兼容
+## License and source references
 
-- 项目代码使用 [MIT](LICENSE)。当前分发的 Newsreader / Schibsted Grotesk 字体使用 SIL OFL，EPUB 解压依赖 fflate 使用 MIT；完整原文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-- [Nutlope/gloss](https://github.com/Nutlope/gloss) 是早期界面与交互参考。来源核查没有把“功能相似”直接视为整个插件的源码复制；也没有把上游缺失的许可改写成 MIT。已识别的具体复用已局部替换，历史来源和验证边界继续保留。
-- [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader) 是交互参考；本版未分发其字体、示例书或 GPL 组件，相似的 EPUB 路径辅助函数已改用标准路径工具。
-- 保留插件 ID `gloss-reader`、视图/命令 ID、SecretStorage 引用及本地数据位置以兼容已有安装；显示名称为 Banana Reader。
+Current project code is distributed under [MIT](LICENSE). Bundled Newsreader and Schibsted Grotesk fonts retain the SIL Open Font License; the fflate dependency retains MIT. Full notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-本插件不是上述项目或 Obsidian 的官方版本，不包含 Gloss 的账户、云端书架、网页导入和 Together 专用服务。界面目前使用中文；字体本地内嵌，中文正文使用系统字体回退。
+[Nutlope/gloss](https://github.com/Nutlope/gloss) and [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader) were early interaction references. The release audit distinguishes specific reused implementations from standard functionality. Identified margin-layout code, an EPUB path helper and specific reading styles/texture were replaced locally; the full plugin was not rebuilt. The release does not include their web-service components, example books or GPL components. It does not assign an invented license to an unlicensed upstream snapshot. The comparison is evidence of the review performed, not a legal certification or upstream endorsement. See the [source audit](notes/community-release-audit.md).
 
-## 0.12.2
+## Validation and release status
 
-- 根据社区审核补齐英文介绍、安装与使用说明；运行代码与 0.12.1 已验收构建保持一致。
+The tested runtime passed 109 regression tests and native Obsidian 1.14.4/macOS checks using synthetic documents: actual selected-text Q&A with model/usage, source citations, saved highlights, Markdown export, reload persistence, continuous original-PDF reading and page return, EPUB chapter order and cited article briefs. Successful live requests used gpt-6-luna; two other cached model selections failed and were honestly displayed. Windows/Linux, the minimum supported Obsidian version and every external model account were not retested.
 
-- 来源修复只涉及两个小辅助函数与已识别的阅读样式/纹理，不重做阅读器、模型接入、数据存储、PDF/EPUB、索引或导出。
-- 修复后的纸张、标记与浮层配色保留原有主题种类和操作入口；字体文件保持不变。
-- 补齐标准三文件发行的许可、兼容版本与布局/EPUB 边界验证。
-- 历史私有开发验收不作为本次发行的通过依据。本次完整测试、临时库验收与官方提交结果记录在 [发布审计](notes/community-release-audit.md)。
+The [community listing](https://community.obsidian.md/plugins/gloss-reader) is public and offers **Add to Obsidian**. The 0.12.1 official review completed and reproduced the release JavaScript byte-for-byte. Version 0.12.2 added English quick-start instructions; 0.12.3 separates this full English guide from the preserved Chinese reference after the directory continued to flag the mixed-language README. The runtime JavaScript and CSS remain byte-identical to the tested 0.12.1 release. The latest review status is recorded in the [release audit](notes/community-release-audit.md).
