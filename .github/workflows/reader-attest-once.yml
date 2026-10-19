@@ -1,0 +1,41 @@
+name: Attest Banana Reader 0.12.4 once
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  attest:
+    if: github.repository == 'TreyDong/banana-reader' && github.ref == 'refs/tags/0.12.4'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Build the exact tagged source
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm test
+      - name: Compare the published installation files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 0.12.4 --repo TreyDong/banana-reader --dir release-check --pattern main.js --pattern styles.css --pattern manifest.json
+          cmp main.js release-check/main.js
+          cmp styles.css release-check/styles.css
+          cmp manifest.json release-check/manifest.json
+      - name: Attest only the verified installation files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            main.js
+            styles.css
+            manifest.json
