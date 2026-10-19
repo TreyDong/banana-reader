@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {briefHash,briefPrompt,briefRanges,parseBrief} from './brief';
+const value={gist:'作者论证独立思考的价值。',claims:[{text:'知识需要亲自思考。',cite:2}],caveats:[{text:'作者主要依靠自身观察。',cite:3}],sections:[{title:'开篇',start:1},{title:'展开',start:3}]};
+test('parses grounded JSON and derives a complete paragraph map',()=>{const data=parseBrief(JSON.stringify(value),5);assert.deepEqual(data,value);assert.deepEqual(briefRanges(data,5).map(s=>[s.start,s.end]),[[1,2],[3,5]]);});
+test('accepts JSON fences, strips answer highlight syntax and allows no caveats',()=>{const d=parseBrief('```json\n'+JSON.stringify({...value,gist:'==要旨==',caveats:[]})+'\n```',5);assert.equal(d.gist,'要旨');assert.deepEqual(d.caveats,[]);});
+test('rejects missing or out of range source citations',()=>{for(const cite of [0,6,1.5,'2',null,undefined])assert.throws(()=>parseBrief(JSON.stringify({...value,claims:[{text:'论点',cite}]}),5));});
+test('rejects section maps with gaps at start, duplicates or reversed order',()=>{for(const starts of [[2],[1,1],[1,4,3],[1,6]])assert.throws(()=>parseBrief(JSON.stringify({...value,sections:starts.map(start=>({title:'分节',start}))}),5));});
+test('rejects incomplete, excessive and malformed content',()=>{for(const answer of ['not JSON','null',JSON.stringify({...value,claims:[]}),JSON.stringify({...value,sections:[]}),JSON.stringify({...value,gist:''}),JSON.stringify({...value,claims:Array(7).fill(value.claims[0])})])assert.throws(()=>parseBrief(answer,5));});
+test('source identity changes only when source text changes',()=>{assert.equal(briefHash('同一篇文章'),briefHash('同一篇文章'));assert.notEqual(briefHash('原文'),briefHash('更改后的原文'));assert.match(briefPrompt(67),/1 到 67/);});
