@@ -81,3 +81,5 @@
 首次提交 0.12.1 已被官方目录识别，条目 ID 为 gloss-reader。0.12.1 审核已完成，依赖、混淆和构建逐字节复现检查通过；README 检查提示缺少英文介绍及英文安装/使用章节。0.12.2 补齐英文快速上手并同步版本元数据，业务 TypeScript 和 CSS 不变。根据官方反馈流程发布新版本后复核，不将尚未结束的 Pending 状态写成审核通过。
 
 当前公开源码：https://github.com/TreyDong/banana-reader 。公开根提交 80b5ef76fee869c09ef6bd3bf4b1ffd1e8ba8c5f 没有父提交，仅含 29 个白名单文件。原私有远端继续保持 PRIVATE。本地 main 沿原私有历史保存开发记录；community-release 分支追踪 publication/main，公开推送只使用该干净分支，不将私有 main 推到公开远端。
+
+0.12.2 已补充英文快速上手，但官方检查仍提示 README 缺少英文。0.12.3 将 README 首页改为完整英文指南，原中文说明原样保存在 README.zh-CN.md；仅文档和版本元数据变更。目录条目已公开，显示 Add to Obsidian，最新版本审核仍需等待实际返回。
