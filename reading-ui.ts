@@ -1,14 +1,31 @@
-// Margin geometry and mark segmentation adapted for Obsidian from Nutlope/gloss.
-// References: components/reader/Margin.tsx, Block.tsx, lib/anchor.ts (54b13b8).
+// Native DOM annotation helpers for Banana Reader.
+// Historical references and the replaced layout routine are recorded in notes/community-release-audit.md.
 import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
 export interface MarginItem {id: string; desired: number; height: number; created: number; mini?:boolean; sourceY?:number; note?:boolean}
+/** Solve spacing in cumulative-height coordinates; retain the active source when it fits. */
 export function placeMarginItems(items: MarginItem[], active?: string): Record<string, number> {
-  if (!items.length) return {};
-  const tops = items.map(i => i.desired), ai = items.findIndex(i => i.id === active), gap = (i:number) => items[i-1].mini&&items[i].mini?4:16;
-  const forward = (from: number) => {for (let i = Math.max(1, from); i < items.length; i++) tops[i] = Math.max(tops[i], tops[i - 1] + items[i - 1].height + gap(i));};
-  if (ai < 0) {tops[0] = Math.max(0, tops[0]); forward(1);}
-  else {forward(ai + 1); for (let i = ai - 1; i >= 0; i--) tops[i] = Math.min(tops[i], tops[i + 1] - gap(i+1) - items[i].height); if (tops[0] < 0) {tops[0] = 0; forward(1);}}
-  return Object.fromEntries(items.map((item, i) => [item.id, tops[i]]));
+  const offsets: number[] = [];
+  let occupied = 0;
+  items.forEach((item, index) => {
+    offsets.push(occupied);
+    const next = items[index + 1];
+    occupied += item.height + (item.mini && next?.mini ? 4 : 16);
+  });
+  const requests = items.map((item, index) => item.desired - offsets[index]);
+  const selected = items.findIndex(item => item.id === active);
+  // Earlier cards have an upper envelope set by the pinned card, not by their heights.
+  const ceilings: number[] = [];
+  if (selected >= 0) requests.slice(0, selected + 1).reduceRight((limit, request, index) => {
+    const level = Math.max(0, Math.min(limit, request));
+    ceilings[index] = level;
+    return level;
+  }, Math.max(0, requests[selected]));
+  let lower = 0;
+  return Object.fromEntries(items.map((item, index) => {
+    const request = selected >= 0 && index <= selected ? ceilings[index] : requests[index];
+    lower = Math.max(lower, request);
+    return [item.id, offsets[index] + lower];
+  }));
 }
 export interface TextMark {id: string; start: number; end: number; kind: 'highlight' | 'thread' | 'pending'; color?: string; note?: boolean; style?:MarkStyle}
 export interface Segment {start: number; end: number; highlights: TextMark[]; threads: TextMark[]; pending: boolean}

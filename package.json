@@ -1,6 +1,6 @@
 {
   "name": "obsidian-gloss-reader",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,5 +17,6 @@
   },
   "dependencies": {
     "fflate": "0.8.3"
-  }
+  },
+  "license": "MIT"
 }

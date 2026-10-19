@@ -1,4 +1,5 @@
 import {unzipSync,strFromU8} from 'fflate';
+import {posix} from 'node:path';
 export type BookBlock={kind:'p'|'heading'|'pre'|'image';text:string;level?:number;image?:string};
 export interface BookSection {title:string;page?:number;blocks:BookBlock[]}
 export interface Book {kind:'pdf'|'epub';title:string;author?:string;sections:BookSection[];images:Record<string,{bytes:Uint8Array;mime:string}>;warnings:string[]}
@@ -6,10 +7,14 @@ export const BOOK_LIMITS={file:40*1024*1024,unpacked:64*1024*1024,entry:12*1024*
 export const readableExtension=(extension:string)=>['md','pdf','epub'].includes(extension.toLowerCase());
 function abort(signal?:AbortSignal){if(signal?.aborted)throw new Error('已取消打开文档。');}
 export function bookPath(base:string,href:string):string|null{
- const value=href.split(/[?#]/)[0];if(!value)return base;
- let decoded:string;try{decoded=decodeURIComponent(value);}catch{return null;}
- if(/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(decoded)||/[\\\0]/.test(decoded))return null;
- const parts=base.split('/').slice(0,-1);for(const part of decoded.split('/')){if(!part||part==='.')continue;if(part==='..'){if(!parts.length)return null;parts.pop();}else parts.push(part);}return parts.join('/');
+ const resource=href.replace(/[?#].*$/,'');
+ if(resource.length===0)return base;
+ let local:string;try{local=decodeURIComponent(resource);}catch{return null;}
+ if(/[\\\0]/.test(local)||local.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(local))return null;
+ const directory=base.substring(0,base.lastIndexOf('/')+1);
+ const resolved=posix.normalize(directory+local).replace(/\/+$/,'');
+ if(resolved==='..'||resolved.startsWith('../'))return null;
+ return resolved==='.'?'':resolved;
 }
 export function epubEntries(bytes:Uint8Array){
  if(bytes.byteLength>BOOK_LIMITS.file)throw new Error('电子书超过 40 MB，请使用较小的文件。');let count=0,total=0;

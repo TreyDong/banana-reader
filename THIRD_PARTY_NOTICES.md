@@ -1,24 +1,18 @@
 # Third-party sources and assets
 
-## Gloss reading UI
+## Historical reading-interface reference
 
-This plugin adapts the reading UI of [Nutlope/gloss](https://github.com/Nutlope/gloss), snapshot `54b13b8882d8a109132c5b2045acd6b45628563d`. Source authors and upstream provenance are retained here.
+Early private prototypes studied [Nutlope/gloss](https://github.com/Nutlope/gloss), snapshot `54b13b8882d8a109132c5b2045acd6b45628563d`. Those prototypes included a closely adapted margin-placement function, copied CSS token/rule groups and the upstream paper-grain SVG. The upstream snapshot did not declare a distribution license.
 
-Adapted parts:
-- `app/globals.css`: paper themes, ink/highlighter tokens, typography, mark strokes and animations, floating selection lens, popovers and margin cards.
-- `components/reader/Reader.tsx`, `TopBar.tsx`, `Composer.tsx`: page geometry, reading header and floating composer.
-- `components/reader/Lens.tsx`: selection toolbar, local ask/note editor, palette expansion and positioning.
-- `components/reader/Margin.tsx`: active-note-priority collision layout and the active source-to-card leader.
-- `components/reader/Notebook.tsx`, `GlossCard.tsx`, `Answer.tsx`: reading-order notebook filters/counts, entry metadata, Q/A layout, answer previews, and action-labelled margin card hierarchy.
-- `components/reader/Brief.tsx`, `lib/prompts.ts`: collapsible whole-article brief, cited claims/caveats, two-column paragraph map and generation receipt.
-- `components/reader/Block.tsx`, `lib/anchor.ts`: segmented overlapping marks and range reconstruction.
-- `components/reader/Rail.tsx`: document-scale minimap geometry and travel behavior.
+The 0.12.1 publication preparation replaces the identified function with a cumulative-height constraint layout and replaces the identified reading-surface/mark/toolbar rules and texture with local implementations. It does not relicense the upstream source or claim permission from its author. Historical references are retained here and in `notes/community-release-audit.md` rather than being presented as current bundled-code licenses.
 
-The browser/Next.js and React mechanisms are translated to Obsidian ItemView, native DOM and MarkdownRenderer. Account sync, hosting and Together-specific application endpoints are not included. This is a community adaptation, not an official Gloss product. No new license is asserted over the upstream material. The referenced snapshot did not contain a repository LICENSE file; this notice does not grant additional rights.
+The reader's Obsidian views, API/CLI integrations, document storage and quote anchors, native PDF integration, EPUB parser, book indexing, notebook handling and Chinese prompts remain in their existing native implementations. A shared feature, output schema, standard DOM operation or generic sorting expression is not treated by itself as evidence of source copying. The audit records both detected matches and the limits of that review. The existing `gloss-reader` storage/view identifier is retained for compatibility; this is an independent Banana Reader community plugin, not an official Gloss product.
+
+Qiaomu Reader was an interaction reference. A similar EPUB archive-path helper was also identified in a second comparison pass and replaced with a Node.js standard-path implementation. That local finding is not treated as proof that the whole EPUB parser derives from Qiaomu. No Qiaomu GPL component is bundled into this release. Obsidian's built-in PDF viewer and icon API remain host dependencies; the plugin does not bundle PDF.js, React, Next.js, Clerk or upstream web application services.
 
 ## Fonts
 
-Newsreader and Schibsted Grotesk font files were captured from the rendered Gloss page on 2026-10-15 and embedded in plugin CSS under distinct family names. They work offline and do not load from a third-party font CDN at runtime. Their original copyright and SIL Open Font License text follow.
+Newsreader and Schibsted Grotesk font files were obtained from the rendered reference page on 2026-10-15 and are embedded unchanged in plugin CSS under local CSS family aliases. These font projects independently license their binaries under the SIL Open Font License below. Their bytes are retained; replacing unlicensed application snippets does not require replacing these licensed fonts. They work offline and do not load from a third-party font CDN at runtime.
 
 ### Newsreader
 

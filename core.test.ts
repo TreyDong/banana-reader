@@ -18,6 +18,37 @@ test('dense comments never overlap or extend above the page',()=>{
   const tops=placeMarginItems(items,'b');assert.ok(tops.a>=0);for(let i=1;i<items.length;i++)assert.ok(tops[items[i].id]>=tops[items[i-1].id]+items[i-1].height+16);
   assert.deepEqual(placeMarginItems([]),{});
 });
+test('margin spacing remains stable across crowded layouts and pins a feasible active card',()=>{
+  for(let seed=0;seed<80;seed++){
+    const items=Array.from({length:1+seed%13},(_,i)=>({id:'card-'+i,desired:Math.floor((i*i*19+seed*7)/3),height:18+(seed*13+i*17)%180,created:i,mini:(seed+i)%3===0}));
+    const original=structuredClone(items),selected=seed%items.length;
+    const positions=placeMarginItems(items,items[selected].id);
+    let required=0;
+    for(let i=0;i<items.length;i++){
+      assert.ok(Number.isFinite(positions[items[i].id]));
+      assert.ok(positions[items[i].id]>=0);
+      if(i){const prior=items[i-1],gap=prior.mini&&items[i].mini?4:16;required+=prior.height+gap;assert.ok(positions[items[i].id]>=positions[prior.id]+prior.height+gap);}
+      if(i===selected)assert.equal(positions[items[i].id],Math.max(items[i].desired,required));
+    }
+    assert.deepEqual(items,original);
+    assert.deepEqual(placeMarginItems(items,items[selected].id),positions);
+  }
+});
+test('margin placement handles an absent active card and page-edge anchors without overlap',()=>{
+  const items=[{id:'one',desired:-20,height:0,created:1},{id:'two',desired:0,height:25,created:2},{id:'three',desired:4,height:0,created:3}];
+  assert.deepEqual(placeMarginItems(items,'missing'),placeMarginItems(items));
+  const result=placeMarginItems(items,'three');
+  assert.equal(result.one,0);assert.ok(result.two>=16);assert.ok(result.three>=result.two+41);
+});
+
+import {bookPath} from './formats';
+test('EPUB resource resolution preserves literal Unicode filenames and rejects encoded root escapes',()=>{
+  assert.equal(bookPath('OPS/book.opf','#chapter'),'OPS/book.opf');
+  assert.equal(bookPath('OPS/chapter/a.xhtml','../图像/封面%23一.png?cache=1#part'),'OPS/图像/封面#一.png');
+  assert.equal(bookPath('OPS/book.opf','./chapters/../二.xhtml'),'OPS/二.xhtml');
+  assert.equal(bookPath('OPS/book.opf','../title.xhtml'),'title.xhtml');
+  for(const href of ['../../outside','%2e%2e/%2e%2e/outside','%2Foutside','%5coutside','%00bad','file:///etc/passwd','https%3A%2F%2Fexample.invalid/a','%E0%A4%A'])assert.equal(bookPath('OPS/book.opf',href),null);
+});
 test('overlapping reader highlight and AI underline retain both identities without nested marks',()=>{
   const segments=segmentMarks(12,[{id:'h',start:1,end:9,kind:'highlight',color:'blue'},{id:'g',start:5,end:11,kind:'thread'}]);
   assert.deepEqual(segments.map(s=>[s.start,s.end,s.highlights.map(h=>h.id),s.threads.map(g=>g.id)]),[[0,1,[],[]],[1,5,['h'],[]],[5,9,['h'],['g']],[9,11,[],['g']],[11,12,[],[]]]);
