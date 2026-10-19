@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {zipSync,strToU8} from 'fflate';
+import {DOMParser} from '@xmldom/xmldom';
+import {bookPath,epubEntries,readEpub,readableExtension,BOOK_LIMITS} from './formats';
+import {contextFor,makeAnchor,exportReading} from './core';
+import {notebookEntries} from './notebook';
+const parse=(text:string)=>new DOMParser().parseFromString(text,'application/xml') as unknown as Document;
+function epub(changes:Record<string,string>={}){const files:Record<string,string>={
+ 'META-INF/container.xml':'<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>',
+ 'OPS/book.opf':'<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>测试书</dc:title><dc:creator>作者</dc:creator></metadata><manifest><item id="b" href="二.xhtml" media-type="application/xhtml+xml"/><item id="a" href="一.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/><itemref idref="b"/></spine></package>',
+ 'OPS/一.xhtml':'<html><body><h1>第一章</h1><p>章节顺序由 spine 决定。</p></body></html>',
+ 'OPS/二.xhtml':'<html><body><h1>第二章</h1><p>真实正文。</p><script>danger()</script><iframe src="https://example.invalid/">禁止内容</iframe><p onclick="danger()">安全的文字</p><img src="https://example.invalid/track.png"/></body></html>',...changes};return zipSync(Object.fromEntries(Object.entries(files).map(([name,text])=>[name,strToU8(text)])));}
+test('reader extensions accept PDF and EPUB without treating arbitrary binaries as Markdown',()=>{for(const e of ['md','pdf','EPUB'])assert.equal(readableExtension(e),true);assert.equal(readableExtension('exe'),false);});
+test('archive paths resolve relative Unicode URLs and reject external or escaping resources',()=>{assert.equal(bookPath('OPS/ch/a.xhtml','../img/%E5%B0%81%E9%9D%A2.png'),'OPS/img/封面.png');for(const p of ['../../../outside','https://example.com/a','javascript:alert(1)','//example.com/a','%2fetc/passwd','a\\b'])assert.equal(bookPath('OPS/a.xhtml',p),null);});
+test('EPUB follows spine order and retains metadata with Unicode chapter paths',async()=>{const b=await readEpub(epub(),parse);assert.equal(b.title,'测试书');assert.equal(b.author,'作者');assert.deepEqual(b.sections.map(s=>s.title),['第一章','第二章']);assert.match(b.sections[0].blocks[0].text,/spine/);});
+test('EPUB keeps only text and local raster image resources, not executable or remote markup',async()=>{const b=await readEpub(epub(),parse),all=b.sections.flatMap(s=>s.blocks).map(b=>b.text).join(' ');assert(!all.includes('danger()'));assert(!all.includes('禁止内容'));assert(all.includes('安全的文字'));assert.deepEqual(b.images,{});});
+test('EPUB refuses missing spine chapters and DRM-encrypted content',async()=>{await assert.rejects(readEpub(epub({'OPS/book.opf':'<package><manifest/><spine><itemref idref="missing"/></spine></package>'}),parse),/顺序清单/);await assert.rejects(readEpub(epub({'META-INF/encryption.xml':'<encryption><EncryptedData><EncryptionMethod Algorithm="DRM"/></EncryptedData></encryption>'}),parse),/DRM/);});
+test('invalid ZIPs, oversized files and cancelled opens fail explicitly',async()=>{assert.throws(()=>epubEntries(new Uint8Array([1,2,3])),/损坏/);assert.throws(()=>epubEntries(new Uint8Array(BOOK_LIMITS.file+1)),/40 MB/);const c=new AbortController();c.abort();await assert.rejects(readEpub(epub(),parse,c.signal),/取消/);});
+test('PDF context carries the actual page and notebook ordering stays by page',()=>{const context=contextFor([{text:'original sentence',start:0,end:17,number:1,source:'PDF 第 2 页'}],undefined,'original sentence',true,1000);assert.match(context,/PDF 第 2 页/);const a=makeAnchor('same quote',0,10),reading:any={threads:[],highlights:[{id:'b',anchor:{...a,pdfPage:2,pdfOffset:0},created:1},{id:'a',anchor:{...a,pdfPage:1,pdfOffset:10},created:2}]};assert.deepEqual(notebookEntries(reading,'all','same quote').map(e=>e.value.id),['a','b']);});
+
+test('PDF export retains page labels and an encoded jump back to the saved annotation',()=>{const anchor={...makeAnchor('saved quote',0,11),pdfPage:27,pdfOffset:0},reading:any={highlights:[{id:'pdf-mark',anchor,style:'wavy',created:1}],threads:[{id:'pdf-answer',anchor,label:'解释',messages:[{role:'user',content:'why?'},{role:'assistant',model:'test-model',content:'answer [¶1]'}],created:2}]};const md=exportReading('assets/book.pdf',reading,'vault');assert.match(md,/PDF 第 27 页/);assert.equal((md.match(/PDF 第 27 页/g)||[]).length,2);assert.match(md,/anchor=pdf-mark/);assert.match(md,/test-model/);});

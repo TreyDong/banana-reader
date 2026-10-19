@@ -1,0 +1,22 @@
+{
+  "name": "obsidian-gloss-reader",
+  "version": "0.12.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --skipLibCheck --lib DOM,ES2022 --types node main.ts core.ts agent.ts && node build.mjs",
+    "test": "tsx --test core.test.ts services.test.ts notebook.test.ts brief.test.ts formats.test.ts rag.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@xmldom/xmldom": "0.9.12",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.8.7",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "fflate": "0.8.3"
+  },
+  "license": "MIT"
+}
