@@ -1,6 +1,6 @@
-# Banana Reader 0.12.1 发布与来源核实 — 2026-10-19
+# Banana Reader 0.12.3 发布与来源核实 — 2026-10-19
 
-状态：来源局部替换、完整回归和本机原生验收已完成，正在准备公开发行与官方提交；尚未以 GitHub Release 或测试通过冒充官方收录。
+状态：来源局部替换、完整回归和本机原生验收已完成，官方条目已公开并提供 Add to Obsidian。0.12.3 官方审核已完成，并已成为公开目录当前版本。
 
 ## 结论的边界
 
@@ -48,7 +48,7 @@
 - 项目 LICENSE：MIT；fflate 0.8.3：MIT；Newsreader、Schibsted Grotesk：SIL OFL。
 - 全部 5 份字体二进制与替换前一致。未分发 Gloss 纸张 SVG、React/Next.js/Clerk/Together 服务或 Qiaomu GPL 组件。
 - build.mjs 将项目许可与完整 THIRD_PARTY_NOTICES.md 内嵌 main.js；标准 main.js、manifest.json、styles.css 即携带完整许可。
-- 版本 0.12.1，ID gloss-reader，最低 Obsidian 1.11.4，桌面限定。原命令、视图、SecretStorage 和数据路径不改。
+- 当前版本 0.12.3，ID gloss-reader，最低 Obsidian 1.11.4，桌面限定。原命令、视图、SecretStorage 和数据路径不改。
 - 原私有远端与历史保持私有；公开发行只使用当前审核文件的干净根提交。排除 design-qa.md 等旧私人验收记录、data.json、indices、电子书、个人笔记、凭据、模型缓存、备份、node_modules 和编译产物。编译文件只作为 Release 附件。
 
 ## 验证
@@ -66,7 +66,7 @@
 - GPT-5.6-Luna 和 gpt-6.1-sol 两个测试分配未完成 CLI 请求，界面真实显示失败；在临时库手动将总结改为已实测可用的 gpt-6-luna 后完成上述解读，不将缓存列表当作模型权限保证。这不改变用户个人库的模型配置，也不自动替用户回退模型。
 - 完整重载后重新打开 Markdown，1 条真实问答与 1 处波浪线标记仍保留；PDF 与 EPUB 三个合成源文件 SHA-256 全部未改变。
 - 临时测试窗口已关闭、显示比例已恢复，测试库已从 Obsidian 仓库列表移除；原个人库设置窗口保持原先状态，原插件安装及个人数据未改。
-- 最终官方目录状态将在实际提交后补记；本次不声称覆盖 Windows/Linux、Obsidian 1.11.4 实机或所有外部模型账户。
+- 官方发布状态见下文记录；本次不声称覆盖 Windows/Linux、Obsidian 1.11.4 实机或所有外部模型账户。
 
 ## 官方流程
 
@@ -78,8 +78,28 @@
 
 ## 官方审核反馈与文档修订
 
-首次提交 0.12.1 已被官方目录识别，条目 ID 为 gloss-reader。0.12.1 审核已完成，依赖、混淆和构建逐字节复现检查通过；README 检查提示缺少英文介绍及英文安装/使用章节。0.12.2 补齐英文快速上手并同步版本元数据，业务 TypeScript 和 CSS 不变。根据官方反馈流程发布新版本后复核，不将尚未结束的 Pending 状态写成审核通过。
+首次提交 0.12.1 已被官方目录识别，条目 ID 为 gloss-reader。0.12.1 审核已完成，依赖、混淆和构建逐字节复现检查通过；README 检查提示缺少英文介绍及英文安装/使用章节。0.12.2 补齐英文快速上手并同步版本元数据，业务 TypeScript 和 CSS 不变。根据官方反馈流程以新版本复核，最终 0.12.3 结果见下文。
 
 当前公开源码：https://github.com/TreyDong/banana-reader 。公开根提交 80b5ef76fee869c09ef6bd3bf4b1ffd1e8ba8c5f 没有父提交，仅含 29 个白名单文件。原私有远端继续保持 PRIVATE。本地 main 沿原私有历史保存开发记录；community-release 分支追踪 publication/main，公开推送只使用该干净分支，不将私有 main 推到公开远端。
 
-0.12.2 已补充英文快速上手，但官方检查仍提示 README 缺少英文。0.12.3 将 README 首页改为完整英文指南，原中文说明原样保存在 README.zh-CN.md；仅文档和版本元数据变更。目录条目已公开，显示 Add to Obsidian，最新版本审核仍需等待实际返回。
+0.12.2 已补充英文快速上手，但官方检查仍提示 README 缺少英文。0.12.3 将 README 首页改为完整英文指南，原中文说明原样保存在 README.zh-CN.md；仅文档和版本元数据变更。目录条目已公开，显示 Add to Obsidian，最终 0.12.3 官方审核已完成。
+
+## 公开发行记录
+
+- 官方条目：https://community.obsidian.md/plugins/gloss-reader ，已公开并显示 Add to Obsidian。
+- 最终文档发行：https://github.com/TreyDong/banana-reader/releases/tag/0.12.3 ，三个附件均已从公开地址下载并与本地核对一致。
+- 0.12.3 干净公开提交：1b85d85f0f00aad13b5ecfb97540c105b3e7966f；当前白名单 30 个文件，多出单独的中文 README。私有 main 历史未上传。
+- 0.12.1 官方构建逐字节复现，依赖与混淆检查通过。0.12.2 安装/使用章节警告已消除，但仍被提示非英文，故 0.12.3 单独提供完整英文首页；两次修订运行代码和 CSS 均未改变。
+- 官方行为提示包括本地 fs / child_process、文件路径枚举和剪贴板；用途已在 README 说明。样式检查的 !important / :has / 最低版本部分 CSS 支持提示，以及未提供 GitHub artifact attestation 的建议仍保留，不为了消除提示重写无关功能。
+
+| 0.12.3 附件 | 字节数 | SHA-256 |
+| --- | --- | --- |
+| main.js | 345376 | `5e17c8fe00fac1ad451c0c6304f8718a073dbdb4985343b4641bce9a53f2607f` |
+| manifest.json | 292 | `ea033eb8d8cb89d064c7051c5ad5df4488617a0fa3b0b618c10bc303a50ca668` |
+| styles.css | 782865 | `f52ea2f95a3284419ac1fb3620564e856d636f492e7bdec5a112808da0262fea` |
+
+## 最终目录验收
+
+2026-10-19 21:36（Asia/Shanghai）现场确认：官方账户面板中 0.12.3 / 1b85d85 显示 Completed，Current release 为 0.12.3；公开页面显示 Current version 0.12.3 和 Add to Obsidian。README 英文/安装/使用提示均已消除；依赖与混淆检查通过，构建再次逐字节复现。评分卡为 Health Excellent / Review Caution，保留上述 CLI/文件访问及 CSS 提示、attestation 建议；没有将 Completed 描述为无任何提示或法律认证。
+
+公开目录：https://community.obsidian.md/plugins/gloss-reader 。本次使用官方 Community directory 申请，不创建 obsidian-releases PR，不创建 Reader 发布工作流。原私有仓库保持私有，原个人库安装与数据未改。
