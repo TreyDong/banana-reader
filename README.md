@@ -1,84 +1,59 @@
-# Banana Reader for Obsidian
+# Banana Reader
 
-Read Markdown, original PDF pages and EPUB books with configurable AI, anchored highlights, margin notes and Markdown export.
+**Read a passage. Ask about it. Keep the understanding beside the source.**
 
-**Desktop only. Requires Obsidian 1.11.4 or later. The plugin interface is currently in Chinese.** Version 0.12.3.
+Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
 
-[完整中文说明](README.zh-CN.md) · [Releases](https://github.com/TreyDong/banana-reader/releases) · [Community listing](https://community.obsidian.md/plugins/gloss-reader)
+[中文使用说明](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
-## Installation
+> 在 Obsidian 里边读、边问、边记。支持 Markdown、原版 PDF 和 EPUB；问答、划线与批注留在原文旁，读完可导出带出处的 Markdown 笔记。
 
-Open the [community listing](https://community.obsidian.md/plugins/gloss-reader) and choose **Add to Obsidian**, then enable Banana Reader in Settings → Community plugins.
+![Selected-text questions and margin notes](https://github.com/TreyDong/banana-reader/releases/download/0.12.4/reader-preview.png)
 
-For manual installation, download `main.js`, `manifest.json` and `styles.css` from the same [GitHub Release](https://github.com/TreyDong/banana-reader/releases). Place all three files in `<vault>/.obsidian/plugins/gloss-reader/` and enable the plugin. When updating, preserve your existing `data.json` and `indices/`. Do not copy source folders or another user's plugin data into your vault.
+## What you can do
 
-## Usage
+- **Ask where you are reading.** Select a passage for an explanation, a counterexample or a translation. Keep follow-up questions in the same conversation. Responses show their actual model and available usage.
+- **Return to the evidence.** Click a paragraph citation or PDF page number to jump back to the passage behind an answer.
+- **Mark what matters.** Add highlights, straight or wavy underlines and personal notes. Review them alongside your questions in the notebook.
+- **Keep the original page.** Read PDF pages in their original layout with continuous scrolling. Read EPUB chapters in book order, with contents navigation and adjustable typography.
+- **Leave with a useful note.** Export excerpts, annotations and conversations to a new Markdown file with source links. Original documents stay unchanged.
+- **Use your own models.** Connect a supported API or an authenticated Codex, Claude or Pi CLI. Choose question, translation and article-brief models independently. Optional book indexing retrieves passages across a longer document.
 
-1. Open a Markdown, PDF or EPUB file. Click the **打开 Banana Reader** ribbon icon or run **Banana Reader: 进入沉浸阅读** from the command palette. You can also use the file context menu.
-2. In plugin settings, add your own API connection or an already installed and authenticated Codex, Claude or Pi CLI. Select the models you want to use. Assign question, translation and article-summary models independently.
-3. Select a passage to ask a question, translate, highlight, underline or add a note. Selecting text does not send a request. Submit the question to call the chosen service.
-4. Responses show the actual model and available usage. Click a paragraph or PDF-page citation to return to the source. Continue a conversation inside its existing card, or start an independent question from the bottom input.
-5. Open the notebook to review annotations. Choose **导出笔记** to create a new Markdown note in `收集箱/`, including excerpts, annotations, conversations and source links. Original documents are not rewritten and existing exports are not overwritten.
-6. Choose **返回文档** to leave immersive reading. Reading controls adjust the theme, font, text size, line spacing and contents navigation. Narrow panes show conversations in the notebook; wider panes also show margin cards.
+## Get started
 
-## Reading and annotation features
+1. Install from the [community directory](https://community.obsidian.md/plugins/gloss-reader) and enable **Banana Reader**.
+2. Open a Markdown, PDF or EPUB file. Click **打开 Banana Reader** in the ribbon, or run **Banana Reader: 进入沉浸阅读** from the command palette.
+3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → 模型服务** and choose a question model first.
+4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
+5. Open the notebook and choose **导出笔记** to save a new Markdown note in `收集箱/`. Choose **返回文档** to return to the normal file view.
 
-Markdown uses Obsidian's native rendering. Selection tools support questions, configurable text instructions, translation, straight or wavy underlines, highlights and written annotations. There are four built-in mark colors. Selections remain visible while composing a question. Questions and marks persist across reloads.
+Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The current interface is **Chinese**, on **desktop Obsidian 1.11.4+**.
 
-PDF files retain the original page layout through Obsidian's native PDF view. Pages scroll continuously; text selections can be questioned or marked. Conversations, notebook entries and exports retain real page numbers. Page links return to the cited page. Fonts and reading text-size controls do not reflow PDF pages. Scanned pages remain readable, but this release has no OCR and cannot select text that is absent from the source. Cross-page selections and full-book PDF summaries are not provided.
+## Make it comfortable
 
-EPUB text is read in spine order with chapter navigation and local raster images. Book scripts are not executed and remote images are not loaded. DRM, image-only books, audio/video, SVG illustrations and original fixed-layout styling are not supported. Limits include 40 MB compressed size, 64 MB expanded size, 4 MB per chapter, 600 chapter files and two million characters.
+Change the paper or dark theme, font, text size and line spacing from the reading toolbar. Wider panes show margin cards; narrow panes keep conversations in the notebook. Question, translation and article-brief models have separate assignments. Built-in Google translation is also available without a chat-model account.
 
-Article briefs provide structured claims, caveats and paragraph citations. Brief generation uses its independently assigned model, or the configured default when no specific model is assigned. Translation can use the built-in Google translation connection or an independently selected language model. Model errors are displayed; the plugin does not silently choose another model.
+For a longer text, configure an OpenAI-compatible embedding model and choose **索引 → 建立索引** inside the reader. Indexing is optional; automatic indexing is off by default. Retrieval finds relevant passages and does not claim to summarize every page. See the [Chinese guide](README.zh-CN.md) for service setup and detailed format limits.
 
-## Optional book retrieval
+## Your files and connections
 
-Configure an OpenAI-compatible embedding service in model settings, mark an added model as an embedding model, and select it for indexing. Inside the reader, use **索引** → **建立索引** to build an index for the current document. A question without a text selection can then retrieve passages across the indexed book. Answers keep source and PDF-page references.
+Annotations and conversations are saved in the plugin's `data.json`; optional indexes use its `indices/` folder. Export creates ordinary Markdown notes. If you sync `.obsidian`, your sync tool may also sync this data.
 
-Indexing sends document chunks to the selected embedding provider; searching sends the question to that provider and matched passages to the selected answer model. Automatic indexing is off by default. Enabling it can start requests when entering a document. Indexing can be stopped, and a failed rebuild preserves the previous complete index. Limits are 3,000 pages, five million characters, 8,000 chunks and three million vector values. Retrieval is not a complete reading or summary of every page. Images and scanned-page content are not indexed.
+AI requests send document context and your question to the service you choose. Indexing sends text chunks to your embedding provider. Google translation sends selected text to Google; optional search sends search terms to DuckDuckGo. The plugin has no author-operated server, advertising or client-side telemetry. Bundled fonts load locally.
 
-## Accounts, costs and network access
+The file picker lists vault paths only when opened. Copy buttons **write** the requested text to the clipboard; the plugin does not read clipboard contents. Local CLI connections use executable discovery, existing CLI authentication and temporary workspaces, requiring filesystem and process access. A local CLI can still call a remote service. API connections do not require a CLI. Read the [access details](README.zh-CN.md#账号网络与本地访问) before connecting a service.
 
-The plugin has no author-operated server, advertising, billing or client-side telemetry. AI services require your own account, subscription or API credits and may charge for usage. Model discovery or a cached model name does not establish account entitlement. Requests can fail because of provider access, network conditions or account limits.
+## Before you install
 
-Questions, article briefs and model translation send the necessary document context, question and conversation to your chosen model service. Optional question suggestions and automatic indexing are off by default; enabling them can trigger model requests during their documented reading actions. Enabling the plugin alone does not start a model request.
+- Desktop only; the interface is currently Chinese.
+- PDF selection needs a text layer. This version has no OCR or cross-page selection. Reading font settings do not reflow PDF pages.
+- EPUB supports text chapters and local raster images. DRM and original fixed-layout styling are not supported.
+- Use models available to your own account. Discovery does not guarantee access; failed requests show an error and do not silently switch providers.
 
-Built-in Google translation sends selected text to `translate.googleapis.com`. Optional web search sends generated search terms to `html.duckduckgo.com` and passes returned snippets to the chosen model. Fonts are bundled locally; there are no runtime font-CDN requests. Data processing by a chosen provider is subject to that provider's policies.
+For manual updates, copy `main.js`, `manifest.json` and `styles.css` from the same [release](https://github.com/TreyDong/banana-reader/releases) into `.obsidian/plugins/gloss-reader/`. Preserve existing `data.json` and `indices/`. The stable plugin ID is `gloss-reader`.
 
-## Local files, CLI access and privacy
+## Development and credits
 
-To discover and run local CLIs, the plugin checks configured executables and common installation paths and reads `~/.codex/models_cache.json`. It reuses the CLI's existing authentication. Questions and model discovery use temporary workspaces instead of the vault as the CLI working directory; temporary workspaces are cleaned up when finished. CLI tools, extensions and session persistence are disabled where the supported CLI protocol permits. A local CLI can still send requests to its remote model service.
+Build with `npm ci` and `npm run build`; run tests with `npm test`. When [reporting an issue](https://github.com/TreyDong/banana-reader/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
 
-Custom API keys use Obsidian SecretStorage; the compatibility path for an unavailable secret-storage API retains keys only in memory. Plugin data stores service identifiers and secret references, not the API key itself.
-
-Annotations, conversations, drafts, context snapshots and reading progress are stored in `<vault>/.obsidian/plugins/gloss-reader/data.json`. Optional indexes are stored in the adjacent `indices/` directory and contain text excerpts, embeddings and page references. These files are private user data, not release assets. If you synchronize `.obsidian`, your sync tool may also synchronize these files. The plugin does not provide a separate cloud-sync service.
-
-The reader processes documents you explicitly open. It does not recursively ingest the whole vault or automatically expand embedded notes into model context. It excludes configured private diary, company and investment-data paths. The public source and release contain no books, personal notes, credentials, plugin data, indexes or model caches.
-
-## Compatibility and limitations
-
-The plugin ID remains `gloss-reader` so existing installations retain their commands, annotations, data paths and credential references. The display name is Banana Reader. Removing a service does not automatically assign another default service, and existing conversation records keep their original model information.
-
-This release is desktop-only and its interface is Chinese. Mobile, web import, a cloud bookshelf and text-to-speech are not implemented. Dynamic content from third-party Markdown renderers may not support reliable selection anchoring. Context-size limits produce an explicit error instead of silently truncating input. See the [Chinese reference](README.zh-CN.md) for detailed settings, capacity limits and migration behavior.
-
-## Build from source
-
-```sh
-npm ci
-npm run build
-npm test
-```
-
-Use the three generated installation files described above. Build output and dependencies are not tracked in Git. The build embeds the project license and complete third-party notices into `main.js`, so the standard three-file installation carries those notices.
-
-## License and source references
-
-Current project code is distributed under [MIT](LICENSE). Bundled Newsreader and Schibsted Grotesk fonts retain the SIL Open Font License; the fflate dependency retains MIT. Full notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-[Nutlope/gloss](https://github.com/Nutlope/gloss) and [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader) were early interaction references. The release audit distinguishes specific reused implementations from standard functionality. Identified margin-layout code, an EPUB path helper and specific reading styles/texture were replaced locally; the full plugin was not rebuilt. The release does not include their web-service components, example books or GPL components. It does not assign an invented license to an unlicensed upstream snapshot. The comparison is evidence of the review performed, not a legal certification or upstream endorsement. See the [source audit](notes/community-release-audit.md).
-
-## Validation and release status
-
-The tested runtime passed 109 regression tests and native Obsidian 1.14.4/macOS checks using synthetic documents: actual selected-text Q&A with model/usage, source citations, saved highlights, Markdown export, reload persistence, continuous original-PDF reading and page return, EPUB chapter order and cited article briefs. Successful live requests used gpt-6-luna; two other cached model selections failed and were honestly displayed. Windows/Linux, the minimum supported Obsidian version and every external model account were not retested.
-
-The [community listing](https://community.obsidian.md/plugins/gloss-reader) is public and offers **Add to Obsidian**. The 0.12.1 official review completed and reproduced the release JavaScript byte-for-byte. Version 0.12.2 added English quick-start instructions; 0.12.3 separates this full English guide from the preserved Chinese reference after the directory continued to flag the mixed-language README. The runtime JavaScript and CSS remain byte-identical to the tested 0.12.1 release. The 0.12.3 official review is completed and the public directory now lists 0.12.3. The English README warning is resolved, dependencies and obfuscation checks pass, and the release build is reproduced byte-for-byte. CLI/filesystem and CSS disclosures remain on the scorecard. Evidence is recorded in the [release audit](notes/community-release-audit.md).
+Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the [source audit and release checks](notes/community-release-audit.md) record the specific replacements and verification limits.

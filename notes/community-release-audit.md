@@ -103,3 +103,27 @@
 2026-10-19 21:36（Asia/Shanghai）现场确认：官方账户面板中 0.12.3 / 1b85d85 显示 Completed，Current release 为 0.12.3；公开页面显示 Current version 0.12.3 和 Add to Obsidian。README 英文/安装/使用提示均已消除；依赖与混淆检查通过，构建再次逐字节复现。评分卡为 Health Excellent / Review Caution，保留上述 CLI/文件访问及 CSS 提示、attestation 建议；没有将 Completed 描述为无任何提示或法律认证。
 
 公开目录：https://community.obsidian.md/plugins/gloss-reader 。本次使用官方 Community directory 申请，不创建 obsidian-releases PR，不创建 Reader 发布工作流。原私有仓库保持私有，原个人库安装与数据未改。
+
+## 0.12.4：官方建议与市场介绍修订
+
+用户要求逐条处理官方建议，并学习高星、高下载量插件的介绍。现场核实 0.12.3 的建议：artifact attestation、fs、child_process、文件路径枚举、剪贴板、text-decoration / clip-path 兼容性、!important 和 :has。
+
+处理：移除 59 处强制覆盖和 3 处 :has；模态框与选区由本地明确类名标记；沉浸模式有专属 banana-reader 样式范围，兼容根元素移到 body 的呈现方式。屏幕阅读器标签用传统裁切保持可访问性；直线/波浪线采用局部背景和边框，保留重叠标记与 PDF 页面功能；减少动态效果使用动画/过渡变量。字体 5 份二进制保持不变。
+
+权限核实：getFiles 仅在用户打开文档选择器时用于列路径，已有格式/隐私过滤；剪贴板 3 处均仅 writeText，没有 readText；CLI 使用 spawn 的分离参数且未启用 shell，使用隔离临时目录；索引位于本插件目录。保留这些实际功能及诚实披露，不换名称隐藏扫描器提示。
+
+README 改为用途、真实截图、主要功能、快速上手、数据与服务、限制的顺序。发行审计和技术过程留在本记录，不再占据安装页面主要内容。中文快速上手置于详细设置说明前。0.12.4 截图仅使用本次新建的合成阅读文章。
+
+参考于 2026-10-19 现场从 GitHub 和官方 community-plugin-stats.json 获取：Dataview 9,400 stars / 5,164,689 downloads；Templater 5,357 / 5,954,659；Excalidraw 7,752 / 8,592,122；PDF++ 2,499 / 845,907。Stars 是 GitHub 星标，downloads 是官方文件中的累计下载字段，不等于活跃用户数或星级评分。
+
+- https://github.com/blacksmithgu/obsidian-dataview
+- https://github.com/SilentVoid13/Templater
+- https://github.com/zsviczian/obsidian-excalidraw-plugin
+- https://github.com/RyotaUshio/obsidian-pdf-plus
+- https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugin-stats.json
+
+为回应来源证明建议，准备仅手动触发、只接受 0.12.4 标签的单次 GitHub 官方构建证明。固定官方 actions 提交，仓库权限 contents: read，仅额外允许本次 id-token / attestations 写入；先重建并逐字节比较 Release 三文件才签发证明，不上传、替换发行附件。完成后移除流程文件，保留证明记录。实际运行、原生验收与目录结果待现场补记。
+
+### 本次中断点
+
+用户已明确要求稍后进行 Obsidian 界面检查。0.12.4 只作为本地候选保留；公开当前版本仍是 0.12.3，未运行来源证明流程、未发布新版本、未改个人库安装。官方市场短介绍与长说明已保存，表单要求英文；README 英文及中文快速上手已重写，预览图片等待原生验收后补齐。0.12.4 样式已在临时库确认基础沉浸布局恢复，PDF/选文/模态框及最终截图仍需补查。109 项回归通过，五份字体字节一致。项目路径已由另一项用户操作改为 banana-reader，保留其 npm 包名调整；原私有历史不推到公开仓库。

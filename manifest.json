@@ -1,9 +1,9 @@
 {
   "id": "gloss-reader",
   "name": "Banana Reader",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "minAppVersion": "1.11.4",
-  "description": "Read Markdown, original PDF pages and EPUB books with an AI companion, anchored highlights, margin notes and focus mode.",
+  "description": "Read and annotate Markdown, PDF and EPUB, ask about selected passages, and export notes with source links.",
   "author": "Trey",
   "isDesktopOnly": true
 }
