@@ -271,3 +271,73 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gloss-root .gloss-card-preview>:first-child{margin-top:0}.gloss-root .gloss-card-preview>:last-child{margin-bottom:0}.gloss-root .gloss-card-preview p{margin:0}.gloss-thread-card.is-mini .gloss-card-preview{display:none}
 .gloss-article::highlight(gloss-reference){background-color:var(--rubric-wash-strong);text-decoration:underline;text-decoration-color:var(--rubric)}
 .gloss-root.gloss-pdf .gloss-article::highlight(gloss-reference){background-color:#9bbfe88c;text-decoration:none}
+
+/* Settings hierarchy: native UI type scale, outlined groups and section dividers. */
+.gr-settings{font-size:var(--font-ui-small);--gr-section-size:var(--font-ui-medium);--gr-item-size:var(--font-ui-small)}
+.gr-settings .gr-settings-head,.gr-settings .gr-settings-body{max-width:860px}
+.gr-settings .gr-settings-head{margin-bottom:var(--size-4-5)}
+.gr-settings .gr-settings-name{font-size:22px;font-weight:600;letter-spacing:-.025em}
+.gr-settings .gr-settings-version{font-size:var(--font-ui-smaller)}
+.gr-settings button.gr-settings-tab{font-size:var(--font-ui-small);height:42px;padding:0 4px 12px}
+.gr-settings .gr-settings-tab svg{width:16px;height:16px}
+.gr-settings .gr-settings-group{min-width:0;margin-bottom:var(--size-4-5);border:1px solid var(--gr-line);border-radius:var(--radius-l);background:transparent;overflow:hidden}
+.gr-settings h3.gr-settings-section,.gr-settings .gr-settings-card-heading,.gr-settings .gr-command-heading{margin:0;padding:var(--size-4-4);border:0;border-bottom:1px solid var(--gr-line);background:transparent}
+.gr-settings h3.gr-settings-section,.gr-settings .gr-settings-card-heading h3{font-size:var(--gr-section-size);font-weight:600;line-height:1.5;letter-spacing:normal}
+.gr-settings .gr-settings-card-heading h3{padding:0;margin:0}
+.gr-settings .gr-command-heading h3.gr-settings-section{padding:0;border:0;margin:0}
+.gr-settings .gr-settings-group-body{min-width:0;padding:4px var(--size-4-4)}
+.gr-settings .gr-settings-row{min-height:64px;padding:16px 0;gap:24px;border-bottom:1px solid var(--gr-line)}
+.gr-settings .gr-settings-row:last-child{border-bottom:0}
+.gr-settings .gr-settings-label{font-size:var(--gr-item-size);font-weight:500;line-height:1.5;color:var(--gr-ink)}
+.gr-settings .gr-settings-description,.gr-settings .gr-command-preview{font-size:var(--font-ui-smaller);line-height:1.6}
+.gr-settings .gr-settings-description{margin-top:4px}
+.gr-settings .gr-settings-controls{width:280px;max-width:52%;justify-content:flex-end}
+.gr-settings :is(input.gr-settings-input,select.gr-settings-input){height:34px;font-size:var(--font-ui-small);border-radius:var(--radius-m)}
+.gr-settings button.gr-settings-button{height:32px;font-size:var(--font-ui-small)}
+.gr-settings .gr-reading-preview.gloss-root{margin:12px 0 4px;padding:20px 22px;border-radius:var(--radius-m)}
+.gr-settings .gr-reading-preview p{font-size:25px;line-height:1.45}
+.gr-settings button.gr-paper-choice{height:34px;font-size:var(--font-ui-smaller)}
+.gr-settings .gr-service-workspace{grid-template-columns:160px minmax(0,1fr);gap:20px;min-height:0;padding:12px 0}
+.gr-settings .gr-service-nav{padding-right:16px}
+.gr-settings button.gr-service-nav-item{min-height:60px;padding:12px 10px}
+.gr-settings .gr-service-nav-copy{font-size:var(--font-ui-small);line-height:1.4}
+.gr-settings .gr-service-nav-meta,.gr-settings .gr-service-kind{font-size:var(--font-ui-smaller)}
+.gr-settings .gr-service-detail{padding-top:4px}
+.gr-settings .gr-service-detail-head{margin-bottom:16px}
+.gr-settings .gr-service-detail-head h4{font-size:var(--font-ui-medium);line-height:1.5;font-weight:600}
+.gr-settings .gr-service-connection{font-size:var(--font-ui-smaller);margin-bottom:18px;padding:10px 12px}
+.gr-settings .gr-service-model-head{font-size:var(--font-ui-small);font-weight:600;padding-bottom:12px;margin:0;border-bottom:1px solid var(--gr-line)}
+.gr-settings .gr-service-models{border:1px solid var(--gr-line);border-radius:var(--radius-m);margin-top:12px;overflow:hidden}
+.gr-settings .gr-saved-model{padding:14px 12px;min-height:66px}
+.gr-settings .gr-saved-model:last-child{border-bottom:0}
+.gr-settings .gr-saved-model .gr-model-name{font-size:var(--font-ui-small)}
+.gr-settings .gr-saved-model .gr-model-id,.gr-settings .gr-model-use-badge{font-size:var(--font-ui-smaller)}
+.gr-settings button.gr-settings-icon{width:30px;height:30px;padding:6px}
+.gr-settings .gr-settings-icon svg{width:16px;height:16px}
+.gr-settings .gr-service-model-footer{padding:12px 0 4px}
+.gr-settings .gr-service-model-empty{border:0}
+.gr-settings .gr-service-empty{min-height:230px;border:0}
+.gr-settings .gr-index-settings>.gr-settings-description{margin:0;padding:12px 16px 16px;border-top:1px solid var(--gr-line)}
+.gr-settings .gr-command-list{padding:0 var(--size-4-4)}
+.gr-settings .gr-command-row{min-height:76px;padding:18px 0;gap:16px}
+.gr-settings .gr-command-actions{flex:none;gap:4px}
+.gr-settings .gr-command-preview{margin-top:5px}
+.gr-settings .gr-command-restore{padding:12px 16px;border-top:1px solid var(--gr-line)}
+.gr-model-modal,.gr-command-editor{font-size:var(--font-ui-small)}
+.gr-model-modal label,.gr-command-editor>label{font-size:var(--font-ui-small);font-weight:500;color:var(--text-normal)}
+.gr-model-modal .gr-settings-input{height:36px;font-size:var(--font-ui-small)}
+.gr-model-modal button.gr-settings-button,.gr-command-editor button.gr-settings-button{font-size:var(--font-ui-small);height:34px}
+.gr-model-modal .gr-model-name{font-size:var(--font-ui-small)}
+.gr-model-modal .gr-model-id{font-size:var(--font-ui-smaller)}
+.gr-model-modal .gr-model-browser-row{padding:12px;min-height:56px}
+.gr-model-modal .gr-settings-footer,.gr-command-editor .gr-settings-footer{margin-top:20px;padding-top:16px;border-top:1px solid var(--background-modifier-border)}
+@container(max-width:600px){
+ .gr-settings .gr-settings-row{flex-direction:column;align-items:stretch;gap:12px}
+ .gr-settings .gr-settings-controls{width:100%;max-width:none}
+ .gr-settings .gr-service-workspace{grid-template-columns:minmax(0,1fr);gap:16px}
+ .gr-settings .gr-service-nav{flex-direction:row;overflow-x:auto;padding:0 0 12px;border-right:0;border-bottom:1px solid var(--gr-line)}
+ .gr-settings button.gr-service-nav-item{flex:0 0 140px;min-width:0}
+ .gr-settings .gr-command-row{flex-direction:column;align-items:stretch;gap:12px}
+ .gr-settings .gr-command-actions{align-self:flex-end}
+ .gr-settings .gr-settings-tabs{gap:14px}
+}
