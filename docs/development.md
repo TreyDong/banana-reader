@@ -15,7 +15,6 @@ npm test
 - `scripts/build.mjs`: bundle the entry with esbuild and embed the root project license and complete third-party notices.
 - `tsconfig.json`: typecheck runtime sources using the existing compiler options; no JavaScript is emitted by TypeScript.
 - `docs/`: developer and detailed reference documentation.
-- `notes/`: engineering decisions, publication audit and historical QA records. Historical reports describe their recorded versions and may retain old filenames.
 
 The build emits `main.js` in the repository root. Install that file together with root `manifest.json` and `styles.css`. Runtime outputs are independent of the source-directory layout. `main.js` and `node_modules/` are ignored by Git.
 

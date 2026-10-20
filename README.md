@@ -59,8 +59,10 @@ See the [development guide](docs/development.md) for the source layout, build an
 
 Build with `npm ci` and `npm run build`; run tests with `npm test`. When [reporting an issue](https://github.com/TreyDong/banana-reader/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
 
-Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the [source audit and release checks](notes/community-release-audit.md) record the specific replacements and verification limits.
+Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
 
-- 2026-10-20: Move unchanged runtime TypeScript into `src/`, tests into `tests/`, the build script into `scripts/`, and the historical QA log into `notes/qa/`. Update build/test paths and add an explicit TypeScript configuration. Version 0.12.5, plugin ID, installation outputs and data paths stay unchanged.
+- 2026-10-20: Move unchanged runtime TypeScript into `src/`, tests into `tests/`, and the build script into `scripts/`. Group developer documentation by purpose. Update build/test paths and add an explicit TypeScript configuration. Version 0.12.5, plugin ID, installation outputs and data paths stay unchanged.
+
+- 2026-10-20: Remove internal engineering and QA records from the repository and prepare the 0.12.5 release. Keep third-party notices and installation/data paths unchanged.
