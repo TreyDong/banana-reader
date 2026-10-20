@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as http from 'node:http';
 import { once } from 'node:events';
-import { makeAnchor, resolveAnchor, indexPassages, contextFor, freshReading, exportReading, blockedPath } from './core';
-import { apiEndpoint, askAgent, parseCodexLine } from './agent';
-import {placeMarginItems, segmentMarks} from './reading-ui';
+import { makeAnchor, resolveAnchor, indexPassages, contextFor, freshReading, exportReading, blockedPath } from '../src/core';
+import { apiEndpoint, askAgent, parseCodexLine } from '../src/agent';
+import {placeMarginItems, segmentMarks} from '../src/reading-ui';
 
 test('margin notes remain next to their paragraphs when they do not collide',()=>{
   assert.deepEqual(placeMarginItems([{id:'a',desired:100,height:60,created:1},{id:'b',desired:300,height:90,created:2}]),{a:100,b:300});
@@ -41,7 +41,7 @@ test('margin placement handles an absent active card and page-edge anchors witho
   assert.equal(result.one,0);assert.ok(result.two>=16);assert.ok(result.three>=result.two+41);
 });
 
-import {bookPath} from './formats';
+import {bookPath} from '../src/formats';
 test('EPUB resource resolution preserves literal Unicode filenames and rejects encoded root escapes',()=>{
   assert.equal(bookPath('OPS/book.opf','#chapter'),'OPS/book.opf');
   assert.equal(bookPath('OPS/chapter/a.xhtml','../图像/封面%23一.png?cache=1#part'),'OPS/图像/封面#一.png');
@@ -140,8 +140,8 @@ test('API failures never echo provider error bodies or keys', async () => {
   try {await assert.rejects(askAgent({settings,context:'test',messages:[],signal:new AbortController().signal,onText:()=>{}}), e => String(e).includes('401') && !String(e).includes('test-key') && !String(e).includes('secret-provider-error'));} finally {server.closeAllConnections();server.close();}
 });
 
-import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand} from './prompts';
-import {parseApiEvent,apiRequest,cliConfig,parseClaudeLine,type ApiProtocol} from './agent';
+import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand} from '../src/prompts';
+import {parseApiEvent,apiRequest,cliConfig,parseClaudeLine,type ApiProtocol} from '../src/agent';
 import {promises as fs} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -195,9 +195,9 @@ test('Claude CLI isolates tools/config, sends stdin context, parses text without
   }finally{await fs.rm(folder,{recursive:true,force:true});}
 });
 
-import {markStyle,MARK_STYLES} from './core';
-import {railMagnification} from './reading-ui';
-import {normalizeModels,mergeModels,discoverCodexModels,discoverApiModels,apiRequest} from './agent';
+import {markStyle,MARK_STYLES} from '../src/core';
+import {railMagnification} from '../src/reading-ui';
+import {normalizeModels,mergeModels,discoverCodexModels,discoverApiModels,apiRequest} from '../src/agent';
 test('legacy marks retain highlight style, wave and underline export without losing quote or notes',()=>{
   assert.equal(markStyle(undefined),'highlight');assert.equal(markStyle('unsupported'),'highlight');assert.equal(markStyle('wavy'),'wavy');
   const r=freshReading();r.highlights.push({id:'wave',anchor:makeAnchor('原文引句',0,4),color:'blue',style:'wavy',note:'我的理解',created:1});
@@ -221,12 +221,12 @@ test('model lists use protocol auth, filter Gemini embedding models, sanitize fa
   const request=apiRequest({settings,context:'公开原文',messages:[{role:'assistant',content:'回答',provider:'claude',model:'sonnet'},{role:'user',content:'继续'}],signal:new AbortController().signal,onText:()=>{}});assert.ok(request.body.messages.every((m:any)=>!('model'in m)&&!('provider'in m)));
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
-import {referenceTokens} from './core';
+import {referenceTokens} from '../src/core';
 test('citations preserve standalone, grouped and ranged references without unbounded expansion',()=>{
   const source='引用[¶1]，参见[¶11–13]、[¶2, ¶5]和[¶8–¶9]。';assert.deepEqual(referenceTokens(source).map(t=>t.ids),[['1'],['11','12','13'],['2','5'],['8','9']]);assert.equal(referenceTokens('[¶0] [¶1–999999] [¶9–2]').length,0);assert.equal(referenceTokens('普通 [1] 或代码').length,0);
 });
 
-import {uniqueReferences} from './core';
+import {uniqueReferences} from '../src/core';
 test('hundreds of PDF paragraph references on one page produce one page link',()=>{
  const citations=Object.fromEntries(Array.from({length:600},(_,i)=>[String(i+1),{...makeAnchor('source '+i,0,8),pdfPage:6}]));
  const ids=Array.from({length:600},(_,i)=>String(i+1));assert.deepEqual(uniqueReferences([...ids,...ids],citations).map(r=>r.label),['第 6 页']);
@@ -241,7 +241,7 @@ test('adjacent reference groups share one navigable PDF page chip without swallo
  const text='说明 [¶1][¶2] [¶3]。另一个结论 [¶4]';const refs=referenceTokens(text);assert.deepEqual(refs.map(r=>r.ids),[['1','2','3'],['4']]);assert.equal(text.slice(refs[0].start,refs[0].end),'[¶1][¶2] [¶3]');const citations=Object.fromEntries(['1','2','3'].map(id=>[id,{...makeAnchor('same page',0,9),pdfPage:6}]));assert.equal(uniqueReferences(refs[0].ids,citations).length,1);
 });
 
-import {followupHistory,visibleThreadError} from './core';
+import {followupHistory,visibleThreadError} from '../src/core';
 test('card follow-up appends one question, preserves the original conversation and sources',()=>{
  const t={id:'same-card',created:1,selection:false,context:'whole document',citations:{'1':makeAnchor('source',0,6)},messages:[{role:'user' as const,content:'主题？'},{role:'assistant' as const,content:'主题与依据 [¶1]',model:'original-model'}]},before=JSON.stringify(t),h=followupHistory(t,'  举个例子？  ');
  assert.deepEqual(h.map(m=>m.content),['主题？','主题与依据 [¶1]','举个例子？']);assert.equal(h[1].model,'original-model');assert.equal(JSON.stringify(t),before);assert.notEqual(h[0],t.messages[0]);assert.throws(()=>followupHistory({...t,removed:true},'继续'),/已删除/);assert.throws(()=>followupHistory(t,' '),/请输入/);
@@ -251,7 +251,7 @@ test('interrupted partial answers remain useful history and cancellation is quie
 });
 
 
-import {compactMarginIds,annotationAnchor} from './reading-ui';
+import {compactMarginIds,annotationAnchor} from '../src/reading-ui';
 test('only nearby source anchors form compact notes, independent of card height or active expansion',()=>{
  const items=[{id:'isolated',desired:800,height:800,created:1},{id:'same-a',desired:100,height:350,created:2},{id:'same-b',desired:100,height:30,created:3},{id:'nearby',desired:187,height:400,created:4},{id:'separate',desired:400,height:20,created:5}];
  assert.deepEqual([...compactMarginIds(items)].sort(),['nearby','same-a','same-b']);assert.deepEqual([...compactMarginIds(items,'same-a')].sort(),['nearby','same-b']);assert.deepEqual([...compactMarginIds(items.map(i=>({...i,height:9999})))].sort(),['nearby','same-a','same-b']);
@@ -266,7 +266,7 @@ test('collapsing with no focused reference safely clears the source, without inv
 });
 
 
-import {answerReceipt} from './core';
+import {answerReceipt} from '../src/core';
 test('legacy answer receipts explain missing metadata without borrowing a current model or estimating usage',()=>{
  const legacy={role:'assistant' as const,content:'旧回答'},before=JSON.stringify(legacy),receipt=answerReceipt(legacy);assert.equal(receipt.model,'模型未记录');assert.equal(receipt.usage,'用量未记录');assert.match(receipt.detail,/无法补算/);assert.equal(JSON.stringify(legacy),before);
  const missing=answerReceipt({...legacy,model:'actual-model',serviceId:'saved-service'},'实际模型');assert.equal(missing.model,'实际模型');assert.equal(missing.usage,'用量未返回');
@@ -277,7 +277,7 @@ test('answer receipts preserve actual zero usage, returned totals and built-in t
 });
 
 
-import {readingMapMetrics,readingMapViewport,readingMapLines} from './reading-ui';
+import {readingMapMetrics,readingMapViewport,readingMapLines} from '../src/reading-ui';
 test('reading map keeps short articles compact and caps long articles at the viewport',()=>{
  const short=readingMapMetrics(1500,760,36);assert.equal(short.height,100);assert.equal(short.scale,1/15);
  const long=readingMapMetrics(60000,760,36);assert.equal(long.height,680);
