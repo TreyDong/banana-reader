@@ -439,12 +439,13 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "界面语言": "Interface language",
   "语言": "Language",
   "跟随 Obsidian": "Follow Obsidian",
-  "设置页立即切换；已打开的阅读页重新打开后应用。不会更改提示词或翻译目标语言。": "Settings update immediately. Reopen an existing reader to apply the language. Prompts and the translation target are unchanged.",
+  "设置页和已打开的阅读页立即切换，保留选区、草稿和正在进行的问答。不会更改提示词或翻译目标语言。": "Settings and open readers update immediately, preserving selections, drafts and active questions. Prompts and the translation target are unchanged.",
   "解释": "Explain",
   "释义": "Define",
   "简化": "Simplify",
   "反例": "Counterexample",
   "简体中文": "Simplified Chinese",
+  "中文（简体）": "Simplified Chinese",
   "繁體中文": "Traditional Chinese",
   "英语": "English",
   "日语": "Japanese",
@@ -478,6 +479,40 @@ export function translate(locale:UiLanguage,message:string,...values:unknown[]):
  return template.replace(/\{(\d+)\}/g,(placeholder,index)=>Number(index)<values.length?String(values[Number(index)]):placeholder);
 }
 export function t(message:string,...values:unknown[]){return translate(language,message,...values);}
+
+type UiFields=Partial<Record<'text'|'label'|'aria-label'|'placeholder'|'title',()=>string>>;
+type UiBinding={field:string;read:()=>string|null;write:(value:string)=>void;value:()=>string;last:string|null};
+const uiBindings=new WeakMap<HTMLElement,UiBinding[]>();
+/** Bind only explicitly translated chrome. Document/model text and input values never participate. */
+export function bindUi<T extends HTMLElement>(element:T,fields:UiFields):T{
+ const bindings=uiBindings.get(element)||[];
+ for(const [field,value]of Object.entries(fields)){
+  let read:()=>string|null,write:(value:string)=>void;
+  if(field==='text'||field==='label'){
+   const host=field==='label'?element.querySelector<HTMLElement>('.gloss-sr-only'):element;
+   const node=host&&Array.from(host.childNodes).find(node=>node.nodeType===3&&node.textContent===value());
+   if(!node)continue;
+   read=()=>node.parentNode===host?node.textContent:null;write=text=>{node.textContent=text;};
+  }else{read=()=>element.getAttribute(field);write=text=>element.setAttribute(field,text);write(value());}
+  const prior=bindings.findIndex(binding=>binding.field===field);if(prior>=0)bindings.splice(prior,1);
+  bindings.push({field,read,write,value,last:read()});
+ }
+ if(bindings.length){uiBindings.set(element,bindings);element.setAttribute('data-reader-i18n','');}
+ return element;
+}
+export function forwardUiLabel(source:HTMLElement,target:HTMLElement){
+ const binding=uiBindings.get(source)?.find(binding=>binding.field==='aria-label');
+ if(binding)bindUi(target,{text:binding.value});
+}
+/** Update existing nodes in place; preserve selections, form values, icons and active requests. */
+export function refreshUi(root:HTMLElement){
+ for(const element of [root,...Array.from(root.querySelectorAll<HTMLElement>('[data-reader-i18n]'))]){
+  for(const binding of uiBindings.get(element)||[]){
+   if(binding.read()!==binding.last)continue;
+   const value=binding.value();binding.write(value);binding.last=value;
+  }
+ }
+}
 const COMMAND_NAMES:Readonly<Record<string,string>>={explain:'解释',define:'释义',simplify:'简化',counter:'反例',translate:'翻译'};
 /** Custom names remain literal, even when a command started from a built-in preset. */
 export function commandName(command:{id:string;name:string},locale:UiLanguage=language){return COMMAND_NAMES[command.id]===command.name?translate(locale,command.name):command.name;}

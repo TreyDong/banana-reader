@@ -6,7 +6,8 @@ import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import ts from 'typescript';
-import {ENGLISH,normalizeLanguage,resolveLanguage,translate,commandName,relativeTime,receiptText,notebookSummary} from '../src/i18n';
+import {DOMParser} from '@xmldom/xmldom';
+import {bindUi,refreshUi,forwardUiLabel,configureLanguage,t,ENGLISH,normalizeLanguage,resolveLanguage,translate,commandName,relativeTime,receiptText,notebookSummary} from '../src/i18n';
 
 test('language preference follows Obsidian, supports explicit overrides and normalizes old data',()=>{
  for(const value of [undefined,null,'invalid',{},'auto'])assert.equal(normalizeLanguage(value),'auto');
@@ -57,12 +58,12 @@ async function loadPlugin(saved:unknown,host='zh'){
  const source=structuredClone(saved);
  const vault={adapter:{getBasePath:()=>'/synthetic-banana-reader'},configDir:'.obsidian',on:()=>()=>{}};
  class Plugin{
-  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{}},secretStorage:{getSecret:()=>''}};
+  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{},getLeavesOfType:()=>[] as any[]},secretStorage:{getSecret:()=>''}};
   manifest={id:'gloss-reader',dir:'.obsidian/plugins/gloss-reader',version:'0.12.5'};
   loadData(){return Promise.resolve(structuredClone(source));}
   saveData(value:unknown){if(failSave)return Promise.reject(new Error('Synthetic save failure'));writes.push(structuredClone(value));return Promise.resolve();}
   registerView(id:string,factory:(leaf:any)=>any){views.set(id,factory);}registerExtensions(){}addSettingTab(){}registerEvent(){}registerObsidianProtocolHandler(){}
-  addRibbonIcon(){return{setAttribute(){}};}
+  addRibbonIcon(){return syntheticDom().createEl('button',{});}
   addCommand(command:{id:string;name:string}){commands.set(command.id,command);return command;}
   removeCommand(id:string){commands.delete(id);}
  }
@@ -99,4 +100,53 @@ test('English UI leaves PDF page identity and active selections intact',async()=
  view.passages=[{source:'PDF 第 1 页'}];view.pdf={blocks:[],text:'Original page',passages:[{source:'PDF 第 1 页'}],page:1};
  view.activeHighlight='h';view.selected={pdfPage:1,start:0,quote:'Original page'};
  view.syncPdfPage();assert.equal(view.activeHighlight,'h');assert.equal(view.selected.quote,'Original page');
+});
+
+
+function syntheticDom(){
+ const doc=new DOMParser().parseFromString('<root/>','application/xml');
+ function prepare(element:any):any{
+  element.querySelectorAll=()=>Array.from(element.getElementsByTagName('*')).filter((child:any)=>child.hasAttribute('data-reader-i18n'));
+  element.querySelector=()=>Array.from(element.getElementsByTagName('*')).find((child:any)=>child.getAttribute('class')?.includes('gloss-sr-only'))||null;
+  element.createEl=(tag:string,options:any={})=>{const child=prepare(doc.createElement(tag));if(options.text!==undefined)child.appendChild(doc.createTextNode(options.text));if(options.cls)child.setAttribute('class',options.cls);for(const [k,v]of Object.entries(options.attr||{}))child.setAttribute(k,v);element.appendChild(child);return child;};
+  element.createSpan=(options:any)=>element.createEl('span',options);element.createDiv=(options:any)=>element.createEl('div',options);
+  element.empty=()=>{while(element.firstChild)element.removeChild(element.firstChild);};element.addEventListener=()=>{};
+  return element;
+ }
+ return prepare(doc.documentElement);
+}
+
+test('live UI bindings update notebook and question labels without replacing icons, input values or user content',()=>{
+ configureLanguage('zh-CN','zh');const root=syntheticDom();
+ const notebook=bindUi(root.createSpan({text:t('笔记本')}),{text:()=>t('笔记本')});
+ const question=bindUi(root.createEl('button',{text:t('提问')}),{text:()=>t('提问')});const icon=question.createSpan({text:'icon'});
+ const marks=bindUi(root.createSpan({text:t('划线')}),{text:()=>t('划线')});
+ const input=bindUi(root.createEl('textarea',{attr:{placeholder:t('询问选中文本…')}}),{placeholder:()=>t('询问选中文本…')});input.value='未发送的草稿';
+ const customName='笔记本';const content=root.createEl('p',{text:'笔记本 划线 问答 — 用户正文'}),custom=bindUi(root.createSpan({text:'笔记本'}),{text:()=>customName||t('选择问答模型')});
+ const changed=bindUi(root.createSpan({text:t('提问')}),{text:()=>t('提问')});changed.textContent='模型产生的新内容';
+ const group=bindUi(root.createDiv({attr:{'aria-label':t('阅读笔记本')}}),{'aria-label':()=>t('阅读笔记本')});const sr=root.createSpan({text:t('阅读笔记本')});forwardUiLabel(group,sr);group.removeAttribute('aria-label');
+ configureLanguage('en','zh');refreshUi(root);
+ assert.equal(notebook.textContent,'Notebook');assert.equal(question.firstChild.textContent,'Ask');assert.equal(question.lastChild,icon);assert.equal(marks.textContent,'Marks');
+ assert.equal(input.getAttribute('placeholder'),'Ask about the selection…');assert.equal(input.value,'未发送的草稿');
+ assert.equal(content.textContent,'笔记本 划线 问答 — 用户正文');assert.equal(custom.textContent,'笔记本');assert.equal(changed.textContent,'模型产生的新内容');
+ assert.equal(sr.textContent,'Reading notebook');assert.equal(group.hasAttribute('aria-label'),false);
+ configureLanguage('zh-CN','en');refreshUi(root);assert.equal(notebook.textContent,'笔记本');assert.equal(question.firstChild.textContent,'提问');assert.equal(input.value,'未发送的草稿');
+});
+
+test('changing language refreshes the real open notebook while preserving drafts, anchors and every active job',async()=>{
+ const run=await loadPlugin(fixture());const view=run.views.get('gloss-reader')!({});view.path='sample.md';
+ const root=syntheticDom();view.root=root;view.drawerTabs=root.createDiv({});view.drawerBody=root.createDiv({});view.drawerBody.scrollTop=73;
+ view.notebookBadge=root.createSpan({});view.drawerSubtitle=root.createSpan({});view.composer={value:'未发送的问答草稿',placeholder:''};view.lensInput={value:'未保存的批注'};
+ view.selected={start:0,quote:'原文',prefix:'',suffix:''};const selected=view.selected;
+ const requests=['aborter','retrievalJob','indexJob','suggestionJob','importAborter'];const jobs=requests.map(()=>new AbortController());requests.forEach((name,index)=>view[name]=jobs[index]);
+ view.quietNotebook=()=>{};view.refreshModelButtons=()=>{};view.paintWebButton=()=>{};view.scheduleLayout=()=>{};
+ run.plugin.app.workspace.getLeavesOfType=()=>[{view}];const before=structuredClone(run.plugin.store.documents);
+ await run.plugin.changeLanguage('en');assert.match(view.drawerTabs.textContent,/All.*Q&A.*Marks/);assert.equal(view.drawerSubtitle.textContent,'1 question, 1 mark');
+ assert.equal(view.composer.value,'未发送的问答草稿');assert.equal(view.lensInput.value,'未保存的批注');assert.equal(view.selected,selected);assert.equal(view.drawerBody.scrollTop,73);
+ requests.forEach((name,index)=>{assert.equal(view[name],jobs[index]);assert.equal(jobs[index].signal.aborted,false);});assert.deepEqual(run.plugin.store.documents,before);assert.equal(run.modelCalls(),0);
+ await run.plugin.changeLanguage('zh-CN');assert.match(view.drawerTabs.textContent,/全部.*问答.*划线/);assert.equal(view.composer.value,'未发送的问答草稿');
+});
+
+test('English documentation has no untranslated Chinese prose or UI labels',async()=>{
+ for(const name of ['README.md','docs/development.md']){const text=await readFile(new URL('../'+name,import.meta.url),'utf8');assert.doesNotMatch(text,/\p{Script=Han}/u,name);}
 });
