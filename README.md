@@ -6,9 +6,7 @@ Version **0.13.0** adds English and Simplified Chinese interface settings, with 
 
 Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
 
-[中文使用说明](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
-
-> 在 Obsidian 里边读、边问、边记。支持 Markdown、原版 PDF 和 EPUB；问答、划线与批注留在原文旁，读完可导出带出处的 Markdown 笔记。
+[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
 
 ## What you can do
@@ -26,15 +24,15 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 2. Open a Markdown, PDF or EPUB file. Click **Open Banana Reader** in the ribbon, or run **Banana Reader: Enter immersive reading** from the command palette.
 3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → Model services** and choose a question model first.
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
-5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in `收集箱/`. Choose **Back to document** to return to the normal file view.
+5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in the vault’s export folder. Choose **Back to document** to return to the normal file view.
 
-These instructions use English interface labels. Choose **English** in **Settings → Banana Reader → Appearance → Interface language**. For instructions using Chinese labels, see the [Chinese guide](README.zh-CN.md#界面语言).
+These instructions use English interface labels. Choose **English** in **Settings → Banana Reader → Appearance → Interface language**. For instructions using Chinese labels, see the [Chinese guide](README.zh-CN.md#%E7%95%8C%E9%9D%A2%E8%AF%AD%E8%A8%80).
 
 Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **desktop Obsidian 1.11.4+**.
 
 ## Make it comfortable
 
-Choose **Settings → Banana Reader → Appearance → Interface language**: **Follow Obsidian**, **中文（简体）**, or **English**. Follow Obsidian is the default: Chinese locales use Simplified Chinese and other locales use English. The choice is saved for this vault. Settings and command labels update immediately. Reopen an existing reader to apply its new interface language. This changes UI labels only; prompts, model assignments, translation targets and saved content keep their existing values. Unedited built-in command names follow the interface; renamed and custom commands keep their saved names. Switching to English does not translate the existing Chinese default prompts or change the model's answer language.
+Choose **Settings → Banana Reader → Appearance → Interface language**: **Follow Obsidian**, **Simplified Chinese**, or **English**. Follow Obsidian is the default: Chinese locales use Simplified Chinese and other locales use English. The choice is saved for this vault. Settings, command labels and open readers update immediately, preserving selections, drafts and active questions. This changes UI labels only; prompts, model assignments, translation targets and saved content keep their existing values. Unedited built-in command names follow the interface; renamed and custom commands keep their saved names. Switching to English does not translate the existing Chinese default prompts or change the model's answer language.
 
 Change the paper or dark theme, font, text size and line spacing from the reading toolbar. Wider panes show margin cards; narrow panes keep conversations in the notebook. Question, translation and article-brief models have separate assignments. Built-in Google translation is also available without a chat-model account.
 
@@ -46,7 +44,7 @@ Annotations and conversations are saved in the plugin's `data.json`; optional in
 
 AI requests send document context and your question to the service you choose. Indexing sends text chunks to your embedding provider. Google translation sends selected text to Google; optional search sends search terms to DuckDuckGo. The plugin has no author-operated server, advertising or client-side telemetry. Bundled fonts load locally.
 
-The file picker lists vault paths only when opened. Copy buttons **write** the requested text to the clipboard; the plugin does not read clipboard contents. Local CLI connections use executable discovery, existing CLI authentication and temporary workspaces, requiring filesystem and process access. A local CLI can still call a remote service. API connections do not require a CLI. Read the [access details](README.zh-CN.md#账号网络与本地访问) before connecting a service.
+The file picker lists vault paths only when opened. Copy buttons **write** the requested text to the clipboard; the plugin does not read clipboard contents. Local CLI connections use executable discovery, existing CLI authentication and temporary workspaces, requiring filesystem and process access. A local CLI can still call a remote service. API connections do not require a CLI. Read the [access details](README.zh-CN.md#%E8%B4%A6%E5%8F%B7%E7%BD%91%E7%BB%9C%E4%B8%8E%E6%9C%AC%E5%9C%B0%E8%AE%BF%E9%97%AE) before connecting a service.
 
 ## Before you install
 
@@ -73,4 +71,6 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 
 - 2026-10-20: Remove internal engineering and QA records from the repository and prepare the 0.12.5 release. Keep third-party notices and installation/data paths unchanged.
 
-- 2026-10-20: Add a persisted UI-language choice (follow Obsidian, Simplified Chinese, English), localize settings and reader controls, and preserve existing prompts, model routes and saved documents. Settings apply immediately; reopen an existing reader to apply its interface language.
+- 2026-10-20: Add a persisted UI-language choice (follow Obsidian, Simplified Chinese, English), localize settings and reader controls, and preserve existing prompts, model routes and saved documents. Settings and existing readers update immediately.
+
+- 2026-10-20: Refresh existing reader labels immediately when the interface language changes, including Notebook, Q&A and Marks. Remove mixed-language prose from the English guide.
