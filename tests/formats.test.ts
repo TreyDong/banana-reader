@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,strToU8} from 'fflate';
 import {DOMParser} from '@xmldom/xmldom';
-import {bookPath,epubEntries,readEpub,readableExtension,BOOK_LIMITS} from './formats';
-import {contextFor,makeAnchor,exportReading} from './core';
-import {notebookEntries} from './notebook';
+import {bookPath,epubEntries,readEpub,readableExtension,BOOK_LIMITS} from '../src/formats';
+import {contextFor,makeAnchor,exportReading} from '../src/core';
+import {notebookEntries} from '../src/notebook';
 const parse=(text:string)=>new DOMParser().parseFromString(text,'application/xml') as unknown as Document;
 function epub(changes:Record<string,string>={}){const files:Record<string,string>={
  'META-INF/container.xml':'<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>',

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {briefHash,briefPrompt,briefRanges,parseBrief} from './brief';
+import {briefHash,briefPrompt,briefRanges,parseBrief} from '../src/brief';
 const value={gist:'作者论证独立思考的价值。',claims:[{text:'知识需要亲自思考。',cite:2}],caveats:[{text:'作者主要依靠自身观察。',cite:3}],sections:[{title:'开篇',start:1},{title:'展开',start:3}]};
 test('parses grounded JSON and derives a complete paragraph map',()=>{const data=parseBrief(JSON.stringify(value),5);assert.deepEqual(data,value);assert.deepEqual(briefRanges(data,5).map(s=>[s.start,s.end]),[[1,2],[3,5]]);});
 test('accepts JSON fences, strips answer highlight syntax and allows no caveats',()=>{const d=parseBrief('```json\n'+JSON.stringify({...value,gist:'==要旨==',caveats:[]})+'\n```',5);assert.equal(d.gist,'要旨');assert.deepEqual(d.caveats,[]);});

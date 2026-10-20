@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newService,migrateSetup,resolveModel,serviceSettings,pruneAssignments,serviceChoices,resolveEmbeddingModel,setModelType,migrateEmbeddingModel,type ModelSetup} from './services';
-import {parsePiLine,cliConfig,askAgent,discoverPiModels,normalizeModels,mergeModels} from './agent';
+import {newService,migrateSetup,resolveModel,serviceSettings,pruneAssignments,serviceChoices,resolveEmbeddingModel,setModelType,migrateEmbeddingModel,type ModelSetup} from '../src/services';
+import {parsePiLine,cliConfig,askAgent,discoverPiModels,normalizeModels,mergeModels} from '../src/agent';
 import {promises as fs} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -16,9 +16,9 @@ test('Pi discovers provider-qualified models and answers with tools/extensions d
 
 test('Pi exposes HTTP status without provider diagnostics or credentials',()=>{assert.deepEqual(parsePiLine(JSON.stringify({type:'message_end',message:{role:'assistant',stopReason:'error',errorMessage:'API error 403 secret-auth-value'}})),{error:true,status:403});});
 
-import {usageFromEvent,mergeTokenUsage} from './agent';
-import {regenerationHistory,tokenReceipt,freshReading,exportReading,type TokenUsage}from'./core';
-import {notebookCounts,notebookEntries}from'./notebook';
+import {usageFromEvent,mergeTokenUsage} from '../src/agent';
+import {regenerationHistory,tokenReceipt,freshReading,exportReading,type TokenUsage}from'../src/core';
+import {notebookCounts,notebookEntries}from'../src/notebook';
 import * as http from'node:http';
 test('reported usage normalizes seven transports without double counting cache or partial deltas',()=>{
  assert.deepEqual(usageFromEvent('codex',{type:'turn.completed',usage:{input_tokens:100,cached_input_tokens:40,output_tokens:10}}),{input:100,output:10,cacheRead:40,total:110});
@@ -63,7 +63,7 @@ test('changing embedding transport removes embedding assignment but leaves unrel
 });
 
 
-import {googleTranslate,translationChunks,translationPayload} from './translation';
+import {googleTranslate,translationChunks,translationPayload} from '../src/translation';
 test('built-in translation detects same-language selections and uses one fallback target across chunks',async()=>{
  const calls:{text:string;target:string}[]=[];const text='中文选文。'.repeat(300);const result=await googleTranslate(text,'zh-CN',new AbortController().signal,async url=>{const u=new URL(url);calls.push({text:u.searchParams.get('q')!,target:u.searchParams.get('tl')!});assert.equal(u.host,'translate.googleapis.com');assert.equal(u.searchParams.get('sl'),'auto');return [[[u.searchParams.get('tl')==='en'?'translated':'中文']],null,'zh-CN'];});assert.equal(result.target,'en');assert.deepEqual(calls.map(c=>c.target),['zh-CN','en','en']);assert.equal(calls.slice(1).map(c=>c.text).join(''),text);assert.equal(result.text,'translatedtranslated');
 });
@@ -72,7 +72,7 @@ test('translation cancellation stops pending work without issuing further segmen
 test('translation errors never echo response bodies, selections or URLs',async()=>{await assert.rejects(googleTranslate('private selection','en',new AbortController().signal,async()=>{throw new Error('sensitive provider body');}),e=>(e as Error).message==='谷歌翻译连接失败，请检查网络后重试。');await assert.rejects(googleTranslate('hello','zh-CN',new AbortController().signal,async()=>{throw new Error('谷歌翻译请求过于频繁，请稍后重试。');}),/过于频繁/);});
 
 
-import {parseQuestionSuggestions,parseWebResults,networkSearch,webContext}from'./agent';
+import {parseQuestionSuggestions,parseWebResults,networkSearch,webContext}from'../src/agent';
 const rss='<html><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fdocs&amp;rut=abc">Official &amp; docs</a><a class="result__snippet">Evidence <b>summary</b> .</a><a class="result__a" href="https://example.com/docs#here">Duplicate</a><a class="result__snippet">Duplicate</a><a class="result__a" href="javascript:alert(1)">Script</a><a class="result__snippet">Unsafe</a><a class="result__a" href="http://localhost/private">Local</a><a class="result__snippet">Unsafe</a></html>';
 
 test('search parsing retains real external URLs and plain summaries while rejecting unsafe sources and duplicates',()=>{assert.deepEqual(parseWebResults(rss),[{title:'Official & docs',url:'https://example.com/docs',snippet:'Evidence summary .'}]);assert.throws(()=>parseWebResults('not search results'),/没有可用/);assert.throws(()=>parseWebResults('{"result":{"content":[]}}'),/没有可用/);});
@@ -80,5 +80,5 @@ test('network search encodes only the provided query, preserves links and cancel
 test('question suggestions must be actual structured model output and never fabricated fallback questions',()=>{assert.deepEqual(parseQuestionSuggestions('```json\n["这段论述的前提是什么？","它与上一段有什么联系？","如何用一个实例检验它？","第四个问题是什么？"]\n```'),['这段论述的前提是什么？','它与上一段有什么联系？','如何用一个实例检验它？']);assert.deepEqual(parseQuestionSuggestions('["解释这个概念？","解释这个概念？","<script>x</script>"]'),['解释这个概念？']);assert.throws(()=>parseQuestionSuggestions('some ordinary answer'),/有效/);assert.throws(()=>parseQuestionSuggestions('[]'),/没有生成/);});
 test('web source receipts survive Markdown export and are absent from outbound message metadata',()=>{const r=freshReading();r.threads=[{id:'web',created:1,messages:[{role:'user',content:'q'},{role:'assistant',content:'Evidence answer',web:{query:'q',sources:parseWebResults(rss)}}]}];const md=exportReading('public.md',r,'vault');assert.ok(md.includes('网络来源（网页 搜索摘要）'));assert.ok(md.includes('https://example.com/docs'));assert.ok(md.includes('Evidence answer'));});
 
-import {parseSearchQuery,webSystemPrompt,SYSTEM}from'./agent';
+import {parseSearchQuery,webSystemPrompt,SYSTEM}from'../src/agent';
 test('web mode removes conflicting offline instructions and distinguishes retrieved summaries from independent browsing',()=>{const prompt=webSystemPrompt(SYSTEM);assert.ok(!prompt.includes('搜索网络、运行工具'));assert.ok(!prompt.includes('仅根据用户明确提供的文档'));assert.ok(prompt.includes('插件已经完成网络搜索'));assert.ok(prompt.includes('不能声称已读网页全文'));assert.equal(parseSearchQuery('{"query":"Arthur Schopenhauer On Thinking for Oneself source"}'),'Arthur Schopenhauer On Thinking for Oneself source');assert.throws(()=>parseSearchQuery('I think the answer is'),/关键词/);assert.throws(()=>parseSearchQuery('{"query":""}'),/关键词/);});
