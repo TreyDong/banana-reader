@@ -1,6 +1,6 @@
 # Banana Reader
 
-Source version **0.12.5**. The paragraph minimap stays visible at desktop widths, reflects actual rendered text lines and keeps short documents compact.
+Version **0.13.0** adds English and Simplified Chinese interface settings, with an option to follow Obsidian's language.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
@@ -23,20 +23,22 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 ## Get started
 
 1. Install from the [community directory](https://community.obsidian.md/plugins/gloss-reader) and enable **Banana Reader**.
-2. Open a Markdown, PDF or EPUB file. Click **打开 Banana Reader** in the ribbon, or run **Banana Reader: 进入沉浸阅读** from the command palette.
-3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → 模型服务** and choose a question model first.
+2. Open a Markdown, PDF or EPUB file. Click **Open Banana Reader** in the ribbon, or run **Banana Reader: Enter immersive reading** from the command palette.
+3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → Model services** and choose a question model first.
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
-5. Open the notebook and choose **导出笔记** to save a new Markdown note in `收集箱/`. Choose **返回文档** to return to the normal file view.
+5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in `收集箱/`. Choose **Back to document** to return to the normal file view.
+
+These labels use the English interface. To switch from Chinese, open **设置 → Banana Reader → 外观配置 → 界面语言** and choose **English**.
 
 Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **desktop Obsidian 1.11.4+**.
 
 ## Make it comfortable
 
-Choose **Settings → Banana Reader → Appearance → Interface language**: follow Obsidian, 中文（简体）, or English. Settings and command labels update immediately. Reopen an existing reader to apply its new interface language. This changes UI labels only; prompts, model assignments, translation targets and saved content keep their existing values.
+Choose **Settings → Banana Reader → Appearance → Interface language**: **Follow Obsidian**, **中文（简体）**, or **English**. Follow Obsidian is the default: Chinese locales use Simplified Chinese and other locales use English. The choice is saved for this vault. Settings and command labels update immediately. Reopen an existing reader to apply its new interface language. This changes UI labels only; prompts, model assignments, translation targets and saved content keep their existing values. Unedited built-in command names follow the interface; renamed and custom commands keep their saved names. Switching to English does not translate the existing Chinese default prompts or change the model's answer language.
 
 Change the paper or dark theme, font, text size and line spacing from the reading toolbar. Wider panes show margin cards; narrow panes keep conversations in the notebook. Question, translation and article-brief models have separate assignments. Built-in Google translation is also available without a chat-model account.
 
-For a longer text, configure an OpenAI-compatible embedding model and choose **索引 → 建立索引** inside the reader. Indexing is optional; automatic indexing is off by default. Retrieval finds relevant passages and does not claim to summarize every page. See the [Chinese guide](README.zh-CN.md) for service setup and detailed format limits.
+For a longer text, configure an OpenAI-compatible embedding model and choose **Index → Build index** inside the reader. Indexing is optional; automatic indexing is off by default. Retrieval finds relevant passages and does not claim to summarize every page. See the [Chinese guide](README.zh-CN.md) for service setup and detailed format limits.
 
 ## Your files and connections
 
@@ -64,6 +66,8 @@ Build with `npm ci` and `npm run build`; run tests with `npm test`. When [report
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-20 · 0.13.0: Release English/Simplified Chinese interface settings and update both user guides, developer documentation and version metadata. Validation covers 120 regression tests, TypeScript checking and the bundled build. Plugin ID and data paths remain unchanged.
 
 - 2026-10-20: Move unchanged runtime TypeScript into `src/`, tests into `tests/`, and the build script into `scripts/`. Group developer documentation by purpose. Update build/test paths and add an explicit TypeScript configuration. Version 0.12.5, plugin ID, installation outputs and data paths stay unchanged.
 
