@@ -32,7 +32,7 @@
 
 ## 版本与发布记录
 
-安装与更新见 [官方目录](https://community.obsidian.md/plugins/gloss-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader/releases)。来源与发布核查保留在 [工程记录](notes/community-release-audit.md)。
+安装与更新见 [官方目录](https://community.obsidian.md/plugins/gloss-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader/releases)。第三方许可及来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 账号、网络与本地访问
 
@@ -141,4 +141,6 @@ npm test
 
 ## 仓库变更日志
 
-- 2026-10-20：业务 TS 原样迁入 `src/`，测试迁入 `tests/`，构建脚本迁入 `scripts/`，历史验收记录迁入 `notes/qa/`；同步构建、测试路径并增加 TypeScript 配置。版本仍为 0.12.5，插件 ID、安装产物和数据路径不变。详见 [开发说明](docs/development.md)。
+- 2026-10-20：业务 TS 原样迁入 `src/`，测试迁入 `tests/`，构建脚本迁入 `scripts/`，开发文档按用途归类；同步构建、测试路径并增加 TypeScript 配置。版本仍为 0.12.5，插件 ID、安装产物和数据路径不变。详见 [开发说明](docs/development.md)。
+
+- 2026-10-20：移出仓库中的内部工程及验收记录，准备发布 0.12.5；第三方许可声明、插件 ID 和数据路径保持不变。
