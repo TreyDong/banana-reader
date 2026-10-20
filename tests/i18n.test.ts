@@ -106,8 +106,9 @@ test('English UI leaves PDF page identity and active selections intact',async()=
 function syntheticDom(){
  const doc=new DOMParser().parseFromString('<root/>','application/xml');
  function prepare(element:any):any{
-  element.querySelectorAll=()=>Array.from(element.getElementsByTagName('*')).filter((child:any)=>child.hasAttribute('data-reader-i18n'));
-  element.querySelector=()=>Array.from(element.getElementsByTagName('*')).find((child:any)=>child.getAttribute('class')?.includes('gloss-sr-only'))||null;
+  element.querySelectorAll=(selector:string)=>Array.from(element.getElementsByTagName('*')).filter((child:any)=>selector.startsWith('.')?(child.getAttribute('class')||'').split(' ').includes(selector.slice(1)):selector==='[id^="reader-group-"]'?(child.getAttribute('id')||'').startsWith('reader-group-'):selector==='[aria-labelledby]'?child.hasAttribute('aria-labelledby'):child.hasAttribute('data-reader-i18n'));
+  element.querySelector=(selector:string)=>element.querySelectorAll(selector)[0]||null;
+  element.remove=()=>element.parentNode?.removeChild(element);
   element.createEl=(tag:string,options:any={})=>{const child=prepare(doc.createElement(tag));if(options.text!==undefined)child.appendChild(doc.createTextNode(options.text));if(options.cls)child.setAttribute('class',options.cls);for(const [k,v]of Object.entries(options.attr||{}))child.setAttribute(k,v);element.appendChild(child);return child;};
   element.createSpan=(options:any)=>element.createEl('span',options);element.createDiv=(options:any)=>element.createEl('div',options);
   element.empty=()=>{while(element.firstChild)element.removeChild(element.firstChild);};element.addEventListener=()=>{};
@@ -149,4 +150,16 @@ test('changing language refreshes the real open notebook while preserving drafts
 
 test('English documentation has no untranslated Chinese prose or UI labels',async()=>{
  for(const name of ['README.md','docs/development.md']){const text=await readFile(new URL('../'+name,import.meta.url),'utf8');assert.doesNotMatch(text,/\p{Script=Han}/u,name);}
+});
+
+
+test('dynamic reader metadata and index labels switch both ways without retaining orphaned accessibility text',async()=>{
+ const run=await loadPlugin(fixture()),view=run.views.get('gloss-reader')!({}),root=syntheticDom();view.root=root;view.path='sample.md';
+ const stats=root.createDiv({cls:'gloss-reading-stats',text:'1 分钟阅读 · 2 个段落'});view.text='A short article';view.blocks=[{tagName:'P'},{tagName:'P'}];
+ view.indexButton=root.createEl('button',{});const indexLabel=view.indexButton.createSpan({cls:'gloss-index-label',text:'索引'});
+ view.updateIndexStatus('先选择嵌入模型');const stale=root.createSpan({cls:'gloss-sr-only',attr:{id:'reader-group-stale'},text:'问答 0'});
+ const live=root.createSpan({cls:'gloss-sr-only',attr:{id:'reader-group-live'},text:'Live label'});root.createEl('button',{attr:{'aria-labelledby':'reader-group-live'}});
+ view.refreshModelButtons=()=>{};view.paintWebButton=()=>{};view.scheduleLayout=()=>{};run.plugin.app.workspace.getLeavesOfType=()=>[{view}];
+ await run.plugin.changeLanguage('en');assert.equal(stats.textContent,'1 min read · 2 paragraphs');assert.equal(indexLabel.textContent,'Index');assert.equal(view.indexButton.getAttribute('title'),'Choose an embedding model first');assert.equal(stale.parentNode,null);assert.ok(live.parentNode);
+ await run.plugin.changeLanguage('zh-CN');assert.equal(stats.textContent,'1 分钟阅读 · 2 个段落');assert.equal(indexLabel.textContent,'索引');assert.equal(view.indexButton.getAttribute('title'),'先选择嵌入模型');assert.equal(run.modelCalls(),0);
 });
