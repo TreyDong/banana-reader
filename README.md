@@ -1,5 +1,7 @@
 # Banana Reader
 
+Source version **0.12.5**. The paragraph minimap stays visible at desktop widths, reflects actual rendered text lines and keeps short documents compact.
+
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
 Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
@@ -8,7 +10,6 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 
 > 在 Obsidian 里边读、边问、边记。支持 Markdown、原版 PDF 和 EPUB；问答、划线与批注留在原文旁，读完可导出带出处的 Markdown 笔记。
 
-![Selected-text questions and margin notes](https://github.com/TreyDong/banana-reader/releases/download/0.12.4/reader-preview.png)
 
 ## What you can do
 

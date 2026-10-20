@@ -1,10 +1,11 @@
 # Banana Reader
 
+源码版本 **0.12.5**。左侧段落预览在桌面宽度下保持可见，按实际换行显示长短线条，并让短文章保持紧凑比例。
+
 在 Obsidian 里边读、边问、边记。读到不懂的句子，选中提问；觉得值得留下的段落，划线或写批注；读完后，把摘录和理解导出成一份带出处的 Markdown 笔记。
 
 [安装插件](https://community.obsidian.md/plugins/gloss-reader) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
 
-![选文问答与页边批注](https://github.com/TreyDong/banana-reader/releases/download/0.12.4/reader-preview.png)
 
 ## 可以用它做什么
 
