@@ -25,3 +25,9 @@ Updated the personal installation's main.js, styles.css and manifest.json to loc
 ## 2026-10-20 — Push source version 0.12.5
 
 Bump package.json, package-lock.json, manifest.json and versions.json to 0.12.5. The stable plugin ID remains gloss-reader. Remove README preview links targeting the nonexistent 0.12.4 release asset and describe the minimap changes. Keep private development history on origin/main; synchronize only the ten changed approved source/docs/version files into the independent community-release history for publication/main. Do not include notes/README.md, design-qa.md, private historical commits, data.json, built artifacts or the old one-time workflow in the public source update. This operation updates Git source/version metadata; it does not create a GitHub Release or change a local Obsidian installation.
+
+## 2026-10-20 — Source-directory migration
+
+Move twelve runtime TypeScript files unchanged into src/, six test files into tests/ with import paths updated, build.mjs into scripts/, and the historical design-qa.md into notes/qa/. Add tsconfig.json with the existing typecheck options and document the source/build layout in docs/development.md. Keep root installation outputs, version 0.12.5, stable gloss-reader ID, runtime logic and user data paths unchanged. No local installation files are part of this migration.
+
+Migration verification: all twelve runtime modules and the historical QA record match their pre-migration SHA-256 values. All six tests differ only in module import paths, including one dynamic import. The 112-test regression suite, TypeScript check and esbuild build pass. Canonical generated JavaScript (comments removed) matches the baseline. Styles, manifest, versions, dependency lockfile, project/third-party licenses and every file in the personal and synthetic-QA installations remain byte-identical. Current developer-document links and all static/dynamic relative module references resolve.
