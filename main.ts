@@ -4,7 +4,7 @@ import { type AgentSettings, type ApiProtocol, API_DEFAULTS, apiEndpoint, askAge
 
 import {type ModelService,type ModelRef,type ModelSetup,type ServiceKind,SERVICE_NAMES,SERVICE_ICONS,newService,serviceChoices,resolveModel,serviceSettings,migrateSetup,pruneAssignments,supportsEmbedding,resolveEmbeddingModel,setModelType,migrateEmbeddingModel} from './services';
 
-import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, type TextMark, type MarginItem, railMagnification} from './reading-ui';
+import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines} from './reading-ui';
 
 import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand,type ReadingCommand} from './prompts';
 
@@ -177,7 +177,7 @@ class GlossView extends ItemView {
   private readingModel?:ModelRef;
   private modelMenu?:HTMLElement;
   private modelMenuTrigger?:HTMLButtonElement;
-  private railGeometry: {top:number;height:number;fill:number;heading:boolean}[]=[];
+  private railGeometry: {top:number;height:number;heading:boolean;lines:{top:number;width:number}[]}[]=[];
   private composer!: HTMLTextAreaElement;
   private composerWrap!: HTMLElement;
   private questionButton!: HTMLButtonElement;
@@ -452,17 +452,30 @@ class GlossView extends ItemView {
     this.rail.addEventListener('pointerdown',e=>{e.preventDefault();this.rail.setPointerCapture(e.pointerId);travel(e.clientY);drag=true;});this.rail.addEventListener('pointermove',e=>{this.railFocus=e.clientY-this.rail.getBoundingClientRect().top;this.magnifyRail();if(drag&&e.buttons)travel(e.clientY,true);});this.rail.addEventListener('pointerleave',()=>{this.railFocus=undefined;this.magnifyRail();});this.rail.addEventListener('pointerup',()=>drag=false);this.rail.addEventListener('pointercancel',()=>drag=false);this.updateRail(true);
   }
   private updateRail(measure=false){
-    if(!this.railWindow||!this.scroller)return;const article=this.article.getBoundingClientRect(),height=Math.max(80,this.scroller.clientHeight-64);this.rail.style.height=height+'px';const k=height/Math.max(1,article.height);
-    if(measure||this.railGeometry.length!==this.blocks.length)this.railGeometry=this.blocks.map(b=>{const r=b.getBoundingClientRect();return{top:r.top-article.top,height:r.height,fill:Math.min(1,.45+(b.textContent?.length||0)/1400),heading:/^H/.test(b.tagName)};});
-    this.rail.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach((el,i)=>{const g=this.railGeometry[i];if(!g)return;el.style.top=g.top*k+'px';el.style.height=Math.max(1,g.height*k-2)+'px';el.style.width=(g.heading?18:18*g.fill)+'px';el.classList.toggle('is-heading',g.heading);});
+    if(!this.railWindow||!this.scroller)return;
+    const article=this.article.getBoundingClientRect(),leading=parseFloat(getComputedStyle(this.article).lineHeight)||32;
+    const {height,scale:k}=readingMapMetrics(article.height,this.scroller.clientHeight,leading);this.rail.style.height=height+'px';
+    if(measure||this.railGeometry.length!==this.blocks.length)this.railGeometry=this.blocks.map(b=>{
+      const r=b.getBoundingClientRect(),range=b.ownerDocument.createRange();range.selectNodeContents(b);
+      return {top:r.top-article.top,height:r.height,heading:/^H/.test(b.tagName),lines:readingMapLines(Array.from(range.getClientRects()),r)};
+    });
+    this.rail.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach((el,i)=>{
+      const g=this.railGeometry[i];if(!g)return;el.style.top=g.top*k+'px';el.style.height=Math.max(2,g.height*k)+'px';el.style.width='22px';el.classList.toggle('is-heading',g.heading);
+      if(measure||!el.childElementCount){
+        el.empty();let last=-2;
+        for(const line of g.lines){const y=line.top*k;if(y-last<1.6)continue;last=y;const stroke=el.createSpan({cls:'gloss-rail-stroke'});stroke.style.top=y+'px';stroke.style.width=line.width+'px';}
+      }
+    });
     this.rail.querySelectorAll('.gloss-rail-tick,.gloss-rail-gloss').forEach(el=>el.remove());
     const at=(a:Anchor)=>{const start=resolveAnchor(this.text,a);if(start===null)return null;const i=this.passages.findIndex(p=>p.end>start);return this.railGeometry[i]?.top*k;};
     for(const h of this.data.highlights.filter(h=>!h.removed)){const top=at(h.anchor);if(top===null||top===undefined)continue;const tick=this.rail.createSpan({cls:'gloss-rail-tick'});tick.dataset.color=h.color;tick.style.top=top+'px';}
     for(const t of this.threads){if(!t.anchor)continue;const top=at(t.anchor);if(top===null||top===undefined)continue;const tick=this.rail.createSpan({cls:'gloss-rail-gloss'});tick.style.top=top+'px';}
-    const visibleTop=this.scroller.getBoundingClientRect().top-article.top,vTop=Math.max(0,visibleTop*k),vHeight=Math.max(14,Math.min(height-vTop,this.scroller.clientHeight*k));this.railWindow.style.top=vTop+'px';this.railWindow.style.height=vHeight+'px';this.magnifyRail((vTop+vHeight/2));this.rail.setAttribute('aria-valuenow',String(Math.round(Math.max(0,Math.min(1,(visibleTop+this.scroller.clientHeight*.3)/Math.max(1,article.height)))*100)));
+    const visibleTop=this.scroller.getBoundingClientRect().top-article.top,window=readingMapViewport(visibleTop,this.scroller.clientHeight,article.height,k);
+    this.railWindow.style.top=window.top+'px';this.railWindow.style.height=window.height+'px';this.magnifyRail(window.top+window.height/2);
+    this.rail.setAttribute('aria-valuenow',String(Math.round(Math.max(0,Math.min(1,(visibleTop+this.scroller.clientHeight*.3)/Math.max(1,article.height)))*100)));
   }
   private pulseRail(){this.rail.classList.add('is-scrolling');clearTimeout(this.railTimer);this.railTimer=setTimeout(()=>{if(!this.rail)return;this.rail.classList.remove('is-scrolling');this.magnifyRail();},800);}
-  private magnifyRail(visibleCenter?:number){if(!this.rail)return;const focus=this.railFocus??(this.rail.classList.contains('is-scrolling')?(visibleCenter??parseFloat(this.railWindow.style.top)+parseFloat(this.railWindow.style.height)/2):undefined);this.rail.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach(el=>{const scale=focus===undefined?1:railMagnification(parseFloat(el.style.top)+parseFloat(el.style.height)/2-focus);el.style.transform=`scaleX(${scale}) scaleY(${1+(scale-1)*.18})`;el.classList.toggle('is-magnified',scale>1.2);});}
+  private magnifyRail(visibleCenter?:number){if(!this.rail)return;const focus=this.railFocus??(this.rail.classList.contains('is-scrolling')?(visibleCenter??parseFloat(this.railWindow.style.top)+parseFloat(this.railWindow.style.height)/2):undefined);this.rail.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach(el=>{const scale=focus===undefined?1:railMagnification(parseFloat(el.style.top)+parseFloat(el.style.height)/2-focus);el.style.transform=`scaleX(${scale}) scaleY(1)`;el.classList.toggle('is-magnified',scale>1.2);});}
   private rememberDraft(){if(!this.path||!this.composer)return;this.data.draft=this.composer.value;clearTimeout(this.draftTimer);this.draftTimer=setTimeout(()=>void this.plugin.persist().catch(showError),500);}
   private async flushDraft(){if(this.path&&this.composer){this.data.draft=this.composer.value;await this.plugin.persist();}}
   onResize(){this.restorePosition();this.scheduleLayout();}
