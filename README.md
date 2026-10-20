@@ -74,3 +74,5 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 - 2026-10-20: Add a persisted UI-language choice (follow Obsidian, Simplified Chinese, English), localize settings and reader controls, and preserve existing prompts, model routes and saved documents. Settings and existing readers update immediately.
 
 - 2026-10-20: Refresh existing reader labels immediately when the interface language changes, including Notebook, Q&A and Marks. Remove mixed-language prose from the English guide.
+
+- 2026-10-20: Refresh reading statistics, index labels and progress tooltips on language changes, and remove orphaned accessibility captions. Validate English/Chinese/English switching in one open reader through BRAT, retaining marks and an unsent draft; 124 regression tests pass.
