@@ -28,9 +28,11 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
 5. Open the notebook and choose **导出笔记** to save a new Markdown note in `收集箱/`. Choose **返回文档** to return to the normal file view.
 
-Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The current interface is **Chinese**, on **desktop Obsidian 1.11.4+**.
+Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **desktop Obsidian 1.11.4+**.
 
 ## Make it comfortable
+
+Choose **Settings → Banana Reader → Appearance → Interface language**: follow Obsidian, 中文（简体）, or English. Settings and command labels update immediately. Reopen an existing reader to apply its new interface language. This changes UI labels only; prompts, model assignments, translation targets and saved content keep their existing values.
 
 Change the paper or dark theme, font, text size and line spacing from the reading toolbar. Wider panes show margin cards; narrow panes keep conversations in the notebook. Question, translation and article-brief models have separate assignments. Built-in Google translation is also available without a chat-model account.
 
@@ -46,7 +48,7 @@ The file picker lists vault paths only when opened. Copy buttons **write** the r
 
 ## Before you install
 
-- Desktop only; the interface is currently Chinese.
+- Desktop only; English and Simplified Chinese interfaces are available.
 - PDF selection needs a text layer. This version has no OCR or cross-page selection. Reading font settings do not reflow PDF pages.
 - EPUB supports text chapters and local raster images. DRM and original fixed-layout styling are not supported.
 - Use models available to your own account. Discovery does not guarantee access; failed requests show an error and do not silently switch providers.
@@ -66,3 +68,5 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 - 2026-10-20: Move unchanged runtime TypeScript into `src/`, tests into `tests/`, and the build script into `scripts/`. Group developer documentation by purpose. Update build/test paths and add an explicit TypeScript configuration. Version 0.12.5, plugin ID, installation outputs and data paths stay unchanged.
 
 - 2026-10-20: Remove internal engineering and QA records from the repository and prepare the 0.12.5 release. Keep third-party notices and installation/data paths unchanged.
+
+- 2026-10-20: Add a persisted UI-language choice (follow Obsidian, Simplified Chinese, English), localize settings and reader controls, and preserve existing prompts, model routes and saved documents. Settings apply immediately; reopen an existing reader to apply its interface language.
