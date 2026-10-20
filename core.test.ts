@@ -275,3 +275,20 @@ test('answer receipts preserve actual zero usage, returned totals and built-in t
  const message={role:'assistant' as const,content:'回答',model:'actual',usage:{input:0,output:12}};assert.equal(answerReceipt(message).usage,'0 输入 · 12 输出');assert.equal(answerReceipt({...message,usage:{total:48}}).usage,'48 tokens');
  const translated=answerReceipt({role:'assistant',content:'译文',provider:'Google Translate',model:'Google Translate · 简体中文'});assert.equal(translated.usage,undefined);assert.equal(translated.model,'Google Translate · 简体中文');assert.equal(translated.detail,'谷歌翻译 · 内置');
 });
+
+
+import {readingMapMetrics,readingMapViewport,readingMapLines} from './reading-ui';
+test('reading map keeps short articles compact and caps long articles at the viewport',()=>{
+ const short=readingMapMetrics(1500,760,36);assert.equal(short.height,100);assert.equal(short.scale,1/15);
+ const long=readingMapMetrics(60000,760,36);assert.equal(long.height,680);
+ for(const content of [0,30,1500,60000]){const map=readingMapMetrics(content,760,36);assert.ok(Number.isFinite(map.scale));assert.ok(map.height>=24&&map.height<=680);}
+});
+test('reading map viewport clips header space and remains inside the silhouette at both ends',()=>{
+ assert.deepEqual(readingMapViewport(-300,700,1500,1/15),{top:0,height:400/15});
+ assert.deepEqual(readingMapViewport(1400,700,1500,1/15),{top:1400/15,height:100/15});
+ const end=readingMapViewport(1600,700,1500,1/15);assert.ok(end.top+end.height<=100);assert.ok(end.top>=0);
+});
+test('reading map merges split highlight rectangles without fabricating uniform line widths',()=>{
+ const lines=readingMapLines([{top:10,left:30,width:60,height:20},{top:10,left:90,width:30,height:20},{top:35,left:30,width:40,height:20}],{top:10,left:30,width:100});
+ assert.deepEqual(lines,[{top:0,width:16.2},{top:25,width:7.2}]);
+});

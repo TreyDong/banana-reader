@@ -83,3 +83,25 @@ export function annotationAnchor(threads:Thread[],id?:string,reference?:{threadI
  if(!id)return;if(reference?.threadId===id)return reference.anchor;
  const thread=threads.find(t=>t.id===id&&!t.removed);return thread?.selection===false?undefined:thread?.anchor;
 }
+
+
+/** A compact document silhouette: short texts keep a natural reading-line density. */
+export function readingMapMetrics(contentHeight:number,viewportHeight:number,lineHeight=32):{height:number;scale:number}{
+ const extent=Math.max(1,Number.isFinite(contentHeight)?contentHeight:1),available=Math.max(24,(Number.isFinite(viewportHeight)?viewportHeight:104)-80);
+ const leading=Math.max(12,Number.isFinite(lineHeight)?lineHeight:32),height=Math.min(available,Math.max(24,extent*2.4/leading));
+ return {height,scale:height/extent};
+}
+export function readingMapViewport(top:number,visibleHeight:number,extent:number,scale:number):{top:number;height:number}{
+ const size=Math.max(1,extent),start=Math.max(0,Math.min(size,top)),end=Math.max(start,Math.min(size,top+Math.max(0,visibleHeight)));
+ const mapHeight=size*scale,height=Math.min(mapHeight,Math.max(6,(end-start)*scale));
+ return {top:Math.min(Math.max(0,start*scale),Math.max(0,mapHeight-height)),height};
+}
+/** Inline marks split rectangles; merge pieces on one visual text line. */
+export function readingMapLines(rects:{top:number;left:number;width:number;height:number}[],block:{top:number;left:number;width:number}):{top:number;width:number}[]{
+ const lines:{y:number;left:number;right:number}[]=[];
+ for(const r of rects.filter(r=>r.width>0&&r.height>2).sort((a,b)=>a.top-b.top||a.left-b.left)){
+  const line=lines.find(l=>Math.abs(l.y-r.top)<1.5);
+  if(line){line.left=Math.min(line.left,r.left);line.right=Math.max(line.right,r.left+r.width);}else lines.push({y:r.top,left:r.left,right:r.left+r.width});
+ }
+ return lines.map(l=>({top:Math.max(0,l.y-block.top),width:Math.max(2,Math.min(18,18*(l.right-l.left)/Math.max(1,block.width)))}));
+}
