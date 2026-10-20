@@ -28,7 +28,7 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
 5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in `收集箱/`. Choose **Back to document** to return to the normal file view.
 
-These labels use the English interface. To switch from Chinese, open **设置 → Banana Reader → 外观配置 → 界面语言** and choose **English**.
+These instructions use English interface labels. Choose **English** in **Settings → Banana Reader → Appearance → Interface language**. For instructions using Chinese labels, see the [Chinese guide](README.zh-CN.md#界面语言).
 
 Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **desktop Obsidian 1.11.4+**.
 
