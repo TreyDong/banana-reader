@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Current release: **0.13.0**, including English and Simplified Chinese UI settings. The minimum desktop Obsidian version remains **1.11.4**.
+Current release: **0.13.1**, including immediate English/Simplified Chinese switching in open readers and dynamic labels. The minimum desktop Obsidian version remains **1.11.4**.
 
 ```sh
 npm ci

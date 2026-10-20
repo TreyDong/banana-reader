@@ -1,6 +1,6 @@
 # Banana Reader
 
-Version **0.13.0** adds English and Simplified Chinese interface settings, with an option to follow Obsidian's language.
+Version **0.13.1** fixes language switching in already open readers, including notebook labels, marks, reading statistics and index tooltips. English, Simplified Chinese and following Obsidian are supported.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
@@ -64,6 +64,8 @@ Build with `npm ci` and `npm run build`; run tests with `npm test`. When [report
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-20 · 0.13.1: Release immediate language switching for open readers, dynamic labels and accessibility captions; clean up English documentation. Validation covers 124 regression tests, TypeScript checking, the bundled build and native English/Chinese/English switching with marks and an unsent draft retained.
 
 - 2026-10-20 · 0.13.0: Release English/Simplified Chinese interface settings and update both user guides, developer documentation and version metadata. Validation covers 120 regression tests, TypeScript checking and the bundled build. Plugin ID and data paths remain unchanged.
 
