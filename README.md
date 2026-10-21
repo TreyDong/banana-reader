@@ -1,6 +1,6 @@
 # Banana Reader
 
-Version **0.13.1** fixes language switching in already open readers, including notebook labels, marks, reading statistics and index tooltips. English, Simplified Chinese and following Obsidian are supported.
+Version **0.13.2** adopts native Obsidian settings headings and supported style assignment helpers, and adds official source-rule checks. English, Simplified Chinese and following Obsidian are supported.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
@@ -59,11 +59,13 @@ For manual updates, copy `main.js`, `manifest.json` and `styles.css` from the sa
 
 See the [development guide](docs/development.md) for the source layout, build and validation commands.
 
-Build with `npm ci` and `npm run build`; run tests with `npm test`. When [reporting an issue](https://github.com/TreyDong/banana-reader/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
+Build with `npm ci` and `npm run build`; run the official source checks with `npm run lint`, or all release checks with `npm run check`. When [reporting an issue](https://github.com/TreyDong/banana-reader/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
 
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-21 · 0.13.2: Replace 10 static style assignments and seven manual settings headings reported by the community scan, preserving existing values, dynamic layout and saved data. Add pinned official ESLint checks and a release-check command.
 
 - 2026-10-20 · 0.13.1: Release immediate language switching for open readers, dynamic labels and accessibility captions; clean up English documentation. Validation covers 124 regression tests, TypeScript checking, the bundled build and native English/Chinese/English switching with marks and an unsent draft retained.
 

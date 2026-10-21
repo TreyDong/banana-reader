@@ -1,16 +1,20 @@
 {
   "name": "banana-reader",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json && node scripts/build.mjs",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "lint": "eslint src manifest.json package.json",
+    "check": "npm run lint && npm test && npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@xmldom/xmldom": "0.9.12",
     "esbuild": "^0.25.0",
+    "eslint": "9.39.1",
+    "eslint-plugin-obsidianmd": "0.4.2",
     "obsidian": "^1.8.7",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
