@@ -2,12 +2,11 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Current release: **0.13.1**, including immediate English/Simplified Chinese switching in open readers and dynamic labels. The minimum desktop Obsidian version remains **1.11.4**.
+Current release: **0.13.2**, including native settings headings, supported style assignments and official source-rule checks. The minimum desktop Obsidian version remains **1.11.4**.
 
 ```sh
 npm ci
-npm run build
-npm test
+npm run check
 ```
 
 ## Layout
@@ -26,6 +25,12 @@ The plugin ID remains `gloss-reader`. Build and tests do not deploy files to a v
 
 [LICENSE](../LICENSE) covers project code. [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) records bundled dependency and font notices plus historical source references. The build carries the complete texts in `main.js`. Both files stay in the repository root.
 
+## Official source checks
+
+`npm run lint` runs the pinned `eslint-plugin-obsidianmd` recommended checks against all runtime sources and release metadata. Obsidian rules retain their recommended error/warning levels. General JavaScript and TypeScript findings remain visible warnings to match the observed community scan; they are not silently disabled. `npm run check` runs lint, regression tests and the TypeScript/bundle build in sequence. Any lint error or failed test/build blocks the command.
+
+The 0.13.1 scan reported 10 static style assignments and seven manually created settings headings. The fix keeps the same style values through `setCssStyles()` and uses `Setting.setName().setHeading()` with existing typography and localization bindings. It does not change model execution, layout calculations or persisted data. The lint regression was checked against the original source: all 17 errors were detected and none remain in the repaired source. Other warnings remain outside this repair's scope.
+
 ## UI localization
 
 `src/i18n.ts` contains the UI catalog, Obsidian-language resolution and display-only helpers. `settings.language` accepts `auto`, `zh-CN` or `en`; older settings default to `auto`. Use `ui(...)` for fixed interface labels. Keep document content, editable prompts, custom model/service names and data-path strings literal. Built-in command names are translated only while their saved name is unchanged. Locale changes persist through the existing save queue; a failed save restores the previous locale. Open reader tabs update their explicitly bound UI labels in place, preserving active questions, selections and drafts.
@@ -38,6 +43,6 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 
 ## Release checklist
 
-Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Build and run tests from the exact source revision being released.
+Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. Push a candidate review branch and obtain a successful official **Review branch** scan before publishing; a successful local build or GitHub release alone does not establish directory approval.
 
 Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Existing users update those three files and restart Obsidian; preserve `data.json` and `indices/`.
