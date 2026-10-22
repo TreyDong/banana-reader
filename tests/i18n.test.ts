@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
@@ -52,16 +54,16 @@ test('every explicit UI message has an English catalog entry with matching forma
  visit(source);assert.ok(checked>450);
 });
 
-async function loadPlugin(saved:unknown,host='zh'){
+async function loadPlugin(saved:unknown,host='zh',identity?:{root:string;id:string;legacyActive:boolean;events:string[]}){
  const output=await build({entryPoints:[fileURLToPath(new URL('../src/main.ts',import.meta.url))],bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',external:['obsidian','electron'],logLevel:'silent'});
  const views=new Map<string,(leaf:any)=>any>();const commands=new Map<string,{id:string;name:string}>();const writes:any[]=[];let failSave=false;let modelCalls=0;
  const source=structuredClone(saved);
- const vault={adapter:{getBasePath:()=>'/synthetic-banana-reader'},configDir:'.obsidian',on:()=>()=>{}};
+ const vault={adapter:{getBasePath:()=>identity?.root||'/synthetic-banana-reader'},configDir:'.obsidian',on:()=>()=>{}};
  class Plugin{
-  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{},getLeavesOfType:()=>[] as any[]},secretStorage:{getSecret:()=>''}};
-  manifest={id:'gloss-reader',dir:'.obsidian/plugins/gloss-reader',version:'0.12.5'};
-  loadData(){return Promise.resolve(structuredClone(source));}
-  saveData(value:unknown){if(failSave)return Promise.reject(new Error('Synthetic save failure'));writes.push(structuredClone(value));return Promise.resolve();}
+  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{},getLeavesOfType:()=>[] as any[]},secretStorage:{getSecret:()=>''},plugins:{enabledPlugins:new Set(identity?.legacyActive?['gloss-reader']:[])}};
+  manifest={id:identity?.id||'gloss-reader',dir:'.obsidian/plugins/'+(identity?.id||'gloss-reader'),version:'0.12.5'};
+  async loadData(){if(identity){identity.events.push('load');return JSON.parse(await readFile(join(identity.root,this.manifest.dir,'data.json'),'utf8'));}return structuredClone(source);}
+  saveData(value:unknown){identity?.events.push('save');if(failSave)return Promise.reject(new Error('Synthetic save failure'));writes.push(structuredClone(value));return Promise.resolve();}
   registerView(id:string,factory:(leaf:any)=>any){views.set(id,factory);}registerExtensions(){}addSettingTab(){}registerEvent(){}registerObsidianProtocolHandler(){}
   addRibbonIcon(){return syntheticDom().createEl('button',{});}
   addCommand(command:{id:string;name:string}){commands.set(command.id,command);return command;}
@@ -162,4 +164,18 @@ test('dynamic reader metadata and index labels switch both ways without retainin
  view.refreshModelButtons=()=>{};view.paintWebButton=()=>{};view.scheduleLayout=()=>{};run.plugin.app.workspace.getLeavesOfType=()=>[{view}];
  await run.plugin.changeLanguage('en');assert.equal(stats.textContent,'1 min read · 2 paragraphs');assert.equal(indexLabel.textContent,'Index');assert.equal(view.indexButton.getAttribute('title'),'Choose an embedding model first');assert.equal(stale.parentNode,null);assert.ok(live.parentNode);
  await run.plugin.changeLanguage('zh-CN');assert.equal(stats.textContent,'1 分钟阅读 · 2 个段落');assert.equal(indexLabel.textContent,'索引');assert.equal(view.indexButton.getAttribute('title'),'先选择嵌入模型');assert.equal(run.modelCalls(),0);
+});
+
+test('compiled new-ID plugin imports old data before loading settings and registering reader commands',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'reader-id-runtime-')),plugins=join(root,'.obsidian/plugins'),saved=fixture(),bytes=JSON.stringify(saved,null,2)+'\n',events:string[]=[];
+ try{
+  await mkdir(join(plugins,'gloss-reader'),{recursive:true});await mkdir(join(plugins,'banana-reader'));await writeFile(join(plugins,'gloss-reader/data.json'),bytes);await writeFile(join(plugins,'banana-reader/manifest.json'),JSON.stringify({id:'banana-reader'}));
+  const run=await loadPlugin(undefined,'zh',{root,id:'banana-reader',legacyActive:false,events});
+  assert.equal(events[0],'load');assert.equal(await readFile(join(plugins,'banana-reader/data.json'),'utf8'),bytes);assert.equal(await readFile(join(plugins,'gloss-reader/data.json'),'utf8'),bytes);
+  assert.deepEqual(structuredClone(run.plugin.store.documents),saved.documents);assert.equal(run.plugin.store.settings.taskModels.default.serviceId,'local');assert.equal(run.plugin.store.settings.translationTarget,'ja');assert.equal(run.plugin.store.settings.commands[0].name,'自定解释');assert.equal(run.modelCalls(),0);assert.equal(run.commands.size,4);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('compiled new-ID plugin stops before loadData or saveData if the old plugin is still enabled',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'reader-id-runtime-stop-')),events:string[]=[];
+ try{await assert.rejects(loadPlugin(undefined,'zh',{root,id:'banana-reader',legacyActive:true,events}),/inactive state must be confirmed/);assert.deepEqual(events,[]);}finally{await rm(root,{recursive:true,force:true});}
 });
