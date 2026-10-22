@@ -4,7 +4,7 @@
 
 在 Obsidian 里边读、边问、边记。读到不懂的句子，选中提问；觉得值得留下的段落，划线或写批注；读完后，把摘录和理解导出成一份带出处的 Markdown 笔记。
 
-[安装插件](https://community.obsidian.md/plugins/banana-reader) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
+[安装插件](https://community.obsidian.md/plugins/banana-reader) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader-plugin/issues)
 
 
 ## 可以用它做什么
@@ -40,7 +40,7 @@
 
 ## 版本与发布记录
 
-安装与更新见 [官方目录](https://community.obsidian.md/plugins/banana-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader/releases)。第三方许可及来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+安装与更新见 [官方目录](https://community.obsidian.md/plugins/banana-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader-plugin/releases)。第三方许可及来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 账号、网络与本地访问
 
@@ -179,6 +179,8 @@ npm test
 - 为安装文件补充可核验的 GitHub 构建来源证明；具体执行结果见发布记录。
 
 ## 仓库变更日志
+
+- 2026-10-22：正式发行仓库改为 `TreyDong/banana-reader-plugin`；旧目录条目已归档，但仍占用原仓库绑定，原仓库保留历史。插件 ID、版本、运行逻辑和本地数据不变。
 
 - 2026-10-22 · 0.13.3：统一新插件 ID 与安装路径，保留旧数据复制和笔记链接兼容，同步中英文文档；新条目替换旧条目，不维护并行版本。
 

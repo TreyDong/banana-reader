@@ -8,7 +8,7 @@ The account editor has no ID field. The [official sample](https://github.com/obs
 
 1. Run local checks and submit the exact candidate for official Review branch scanning. For 0.13.3, the old entry rejected only the changed manifest ID (`banana-reader` versus `gloss-reader`); source checks contained warnings without blocking source errors. The maintainer explicitly approved proceeding through new-entry review instead of requiring the incompatible old-ID preview to pass.
 2. Prepare the three installation assets and retain the old release tag and assets as recovery material. Do not overwrite old release assets with a new-ID manifest.
-3. Confirm the directory accepts the replacement with the existing repository and name. Archive the old listing as part of cutover and submit `banana-reader`. If repository/name ownership prevents this, stop for administrator assistance rather than delete entries to evade a restriction.
+3. The old `gloss-reader` listing is archived. A new submission using the former repository was rejected because archiving retains its repository binding. The maintainer explicitly approved a separate public publication repository, [TreyDong/banana-reader-plugin](https://github.com/TreyDong/banana-reader-plugin), retaining the former repository for history and ending legacy-version maintenance. Publish the audited 0.13.3 package there and submit the new repository for `banana-reader`. If the directory also reserves the old display name, stop for administrator assistance rather than delete or rename entries to evade a restriction.
 4. Verify the new listing and its review result independently of GitHub. An archived old listing is not a redirect, and registration does not migrate installed vaults.
 
 ## Existing installation

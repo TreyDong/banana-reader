@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Release candidate: **0.13.3**, using `banana-reader` as the plugin ID with guarded legacy-data copying and compatible old note links. The minimum desktop Obsidian version remains **1.11.4**.
+Current version: **0.13.3**, using `banana-reader` as the plugin ID with guarded legacy-data copying and compatible old note links. The minimum desktop Obsidian version remains **1.11.4**.
 
 ```sh
 npm ci
@@ -42,6 +42,8 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 `bindUi()` registers explicitly translated text nodes and accessibility attributes; `refreshUi()` updates only those bindings, retaining child icons and skipping nodes changed by another renderer. User-authored content and input values are never registered. `refreshLanguage()` refreshes reader chrome, notebook labels and reading statistics without reloading documents, restarting services or triggering model requests. Index progress retains a label callback so counts can be rendered in the current locale; repainting does not restart indexing. After notebook rendering, remove only generated accessibility captions no longer referenced by `aria-labelledby`.
 
 ## Release checklist
+
+The active publication repository is [TreyDong/banana-reader-plugin](https://github.com/TreyDong/banana-reader-plugin). The previous `TreyDong/banana-reader` repository retains historical releases; do not publish new versions there. The package ID and local project directory remain `banana-reader`.
 
 Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. For an unchanged plugin ID, push a candidate branch and obtain a successful official **Review branch** scan before publishing. The old entry rejects a new ID even when its source checks pass. For the explicitly approved 0.13.3 replacement, archive the old entry, publish the new-ID package and submit a new entry for its own review. A local build or GitHub release alone does not establish directory approval.
 
