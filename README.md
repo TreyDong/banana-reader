@@ -1,12 +1,12 @@
 # Banana Reader
 
-Version **0.13.2** adopts native Obsidian settings headings and supported style assignment helpers, and adds official source-rule checks. English, Simplified Chinese and following Obsidian are supported.
+Version **0.13.3** uses the plugin ID `banana-reader`, preserves legacy reading data through a guarded copy, and keeps existing exported-note links working. English, Simplified Chinese and following Obsidian are supported.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
 Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
 
-[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
+[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/banana-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
 
 ## What you can do
@@ -20,7 +20,7 @@ Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidia
 
 ## Get started
 
-1. Install from the [community directory](https://community.obsidian.md/plugins/gloss-reader) and enable **Banana Reader**.
+1. Install from the [community directory](https://community.obsidian.md/plugins/banana-reader) and enable **Banana Reader**.
 2. Open a Markdown, PDF or EPUB file. Click **Open Banana Reader** in the ribbon, or run **Banana Reader: Enter immersive reading** from the command palette.
 3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → Model services** and choose a question model first.
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
@@ -53,7 +53,9 @@ The file picker lists vault paths only when opened. Copy buttons **write** the r
 - EPUB supports text chapters and local raster images. DRM and original fixed-layout styling are not supported.
 - Use models available to your own account. Discovery does not guarantee access; failed requests show an error and do not silently switch providers.
 
-For manual updates, copy `main.js`, `manifest.json` and `styles.css` from the same [release](https://github.com/TreyDong/banana-reader/releases) into `.obsidian/plugins/gloss-reader/`. Preserve existing `data.json` and `indices/`. The stable plugin ID is `gloss-reader`.
+For manual installation, copy `main.js`, `manifest.json` and `styles.css` from the same [release](https://github.com/TreyDong/banana-reader/releases) into `.obsidian/plugins/banana-reader/`. The plugin ID and installation folder are `banana-reader`; a custom vault configuration directory replaces `.obsidian` where applicable. Directory registration is a separate review; use the release files if the new listing is not available yet.
+
+If you installed an earlier release under `gloss-reader`, back up its plugin folder and **disable the old plugin before enabling the new installation**. Do not uninstall it first: Obsidian may remove its stored data. On first load, Banana Reader copies the old settings, highlights, annotations, conversations and recognized indexes without replacing existing destination data. It retains the originals and a migration receipt. If migration reports a conflict, stop and reconcile both copies; do not delete either copy to force an import. This is a replacement installation, not an automatic in-place ID update, and no parallel legacy release will be maintained. Reassign custom hotkeys to the new plugin's commands. Existing secret-reference names and old exported-note links are retained; session-only keys must be entered again. See [migration and recovery](docs/plugin-id-migration.md).
 
 ## Development and credits
 
@@ -64,6 +66,8 @@ Build with `npm ci` and `npm run build`; run the official source checks with `np
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-22 · 0.13.3: Unify the manifest, installation folder and new exported-note links under `banana-reader`. Retain old note-link handling and copy legacy data without overwriting either copy. Retire the old directory entry during replacement; keep historical release files available.
 
 - 2026-10-21 · 0.13.2: Replace 10 static style assignments and seven manual settings headings reported by the community scan, preserving existing values, dynamic layout and saved data. Add pinned official ESLint checks and a release-check command.
 
@@ -81,4 +85,4 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 
 - 2026-10-20: Refresh reading statistics, index labels and progress tooltips on language changes, and remove orphaned accessibility captions. Validate English/Chinese/English switching in one open reader through BRAT, retaining marks and an unsent draft; 124 regression tests pass.
 
-- 2026-10-22: Prepare a copy-only `gloss-reader` to `banana-reader` data migration on an isolated branch. The published ID and installation remain unchanged pending the official directory migration process; see [migration status and gates](docs/plugin-id-migration.md).
+- 2026-10-22: Prepare the guarded legacy-data copy on an isolated branch before the identity cutover; see [migration and recovery](docs/plugin-id-migration.md).

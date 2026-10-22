@@ -1,10 +1,10 @@
 # Banana Reader
 
-版本 **0.13.2**。设置标题改用 Obsidian 原生组件，静态样式改用官方接口，并加入官方源码规则检查；支持简体中文、English 和跟随 Obsidian。
+版本 **0.13.3**。插件 ID、安装目录及新导出笔记链接统一为 `banana-reader`；受保护地复制旧配置、划线和批注，兼容旧笔记回跳。支持简体中文、English 和跟随 Obsidian。
 
 在 Obsidian 里边读、边问、边记。读到不懂的句子，选中提问；觉得值得留下的段落，划线或写批注；读完后，把摘录和理解导出成一份带出处的 Markdown 笔记。
 
-[安装插件](https://community.obsidian.md/plugins/gloss-reader) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
+[安装插件](https://community.obsidian.md/plugins/banana-reader) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
 
 
 ## 可以用它做什么
@@ -34,13 +34,13 @@
 
 ## 详细使用说明
 
-在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的桌面插件。当前版本 0.13.2。
+在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的桌面插件。当前版本 0.13.3。
 
 使用 Obsidian 原生视图、MarkdownRenderer 与本地文档数据，提供选文问答、页边理解和沉浸阅读。问答、翻译与文章解读分别选择模型；现有配置、划线、问答和导出格式保持兼容。
 
 ## 版本与发布记录
 
-安装与更新见 [官方目录](https://community.obsidian.md/plugins/gloss-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader/releases)。第三方许可及来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+安装与更新见 [官方目录](https://community.obsidian.md/plugins/banana-reader) 和 [GitHub Releases](https://github.com/TreyDong/banana-reader/releases)。第三方许可及来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 账号、网络与本地访问
 
@@ -75,7 +75,7 @@
 3. 打开底部提问栏，没有选区时面向整篇文档；有可用索引时自动使用整书检索。先结合语义向量与关键词查找相关片段，再把片段及原文引用交给问答模型。默认命中 6 处，可配置 4–12 处；检索正文受 16,000 字符及用户上下文上限约束，不把整本书发给问答模型。历史对话连同检索正文超限会明确提示新建问题，不静默丢弃。
 4. 回答中的引用标签可跳回原文或真实 PDF 页码，跨页查看引用时保留整篇回答。卡片追问沿用该对话保存的原文上下文与引用编号；重新生成也沿用已保存的上下文。需要查找新的主题时，在底部发起独立问题重新检索。检索模型、来源和未索引页数保存在问答记录中，导出保留这些信息，回答底部不再展开来源列表。
 
-索引保存在 `<vault>/.obsidian/plugins/gloss-reader/indices/`，含原文片段、向量与页码，不含密钥。默认仅手动建立索引；开启 **自动建立索引**后，进入沉浸阅读时会为当前文档建立或更新索引，有效缓存直接复用。退出阅读或关闭自动开关会取消自动索引；关闭进度弹窗不会取消后台自动任务，也可在索引弹窗中手动停止。不会扫描整个笔记库。建立索引时才发送书籍文字；点击提问时还会把问题发送至 Embedding 服务进行查询向量化。密钥存在 Obsidian SecretStorage。若同步 `.obsidian`，本地索引也可能随同步传走。
+索引保存在 `<vault>/.obsidian/plugins/banana-reader/indices/`，含原文片段、向量与页码，不含密钥。默认仅手动建立索引；开启 **自动建立索引**后，进入沉浸阅读时会为当前文档建立或更新索引，有效缓存直接复用。退出阅读或关闭自动开关会取消自动索引；关闭进度弹窗不会取消后台自动任务，也可在索引弹窗中手动停止。不会扫描整个笔记库。建立索引时才发送书籍文字；点击提问时还会把问题发送至 Embedding 服务进行查询向量化。密钥存在 Obsidian SecretStorage。若同步 `.obsidian`，本地索引也可能随同步传走。
 
 文件路径、修改时间、大小、接口地址、模型 ID 或维度变化后需重建索引；单纯调整命中数不必重建。可清除本书索引，原书和批注保持不变。建立过程可停止，失败不会替换上一次完整索引。当前容量为最多 3,000 页、500 万字符、8,000 个片段和 300 万个向量数值；超过限制明确提示降低维度或拆分文档。
 
@@ -115,7 +115,7 @@
 
 ## 数据和边界
 
-文档不被修改。批注、对话、上下文快照、草稿与阅读进度保存在 `<vault>/.obsidian/plugins/gloss-reader/data.json`。问答与高亮采用软移除，笔记本不再提供恢复入口。文件/文件夹重命名时保留批注；目标路径已有记录时保留两份而不覆盖。插件没有独立云同步；若用户同步 `.obsidian`，数据也可能由同步工具传走。
+文档不被修改。批注、对话、上下文快照、草稿与阅读进度保存在 `<vault>/.obsidian/plugins/banana-reader/data.json`。问答与高亮采用软移除，笔记本不再提供恢复入口。文件/文件夹重命名时保留批注；目标路径已有记录时保留两份而不覆盖。插件没有独立云同步；若用户同步 `.obsidian`，数据也可能由同步工具传走。
 
 `日记/`、`60_工作库/`、`20_投资库/`、`A1_交易数据/` 不进入阅读器或 AI 上下文。其他笔记的嵌入不会自动展开给模型，正文中的本地图片正常显示。仅处理用户明确打开的文档，不递归读取整个库。
 
@@ -129,18 +129,30 @@ npm run build
 npm test
 ```
 
-将同一版本 Release 中的 `main.js`、`styles.css`、`manifest.json` 三个文件放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。构建会将 MIT、字体 OFL 和 fflate 许可内嵌到 `main.js`，标准三文件安装即可携带完整许可；不需要额外复制源码或其他人的 `data.json`。
+将同一版本 Release 中的 `main.js`、`styles.css`、`manifest.json` 三个文件放进 `<vault>/.obsidian/plugins/banana-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。构建会将 MIT、字体 OFL 和 fflate 许可内嵌到 `main.js`，标准三文件安装即可携带完整许可；不需要额外复制源码或其他人的 `data.json`。
 
 ## 许可、参考与兼容
 
 - 项目代码使用 [MIT](LICENSE)。当前分发的 Newsreader / Schibsted Grotesk 字体使用 SIL OFL，EPUB 解压依赖 fflate 使用 MIT；完整原文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 - [Nutlope/gloss](https://github.com/Nutlope/gloss) 是早期界面与交互参考。来源核查没有把“功能相似”直接视为整个插件的源码复制；也没有把上游缺失的许可改写成 MIT。已识别的具体复用已局部替换，历史来源和验证边界继续保留。
 - [Qiaomu Reader](https://github.com/joeseesun/qiaomu-reader) 是交互参考；本版未分发其字体、示例书或 GPL 组件，相似的 EPUB 路径辅助函数已改用标准路径工具。
-- 保留插件 ID `gloss-reader`、视图/命令 ID、SecretStorage 引用及本地数据位置以兼容已有安装；显示名称为 Banana Reader。
+- 插件 ID 和安装目录统一为 `banana-reader`，保留内部视图类型、旧笔记链接与密钥引用名称。旧安装需要按下述步骤迁移，插件命令的自定义快捷键需重新分配。
 
 本插件不是上述项目或 Obsidian 的官方版本，不包含 Gloss 的账户、云端书架、网页导入和 Together 专用服务。界面支持中文与英文；字体本地内嵌，中文正文使用系统字体回退。
 
-## 0.13.2
+## 从旧 ID 迁移
+
+先备份旧 `gloss-reader` 插件目录，**停用旧插件，再启用新安装**。不要先卸载旧插件，以免 Obsidian 删除其数据。新插件在读取设置前，复制旧 `data.json` 和合法 `indices/` 文件，保留原件并生成迁移凭据；不覆盖或合并已有目标数据。若提示冲突，请保留两份并核对，不要删除数据强行导入。
+
+此次采用新条目替换，不长期维护两个版本，也不会自动把旧 ID 原地升级成新 ID。旧导出笔记的回跳链接仍可使用；快捷键需绑定到新插件的命令。服务与密钥引用名称保留，会话内未保存的密钥需要重新输入。使用自定义配置目录时，将路径中的 `.obsidian` 换为实际目录。新条目审核完成前可从 GitHub Release 手动安装。详见 [迁移与恢复](docs/plugin-id-migration.md)。
+
+## 0.13.3
+
+- 插件 ID、安装目录与新导出链接统一为 `banana-reader`，兼容旧笔记链接。
+- 受保护地复制旧配置、划线、批注、问答和索引，保留原件，遇到冲突停止。
+- 旧官方条目在替换时归档，不持续维护旧 ID 版本；阅读及模型业务逻辑不变。
+
+## 历史版本 0.13.2
 
 - 修复社区审核报告中的 10 处静态样式赋值和 7 处设置区域 HTML 标题，保留原有样式数值及动态布局。
 - 加入官方 ESLint 规则：`npm run lint` 检查源码，`npm run check` 串联规则检查、回归测试和构建。
@@ -168,6 +180,8 @@ npm test
 
 ## 仓库变更日志
 
+- 2026-10-22 · 0.13.3：统一新插件 ID 与安装路径，保留旧数据复制和笔记链接兼容，同步中英文文档；新条目替换旧条目，不维护并行版本。
+
 - 2026-10-21 · 0.13.2：按社区审核结果局部修复样式赋值和设置标题，增加官方源码规则检查，保持业务与数据兼容。
 
 - 2026-10-20 · 0.13.1：发布已打开阅读页的即时语言切换及动态文案修复，同步中英文说明与版本信息；插件 ID、数据路径和最低 Obsidian 版本保持不变。
@@ -184,4 +198,4 @@ npm test
 
 - 2026-10-20：补齐阅读统计、索引标签及进度提示的即时语言切换，清理失效的无障碍标签。通过 BRAT 在同一阅读页验证 English／中文／English 切换，划线和未发送草稿保留；124 项回归测试通过。
 
-- 2026-10-22：在独立分支准备从 `gloss-reader` 到 `banana-reader` 的只复制数据迁移，原件保留，冲突及异常时停止。正式 ID 和现有安装保持不动，等待官方确认目录迁移流程；详见 [迁移状态与放行条件](docs/plugin-id-migration.md)。
+- 2026-10-22：切换身份前先在独立分支准备受保护的旧数据复制；原件保留，冲突及异常时停止。详见 [迁移与恢复](docs/plugin-id-migration.md)。

@@ -103,7 +103,7 @@ export default class GlossPlugin extends Plugin {
       }
       void this.persist().catch(showError);
     }));
-    this.registerObsidianProtocolHandler(VIEW, async params => {
+    for(const protocol of [TARGET_PLUGIN_ID,LEGACY_PLUGIN_ID])this.registerObsidianProtocolHandler(protocol, async params => {
       if (params.vault && params.vault !== this.app.vault.getName()) return;
       const file = this.app.vault.getAbstractFileByPath(params.path || '');
       if (!(file instanceof TFile)) {new Notice(ui("原文已移动或不存在，请手动打开。")); return;}
