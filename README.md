@@ -6,7 +6,7 @@ Version **0.13.3** uses the plugin ID `banana-reader`, preserves legacy reading 
 
 Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
 
-[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/banana-reader) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
+[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/banana-reader) · [Report an issue](https://github.com/TreyDong/banana-reader-plugin/issues)
 
 
 ## What you can do
@@ -53,7 +53,7 @@ The file picker lists vault paths only when opened. Copy buttons **write** the r
 - EPUB supports text chapters and local raster images. DRM and original fixed-layout styling are not supported.
 - Use models available to your own account. Discovery does not guarantee access; failed requests show an error and do not silently switch providers.
 
-For manual installation, copy `main.js`, `manifest.json` and `styles.css` from the same [release](https://github.com/TreyDong/banana-reader/releases) into `.obsidian/plugins/banana-reader/`. The plugin ID and installation folder are `banana-reader`; a custom vault configuration directory replaces `.obsidian` where applicable. Directory registration is a separate review; use the release files if the new listing is not available yet.
+For manual installation, copy `main.js`, `manifest.json` and `styles.css` from the same [release](https://github.com/TreyDong/banana-reader-plugin/releases) into `.obsidian/plugins/banana-reader/`. The plugin ID and installation folder are `banana-reader`; a custom vault configuration directory replaces `.obsidian` where applicable. Directory registration is a separate review; use the release files if the new listing is not available yet.
 
 If you installed an earlier release under `gloss-reader`, back up its plugin folder and **disable the old plugin before enabling the new installation**. Do not uninstall it first: Obsidian may remove its stored data. On first load, Banana Reader copies the old settings, highlights, annotations, conversations and recognized indexes without replacing existing destination data. It retains the originals and a migration receipt. If migration reports a conflict, stop and reconcile both copies; do not delete either copy to force an import. This is a replacement installation, not an automatic in-place ID update, and no parallel legacy release will be maintained. Reassign custom hotkeys to the new plugin's commands. Existing secret-reference names and old exported-note links are retained; session-only keys must be entered again. See [migration and recovery](docs/plugin-id-migration.md).
 
@@ -61,11 +61,13 @@ If you installed an earlier release under `gloss-reader`, back up its plugin fol
 
 See the [development guide](docs/development.md) for the source layout, build and validation commands.
 
-Build with `npm ci` and `npm run build`; run the official source checks with `npm run lint`, or all release checks with `npm run check`. When [reporting an issue](https://github.com/TreyDong/banana-reader/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
+Build with `npm ci` and `npm run build`; run the official source checks with `npm run lint`, or all release checks with `npm run check`. When [reporting an issue](https://github.com/TreyDong/banana-reader-plugin/issues), include the app/plugin version, document format and reproduction steps. Do not include private documents or API keys.
 
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-22: Move active publication to `TreyDong/banana-reader-plugin`. The former directory entry is archived but keeps its repository binding, so the previous repository is retained for history. Plugin ID, version and runtime data remain unchanged.
 
 - 2026-10-22 · 0.13.3: Unify the manifest, installation folder and new exported-note links under `banana-reader`. Retain old note-link handling and copy legacy data without overwriting either copy. Retire the old directory entry during replacement; keep historical release files available.
 
