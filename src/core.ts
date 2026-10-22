@@ -63,7 +63,7 @@ export function blockedPath(path: string): boolean {
 export function exportReading(path: string, data: Reading, vault: string): string {
   const source = `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(path)}`;
   let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
-  const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
+  const back = (id: string) => `obsidian://banana-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}${h.anchor.pdfPage?' · PDF 第 '+h.anchor.pdfPage+' 页':''}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }

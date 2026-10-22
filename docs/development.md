@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Current release: **0.13.2**, including native settings headings, supported style assignments and official source-rule checks. The minimum desktop Obsidian version remains **1.11.4**.
+Release candidate: **0.13.3**, using `banana-reader` as the plugin ID with guarded legacy-data copying and compatible old note links. The minimum desktop Obsidian version remains **1.11.4**.
 
 ```sh
 npm ci
@@ -19,7 +19,7 @@ npm run check
 
 The build emits `main.js` in the repository root. Install that file together with root `manifest.json` and `styles.css`. Runtime outputs are independent of the source-directory layout. `main.js` and `node_modules/` are ignored by Git.
 
-The plugin ID remains `gloss-reader`. Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
+The plugin ID and installation folder are `banana-reader`. Legacy `gloss-reader` data is imported only when the old plugin is disabled and the destination is safe. Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
 
 ## Licenses
 
@@ -37,7 +37,7 @@ The 0.13.1 scan reported 10 static style assignments and seven manually created 
 
 `auto` uses Obsidian's `getLanguage()`: Chinese locales resolve to Simplified Chinese, while other locales resolve to English. The setting is per vault. UI language does not change the model's answer language or translate existing default prompts. Preserve canonical PDF source labels and other stored identity strings; translate their display labels without changing selection or citation matching.
 
-The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The suite currently contains 124 passing tests. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
+The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The suite includes the original 124 regression tests plus migration and protocol compatibility coverage. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
 
 `bindUi()` registers explicitly translated text nodes and accessibility attributes; `refreshUi()` updates only those bindings, retaining child icons and skipping nodes changed by another renderer. User-authored content and input values are never registered. `refreshLanguage()` refreshes reader chrome, notebook labels and reading statistics without reloading documents, restarting services or triggering model requests. Index progress retains a label callback so counts can be rendered in the current locale; repainting does not restart indexing. After notebook rendering, remove only generated accessibility captions no longer referenced by `aria-labelledby`.
 
@@ -45,8 +45,8 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 
 Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. Push a candidate review branch and obtain a successful official **Review branch** scan before publishing; a successful local build or GitHub release alone does not establish directory approval.
 
-Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Existing users update those three files and restart Obsidian; preserve `data.json` and `indices/`.
+Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Updates within the new ID replace only those three files. Old-ID installations must follow the guarded replacement process below; never install a new-ID manifest into the old folder. Preserve `data.json`, `indices/` and `legacy-migration.json`.
 
-## Planned plugin identity change
+## Plugin identity replacement
 
-The live plugin ID remains `gloss-reader`. A guarded copy-only data migrator is prepared for a future `banana-reader` installation, but directory support and the old-user upgrade path must be confirmed before switching manifests. See [migration status and release gates](plugin-id-migration.md). Do not rename active installation directories or rewrite vault-wide settings during development.
+Use a new `banana-reader` directory entry and retire the old `gloss-reader` listing rather than maintain parallel release channels. The package is based on 0.13.2 plus the isolated migration work; unrelated 0.14.0 work is excluded. Internal view types and historical source attributions remain unchanged. Both new and legacy note protocols resolve through the same handler. See [migration, directory cutover and recovery](plugin-id-migration.md). Do not rename active installations or rewrite vault-wide settings during development.
