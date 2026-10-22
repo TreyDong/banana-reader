@@ -46,3 +46,7 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. Push a candidate review branch and obtain a successful official **Review branch** scan before publishing; a successful local build or GitHub release alone does not establish directory approval.
 
 Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Existing users update those three files and restart Obsidian; preserve `data.json` and `indices/`.
+
+## Planned plugin identity change
+
+The live plugin ID remains `gloss-reader`. A guarded copy-only data migrator is prepared for a future `banana-reader` installation, but directory support and the old-user upgrade path must be confirmed before switching manifests. See [migration status and release gates](plugin-id-migration.md). Do not rename active installation directories or rewrite vault-wide settings during development.

@@ -80,3 +80,5 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 - 2026-10-20: Refresh existing reader labels immediately when the interface language changes, including Notebook, Q&A and Marks. Remove mixed-language prose from the English guide.
 
 - 2026-10-20: Refresh reading statistics, index labels and progress tooltips on language changes, and remove orphaned accessibility captions. Validate English/Chinese/English switching in one open reader through BRAT, retaining marks and an unsent draft; 124 regression tests pass.
+
+- 2026-10-22: Prepare a copy-only `gloss-reader` to `banana-reader` data migration on an isolated branch. The published ID and installation remain unchanged pending the official directory migration process; see [migration status and gates](docs/plugin-id-migration.md).
