@@ -6,7 +6,7 @@ Version 0.13.3 uses `banana-reader` as the plugin ID and installation folder. It
 
 The account editor has no ID field. The [official sample](https://github.com/obsidianmd/obsidian-sample-plugin/blob/master/AGENTS.md#manifest-rules-manifestjson) treats released IDs as stable API, and the [manifest reference](https://docs.obsidian.md/Reference/Manifest) requires installation folders to match the ID. This replacement does not claim an automatic update path or transfer of listing history/downloads. An earlier administrator inquiry remains separate from the chosen replacement strategy.
 
-1. Run local checks and a successful official Review branch scan of the exact candidate commit before publishing.
+1. Run local checks and submit the exact candidate for official Review branch scanning. For 0.13.3, the old entry rejected only the changed manifest ID (`banana-reader` versus `gloss-reader`); source checks contained warnings without blocking source errors. The maintainer explicitly approved proceeding through new-entry review instead of requiring the incompatible old-ID preview to pass.
 2. Prepare the three installation assets and retain the old release tag and assets as recovery material. Do not overwrite old release assets with a new-ID manifest.
 3. Confirm the directory accepts the replacement with the existing repository and name. Archive the old listing as part of cutover and submit `banana-reader`. If repository/name ownership prevents this, stop for administrator assistance rather than delete entries to evade a restriction.
 4. Verify the new listing and its review result independently of GitHub. An archived old listing is not a redirect, and registration does not migrate installed vaults.
