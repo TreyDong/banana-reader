@@ -35,8 +35,8 @@ export function shelfBooks(files:ShelfFile[],readings:Record<string,ShelfReading
 /** Deterministic binding for a title: the same book always gets the same spine. */
 export function spineStyle(seed:string):SpineStyle{
  let hash=0;for(let i=0;i<seed.length;i++)hash=(hash*31+seed.charCodeAt(i))>>>0;
- const [color,dark]=PALETTE[hash%PALETTE.length]!;
- return{color,dark,width:56+(hash>>>6)%17,height:320+(hash>>>11)%72,variant:VARIANTS[(hash>>>3)%VARIANTS.length]!};
+ const [color,dark]=PALETTE[hash%PALETTE.length];
+ return{color,dark,width:56+(hash>>>6)%17,height:320+(hash>>>11)%72,variant:VARIANTS[(hash>>>3)%VARIANTS.length]};
 }
 
 /** Greedy packing of variable-width spines into plank rows that fit the container. */

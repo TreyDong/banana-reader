@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Published release: **0.13.3**. Working candidate: **0.14.0**, with mobile support, book sources and bookshelf. Minimum Obsidian: **1.11.4**. Physical iOS/Android validation is pending; local checks are not directory approval.
+Published GitHub release: **0.14.7**. Community-review repair candidate: **0.14.8**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. Physical iOS/Android validation is pending; local checks are not directory approval.
 
 ```sh
 npm ci
@@ -19,7 +19,7 @@ npm run check
 
 The build emits `main.js` in the repository root. Install that file together with root `manifest.json` and `styles.css`. Runtime outputs are independent of the source-directory layout. `main.js` and `node_modules/` are ignored by Git.
 
-The plugin ID is `banana-reader`, matching the published 0.13.3 replacement. Internal view IDs remain stable. See [identity migration](plugin-id-migration.md). Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
+The community plugin ID is `gloss-reader`, restored in 0.14.7. The display name remains Banana Reader; never activate the historical `banana-reader` replacement at the same time. Internal view IDs remain stable. See [identity migration](plugin-id-migration.md). Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
 
 ## Licenses
 
@@ -27,9 +27,15 @@ The plugin ID is `banana-reader`, matching the published 0.13.3 replacement. Int
 
 ## Official source checks
 
-`npm run lint` runs the pinned `eslint-plugin-obsidianmd` recommended checks against all runtime sources and release metadata. Obsidian rules retain their recommended error/warning levels. General JavaScript and TypeScript findings remain visible warnings to match the observed community scan; they are not silently disabled. `npm run check` runs lint, regression tests and the TypeScript/bundle build in sequence. Any lint error or failed test/build blocks the command.
+`npm run lint` runs the pinned `eslint-plugin-obsidianmd` recommended configuration at its original severities with `--max-warnings 0`. Release metadata is validated separately, including the manifest, package, lockfile, versions map, identity and desktop-only status. No source rule is disabled or downgraded. `npm run check` also runs the regression suite and the TypeScript/bundle build.
 
-The 0.13.1 scan reported 10 static style assignments and seven manually created settings headings. The fix keeps the same style values through `setCssStyles()` and uses `Setting.setName().setHeading()` with existing typography and localization bindings. It does not change model execution, layout calculations or persisted data. The lint regression was checked against the original source: all 17 errors were detected and none remain in the repaired source. Other warnings remain outside this repair's scope.
+The 0.14.7 baseline contained 826 local warnings and no lint errors. The repair types JSON/provider boundaries and native host integration, uses document-owned DOM helpers and scheduling, removes unused declarations, replaces deprecated keyboard/refresh calls and adds declarative settings search with a legacy fallback. Search indexes both Chinese and English labels without network requests or writes; the existing four settings tabs remain the editor.
+
+Document selection and the unscoped bookshelf enumerate file paths only after the user opens those interfaces. A configured bookshelf folder is traversed directly, with protected subtrees excluded before traversal. These capabilities can still produce a Community behavior notice. Copy actions only call `clipboard.writeText` on a user click; the plugin does not read the clipboard. Do not replace these APIs with aliases just to hide capability findings.
+
+The build's version-checked PDF transform removes both dynamic-code probes and the PostScript compiler branch from PDF.js 4.10.38, retaining the upstream interpreter. Dependency files on disk remain unchanged. Source-structure changes fail the build, and the complete emitted installation bundle is parsed again to reject dynamic constructors/evaluation. A real synthetic PDF is extracted in a VM with string/wasm code generation disabled. PDF text/outline extraction stays local; the original-page view remains the fallback.
+
+The 0.13.2 release previously replaced static style assignments and manual settings headings. Those changes and stored data formats are preserved.
 
 ## UI localization
 
@@ -43,9 +49,13 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 
 ## Release checklist
 
-Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. Before a stable community release, push a candidate review branch and obtain a successful official **Review branch** scan. The user requested BRAT distribution of the mobile candidate: publish 0.14.0 as a GitHub pre-release only, pin its version in the BRAT instructions, and keep 0.13.3 as the stable Latest release. A successful local build or GitHub pre-release does not establish directory approval or physical-device acceptance.
+Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Run `npm run check` on the exact revision being reviewed. The `reader-release-verify.yml` workflow repeats these checks on GitHub, builds the three installation files, generates SHA-256 values, creates provenance attestations for all three and verifies the attestations against the workflow, source ref and source commit before uploading its candidate artifact.
 
-Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Existing users update those three files and restart Obsidian; preserve `data.json` and `indices/`.
+Before a community release, obtain a successful official **Review branch** scan. Retain documented necessary file-enumeration and clipboard-write behavior notices; do not claim they are code failures or conceal them. Keep official review results separate from local verification.
+
+A release tag is the manifest version without a `v` prefix. Build and attest again on the exact tag. Publish the three installation files from that attested artifact, then download the actual published bytes, compare all hashes and run `gh attestation verify` against the tag commit. Adding a workflow file or passing local checks alone does not establish artifact provenance.
+
+Preserve existing `data.json` and `indices/`; they are not release assets. Physical mobile acceptance remains pending and `isDesktopOnly` stays true. Do not change the personal installation during isolated release validation.
 
 ## Mobile runtime
 
