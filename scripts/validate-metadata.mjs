@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const read=async name=>JSON.parse(await readFile(new URL('../'+name,import.meta.url),'utf8'));
+const [manifest,pkg,lock,versions]=await Promise.all(['manifest.json','package.json','package-lock.json','versions.json'].map(read));
+assert.equal(manifest.id,'gloss-reader','Retain the reviewed community identity');
+assert.equal(manifest.version,pkg.version);
+assert.equal(lock.version,pkg.version);
+assert.equal(lock.packages[''].version,pkg.version);
+assert.equal(versions[manifest.version],manifest.minAppVersion);
+assert.equal(manifest.isDesktopOnly,true,'Physical mobile acceptance is still pending');
+for(const field of ['name','description','author','minAppVersion'])assert.equal(typeof manifest[field],'string');
+console.log('Release metadata is consistent.');

@@ -1,11 +1,12 @@
 import {desktopModule} from './agent';
 // This module is lazy-loaded on desktop; the loader also refuses native modules
 // if mobile transport is active, before any require is performed.
-const fs=(desktopModule('node:fs') as typeof import('node:fs')).promises;
-const {Buffer}=desktopModule('node:buffer') as typeof import('node:buffer');
+const fs=(desktopModule('node:fs')).promises;
+const {Buffer}=desktopModule('node:buffer');
 type NodeBuffer=ReturnType<typeof Buffer.alloc>;
-const {createHash,randomUUID}=desktopModule('node:crypto') as typeof import('node:crypto');
-const {dirname,isAbsolute,join,relative,resolve,sep}=desktopModule('node:path') as typeof import('node:path');
+const {createHash,randomUUID}=desktopModule('node:crypto');
+const path=desktopModule('node:path'),sep=path.sep;
+const dirname=(value:string)=>path.dirname(value),isAbsolute=(value:string)=>path.isAbsolute(value),join=(...values:string[])=>path.join(...values),relative=(from:string,to:string)=>path.relative(from,to),resolve=(...values:string[])=>path.resolve(...values);
 
 export const LEGACY_PLUGIN_ID='gloss-reader';
 export const TARGET_PLUGIN_ID='banana-reader';

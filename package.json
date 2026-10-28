@@ -1,12 +1,12 @@
 {
   "name": "banana-reader",
-  "version": "0.14.7",
+  "version": "0.14.8",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json && node scripts/build.mjs",
-    "test": "tsx --test tests/*.test.ts",
-    "lint": "eslint src manifest.json package.json",
+    "test": "node --import ./tests/browser-env.mjs --import tsx --test tests/*.test.ts",
+    "lint": "eslint src --max-warnings 0 && node scripts/validate-metadata.mjs",
     "check": "npm run lint && npm test && npm run build"
   },
   "devDependencies": {

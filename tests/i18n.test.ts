@@ -76,7 +76,7 @@ async function loadPlugin(saved:unknown,host='zh',identity?:{root:string;id:stri
   if(['node:child_process','node:http','node:https'].includes(id))return new Proxy({}, {get:()=>()=>{modelCalls++;throw new Error('Language changes must not call a model service');}});
   return nativeRequire(id);
  }};
- vm.runInNewContext(output.outputFiles[0].text,context);
+ Object.assign(context,{window:context});vm.runInNewContext(output.outputFiles[0].text,context);
  const Constructor=(context.module.exports as any).default;const plugin=new Constructor();await plugin.onload();
  return{plugin,commands,writes,views,protocols,TFile:stub.TFile,fail:()=>{failSave=true;},modelCalls:()=>modelCalls};
 }

@@ -1,0 +1,57 @@
+name: Verify and attest Reader installation files
+on:
+  push:
+    branches: ['fix/community-review-0.14.7']
+    tags: ['0.*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: reader-verify-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'TreyDong/banana-reader'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install the pinned dependency graph
+        run: npm ci --ignore-scripts
+      - name: Check source, behavior and the exact installation bundle
+        run: npm run check
+      - name: Record installation file hashes
+        run: sha256sum main.js manifest.json styles.css > SHA256SUMS
+      - name: Attest all three installation files from this exact source revision
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+      - name: Verify the attestations before sharing the candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify main.js --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/reader-release-verify.yml" --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA"
+          gh attestation verify manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/reader-release-verify.yml" --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA"
+          gh attestation verify styles.css --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/reader-release-verify.yml" --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reader-installation-${{ github.sha }}
+          path: |
+            main.js
+            manifest.json
+            styles.css
+            SHA256SUMS
+          if-no-files-found: error

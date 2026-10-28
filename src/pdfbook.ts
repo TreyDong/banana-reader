@@ -29,14 +29,14 @@ export function linesFromItems(items:PdfItem[]):{lines:PdfLine[];charCount:numbe
  const flush=()=>{if(!current.length)return;
   current.sort((a,b)=>a.x-b.x);
   let text='';
-  for(let i=0;i<current.length;i++){const item=current[i]!,prev=current[i-1];
+  for(let i=0;i<current.length;i++){const item=current[i],prev=current[i-1];
    if(!text){text=item.str;continue;}
    const gap=prev?item.x-prev.x-textWidth(prev.str,prev.size):0;
-   text+=gap>Math.max(1.2,item.size*0.28)&&/[A-Za-z0-9,;:%)\]]$/.test(text)&&/^[A-Za-z0-9(\[“"]/.test(item.str)?' '+item.str:item.str;}
+   text+=gap>Math.max(1.2,item.size*0.28)&&/[A-Za-z0-9,;:%)\]]$/.test(text)&&/^[A-Za-z0-9([“"]/.test(item.str)?' '+item.str:item.str;}
   const weight=current.reduce((sum,item)=>sum+item.str.length,0);
   const size=weight?current.reduce((sum,item)=>sum+item.size*item.str.length,0)/weight:10;
   const finalText=text.replace(/\s{2,}/g,' ').trim();
-  if(finalText){lines.push({text:finalText,x:current[0]!.x,y:current[0]!.y,size,bold:current.filter(item=>item.bold).reduce((sum,item)=>sum+item.str.length,0)>finalText.length/2});charCount+=finalText.length;}
+  if(finalText){lines.push({text:finalText,x:current[0].x,y:current[0].y,size,bold:current.filter(item=>item.bold).reduce((sum,item)=>sum+item.str.length,0)>finalText.length/2});charCount+=finalText.length;}
   current=[];};
  for(const item of usable){
   if(current.length&&Math.abs(item.y-top)>Math.max(1.2,item.size*0.5))flush();
@@ -54,7 +54,7 @@ type Draft=Para|Head;
 
 const cleanJoin=(a:string,b:string):string=>{
  if(/[-‐‑]$/.test(a)&&/^[a-z]/.test(b))return a.slice(0,-1)+b;
- if(/[A-Za-z0-9,;:%)\]]$/.test(a)&&/^[A-Za-z0-9(\[“"]/.test(b))return a+' '+b;
+ if(/[A-Za-z0-9,;:%)\]]$/.test(a)&&/^[A-Za-z0-9([“"]/.test(b))return a+' '+b;
  return a+b;
 };
 const headingLevelOf=(line:PdfLine,bodySize:number):number=>{
@@ -89,7 +89,7 @@ export function buildPdfBook(pages:PdfPageItems[],outline:PdfOutlineEntry[]|unde
  const repeats=new Map<string,number>();
  for(const {page,lines} of textual)for(const line of [...lines.slice(0,2),...lines.slice(-2)])
   if(PAGE_NUMBER.test(line.text.trim()))strip(page,lines,line);
- for(const {page,lines} of textual)for(const line of [...lines.slice(0,2),...lines.slice(-2)]){
+ for(const {lines} of textual)for(const line of [...lines.slice(0,2),...lines.slice(-2)]){
   const key=normalizeForRepeat(line.text);if(key.length<2)continue;
   repeats.set(key,(repeats.get(key)||0)+1);
  }
@@ -128,7 +128,7 @@ export function buildPdfBook(pages:PdfPageItems[],outline:PdfOutlineEntry[]|unde
  if(outline?.length){
   for(const entry of outline){
    if(entry.level>2)continue;
-   const floor=starts.length?starts.at(-1)!.index+1:0;
+   const floor=starts.length?starts.at(-1).index+1:0;
    const index=drafts.findIndex((draft,i)=>i>=floor&&draft.page===entry.page&&mutualPrefix(draft.text,entry.title));
    if(index>=0)starts.push({title:entry.title,page:entry.page,index});
   }
@@ -144,13 +144,13 @@ export function buildPdfBook(pages:PdfPageItems[],outline:PdfOutlineEntry[]|unde
   if(!items.length)return;
   sections.push({title:title||'正文',page,blocks:items.map(toBlock)});};
  if(starts.length){
-  if(starts[0]!.index>0)pushSection('卷首',drafts[0]!.page,drafts.slice(0,starts[0]!.index));
+  if(starts[0].index>0)pushSection('卷首',drafts[0].page,drafts.slice(0,starts[0].index));
   for(let i=0;i<starts.length;i++){
-   const start=starts[i]!,end=i+1<starts.length?starts[i+1]!.index:drafts.length;
+   const start=starts[i],end=i+1<starts.length?starts[i+1].index:drafts.length;
    pushSection(start.title,start.page,drafts.slice(start.index+1,end));
   }
  }else if(drafts.length){
-  pushSection('',textual[0]!.page,drafts);
+  pushSection('',textual[0].page,drafts);
  }
  if(scanPages>0&&textual.length)warnings.push(`有 ${scanPages} 页无法提取文字（扫描或图片页），重排视图不含这些页的内容。`);
 
