@@ -1,9 +1,9 @@
 {
-  "id": "banana-reader",
+  "id": "gloss-reader",
   "name": "Banana Reader",
-  "version": "0.14.6",
+  "version": "0.14.7",
   "minAppVersion": "1.11.4",
   "description": "Read and annotate Markdown, PDF and EPUB, ask about selected passages, and export notes with source links.",
   "author": "Trey",
-  "isDesktopOnly": false
+  "isDesktopOnly": true
 }

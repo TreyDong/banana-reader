@@ -78,6 +78,10 @@ export default class GlossPlugin extends Plugin {
   zlibClient(credentials:ZlibCredentials=this.zlibCredentials(),domain=this.store.settings.zlibDomain){return new ZLibraryClient(domain,credentials,zlibRequest,Platform?.isMobile?BOOK_LIMITS.file:200*1024*1024);}
   private saveQueue: Promise<void> = Promise.resolve();
   async onload() {
+    // Both identities share view types and note-link handlers; never load together.
+    if(this.manifest.id===LEGACY_PLUGIN_ID&&(this.app as any).plugins?.enabledPlugins?.has(TARGET_PLUGIN_ID)){
+      const error=new Error("请先停用 banana-reader 再启用 Banana Reader（gloss-reader）。两份阅读记录均未改动。 Disable banana-reader before enabling this installation.");showError(error);throw error;
+    }
     configureMobileTransport(Platform?.isMobile?async request=>{const response=await requestUrl({...request,throw:false});return{status:response.status,text:response.text};}:undefined);
     try{await preparePluginIdentity({pluginId:this.manifest.id,mobile:!!Platform?.isMobile,configDir:this.app.vault.configDir,adapter:this.app.vault.adapter,legacyActive:(this.app as any).plugins?.enabledPlugins?.has(LEGACY_PLUGIN_ID)});}catch(error){showError(error);throw error;}
     const saved = await this.loadData();
