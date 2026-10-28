@@ -1,6 +1,6 @@
 # Community review repair dry run — 2026-10-28
 
-Status: batch approved by the user; 0.14.8 repair implemented and locally verified. Remote provenance and official review still pending.
+Status: 0.14.8 is published. Local/native acceptance, tagged GitHub provenance and the complete automated Community review have passed. The two intentional file-enumeration and clipboard-write recommendations remain documented.
 
 ## Verified starting point
 
@@ -49,7 +49,7 @@ The concrete tests/fixtures will be selected after the boundary changes are impl
 3. Inspect installation bundle for dynamic constructors and external imports; exercise real PDF extraction with dynamic generation unavailable.
 4. Verify settings and reading behavior in an isolated synthetic vault if the application is available. Do not alter the personal installation.
 5. Before claiming the release/provenance item fixed, execute and verify the workflow against published or candidate assets and compare SHA-256 values.
-6. Keep official Community review acceptance separate from local checks; the currently visible results are incomplete.
+6. Keep official Community review acceptance separate from local checks; wait for the exact release scan to complete before recording acceptance.
 
 ## Implementation and current verification
 
@@ -59,7 +59,7 @@ The concrete tests/fixtures will be selected after the boundary changes are impl
 - Native Obsidian 1.14.5 in `/private/tmp/reader-community-0148-qa`: plugin 0.14.8 loaded; existing four-tab settings editor rendered; global search for Bookshelf folder found the plugin settings; configured Books folder was visible; synthetic saved annotation and unsent draft survived; Markdown export was created with the annotation and source links; the scoped shelf opened its synthetic EPUB successfully.
 - The personal vault installation has not been modified. The test vault contains synthetic fixtures only.
 - Necessary file enumeration and clipboard-write behavior notices are retained and documented rather than concealed.
-- GitHub workflow proof, official preview scan and publication remain to be verified.
+- Tagged GitHub provenance, the exact-source official preview, publication and complete official release scan are verified below.
 
 ### PDF native-view acceptance follow-up
 
@@ -71,4 +71,22 @@ The user explicitly approved uploading to `https://github.com/TreyDong/banana-re
 
 ### Official preview reconciliation
 
-The official preview of `55e8913` completed with one remaining source warning: an unnecessary type assertion on the bound modal-close callback (`src/main.ts:1198`). The local compiler had inferred that bind result as `any` because strictBindCallApply was unset. Enable TypeScript's strictBindCallApply and remove the assertion, so both local and official checks use the real callback type without suppression. A second exact-source preview is required before release.
+The official preview of `55e8913` completed with one remaining source warning: an unnecessary type assertion on the bound modal-close callback (`src/main.ts:1198`). The local compiler had inferred that bind result as `any` because strictBindCallApply was unset. The final repair enables strictBindCallApply and removes the assertion. The exact-source preview of `5ab337b6dd4036d5f7d1b17b212ae536b92bfd96` completed without source or CSS warnings before publication.
+
+### Publication and complete automated review acceptance — 2026-10-28
+
+- Stable release: https://github.com/TreyDong/banana-reader/releases/tag/0.14.8 . GitHub confirms neither draft nor prerelease, with all three installation files uploaded.
+- The existing tag remains fixed at `5ab337b6dd4036d5f7d1b17b212ae536b92bfd96`; it was not recreated or moved.
+- Tagged build and provenance run: https://github.com/TreyDong/banana-reader/actions/runs/40651963627 . The run succeeded, including the full check suite and individual attestations for all three installation files.
+- Released files were downloaded again and compared byte-for-byte with the tagged CI artifact. Cryptographic verification for each downloaded file binds the exact workflow, `refs/tags/0.14.8` and final source digest.
+- PR https://github.com/TreyDong/banana-reader/pull/1 was merged into `main` as `92e7374f77bd2957bf8f742d6d949a8cb173b39d`, preserving the earlier restoration documentation. The default-branch manifest now identifies 0.14.8. This synchronization was required because the official release-check endpoint reads that manifest rather than just the newest GitHub release.
+- At https://community.obsidian.md/account/plugins/gloss-reader, the complete 0.14.8 scan for `5ab337b` shows **Completed** and Current release **0.14.8**. No source or CSS warnings remain. GitHub attestations for main.js/styles.css pass; dependency and obfuscation checks pass. Dynamic Code Execution and Missing Artifact Attestations findings are gone.
+- Official Build Verification passes: the release main.js was reproduced byte-for-byte. This is automated review acceptance; it is not a claim of manual Obsidian staff review.
+- The only remaining recommendations are Vault Enumeration and Clipboard Access, reflecting the retained document picker and explicit copy actions. Clipboard contents are never read. Scoped shelves begin at the configured folder and exclude protected subtrees.
+- The verified three-file ZIP is `/private/tmp/reader-0.14.8-verified.zip`. The personal-vault plugin and original development checkout were not replaced or modified during this work.
+
+| Released asset | SHA-256 |
+| --- | --- |
+| main.js | `2aba629df43587244c1c78af3a8633bebac82cca180acdff505648bf57c0e979` |
+| manifest.json | `12473d6df8c0b4a7476001f58cdc89a79bdf479a0d3dffe57a4090375f565a7f` |
+| styles.css | `9bf49657020d8dc2bdbfbabf6ba23d60f0557faa3bcc2c7f4d555ad25db676d0` |
