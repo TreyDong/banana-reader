@@ -8,7 +8,7 @@ export function translationPayload(payload:unknown):{text:string;source:string}{
 }
 function language(code:string){return /^zh-(TW|HK|Hant)$/i.test(code)?'zh-tw':code.toLowerCase().split(/[-_]/)[0];}
 async function cancellable<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
- if(signal.aborted)throw new Error('已停止');let abort:()=>void=()=>{};let timer:ReturnType<typeof setTimeout>|undefined;try{return await Promise.race([work,new Promise<T>((_,reject)=>{timer=setTimeout(()=>reject(new Error('谷歌翻译请求超时。')),25000);abort=()=>reject(new Error('已停止'));signal.addEventListener('abort',abort,{once:true});})]);}finally{clearTimeout(timer);signal.removeEventListener('abort',abort);}
+ if(signal.aborted)throw new Error('已停止');let abort:()=>void=()=>{};let timer:number|undefined;try{return await Promise.race([work,new Promise<T>((_,reject)=>{timer=window.setTimeout(()=>reject(new Error('谷歌翻译请求超时。')),25000);abort=()=>reject(new Error('已停止'));signal.addEventListener('abort',abort,{once:true});})]);}finally{window.clearTimeout(timer);signal.removeEventListener('abort',abort);}
 }
 /** Only the explicit selection is sent. One detected target applies to all chunks. */
 export async function googleTranslate(text:string,target:string,signal:AbortSignal,request:GoogleRequest):Promise<{text:string;target:string}>{

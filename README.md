@@ -1,6 +1,6 @@
 # Banana Reader
 
-Version **0.14.7** adds a Z-Library book source (search inside the plugin, download into the vault) and a bookshelf view of cloth spines on wooden planks. English, Simplified Chinese and following Obsidian are supported.
+Version **0.14.8** adds a Z-Library book source (search inside the plugin, download into the vault) and a bookshelf view of cloth spines on wooden planks. English, Simplified Chinese and following Obsidian are supported.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
@@ -81,6 +81,8 @@ Build with `npm ci` and `npm run build`; run the official source checks with `np
 Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SIL OFL. fflate: MIT. Full [third-party notices](THIRD_PARTY_NOTICES.md) are embedded in the installation package. Early interaction references include Gloss and Qiaomu Reader; the third-party notices retain the source-reference disclosures.
 
 ## Repository changes
+
+- 2026-10-28 · 0.14.8 candidate: Repair the 0.14.7 Community source warnings, remove PDF.js dynamic compilation from the installation bundle, preserve popout-window ownership, add searchable settings, and verify/attest all three installation files. Clipboard copying and user-opened file selection remain intentional capabilities. Community review and publication status are tracked in `notes/community-review-repair-plan.md`.
 
 - 2026-10-28 · 0.14.7: Restore the existing `gloss-reader` community identity and the Banana Reader display name. Preserve stored records, both note-link protocols and all current reading features. Refuse simultaneous activation with `banana-reader`. The community package remains desktop-only; mobile acceptance is pending.
 

@@ -421,7 +421,7 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gr-spine-bands.is-top{top:18px;}
 .gr-spine-bands.is-bottom{bottom:34px;}
 .gr-shelf-book[data-v="bands"] .gr-spine-wrap{padding-bottom:38px;}
-.gr-spine-ribbon{position:absolute;top:-13px;right:26%;width:8px;height:var(--rh,16px);background:#bf3f2b;clip-path:polygon(0 0,100% 0,100% 100%,0 100%);box-shadow:inset -1px 0 0 rgb(0 0 0/.15);z-index:2;}
+.gr-spine-ribbon{position:absolute;top:-13px;right:26%;width:8px;height:var(--rh,16px);background:#bf3f2b;box-shadow:inset -1px 0 0 rgb(0 0 0/.15);z-index:2;}
 @keyframes gr-book-drop{from{opacity:0;transform:translateY(-40px);}}
 .gr-shelf-book.is-lean{animation-name:gr-book-drop-lean;}
 @keyframes gr-book-drop-lean{from{opacity:0;transform:rotate(-6deg) translateY(-40px);}}

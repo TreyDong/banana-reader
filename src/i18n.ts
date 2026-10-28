@@ -598,8 +598,9 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "最多保留8条指令。": "Up to eight commands are allowed."
 };
 export function translate(locale:UiLanguage,message:string,...values:unknown[]):string{
+ const display=(value:unknown)=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?String(value):value===null?'null':value===undefined?'undefined':'';
  const template=locale==='en'?(ENGLISH[message]??message):message;
- return template.replace(/\{(\d+)\}/g,(placeholder,index)=>Number(index)<values.length?String(values[Number(index)]):placeholder);
+ return template.replace(/\{(\d+)\}/g,(placeholder,index)=>Number(index)<values.length?display(values[Number(index)]):placeholder);
 }
 export function t(message:string,...values:unknown[]){return translate(language,message,...values);}
 

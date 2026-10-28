@@ -1,5 +1,11 @@
 import type {ContextInfo} from './rag';
 import type {ReadingBrief} from './brief';
+/** Narrow external JSON before reading fields; arrays never leak `any` into callers. */
+export function objectValue(value:unknown):Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+export function arrayValue(value:unknown):unknown[]{return Array.isArray(value)?value:[];}
+export function stringValue(value:unknown):string{return typeof value==='string'?value:'';}
+/** Obsidian installs its DOM helpers on every window, including popouts. */
+export function documentWindow(doc:Document):typeof window{return doc.win as typeof window;}
 export interface Anchor { pdfPage?:number;pdfOffset?:number;quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { source?:string;text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
@@ -79,7 +85,7 @@ export function exportReading(path: string, data: Reading, vault: string): strin
     md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     if(t.contextInfo)md+='上下文：'+t.contextInfo.label+(t.contextInfo.embeddingModel?' · Embedding：'+t.contextInfo.embeddingModel:'')+'\n\n';
     if(t.contextInfo?.embeddingModel){md+='### 检索来源\n\n';for(const [id,anchor]of Object.entries(t.citations||{})){const label=anchor.pdfPage?'PDF 第 '+anchor.pdfPage+' 页':t.contextInfo.sources.find(s=>s.id===id)?.label||'原文片段';md+='- [¶'+id+'] ['+label+']('+back(t.id)+'&citation='+encodeURIComponent(id)+')\n';}md+='\n';}
-    for (const m of t.messages){md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;if(m.web?.sources.length){md+='网络来源（'+(m.web.provider||'网页')+' 搜索摘要）：\n\n';for(const source of m.web.sources)md+='- ['+source.title.replace(/[\[\]\n]/g,' ')+'](<'+source.url+'>)\n';md+='\n';}}
+    for (const m of t.messages){md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;if(m.web?.sources.length){md+='网络来源（'+(m.web.provider||'网页')+' 搜索摘要）：\n\n';for(const source of m.web.sources)md+='- ['+source.title.replace(/[[\]\n]/g,' ')+'](<'+source.url+'>)\n';md+='\n';}}
   }
   return md;
 }
@@ -88,7 +94,7 @@ export function referenceTokens(text:string):{start:number;end:number;ids:string
   const tokens:{start:number;end:number;ids:string[]}[]=[];
   for(const match of text.matchAll(/\[¶\d+(?:\s*(?:[–—-]\s*¶?\d+|[,，、]\s*¶?\d+))*\]/g)){
     const ids:string[]=[];for(const part of match[0].matchAll(/¶?(\d+)(?:\s*[–—-]\s*¶?(\d+))?/g)){const first=Number(part[1]),last=Number(part[2]||part[1]);if(first<1||last<first||last-first>100)continue;for(let n=first;n<=last;n++)ids.push(String(n));}
-    if(ids.length){const previous=tokens.at(-1);if(previous&&/^\s*$/.test(text.slice(previous.end,match.index!))){previous.end=match.index!+match[0].length;previous.ids=[...new Set([...previous.ids,...ids])];}else tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});}
+    if(ids.length){const previous=tokens.at(-1);if(previous&&/^\s*$/.test(text.slice(previous.end,match.index))){previous.end=match.index+match[0].length;previous.ids=[...new Set([...previous.ids,...ids])];}else tokens.push({start:match.index,end:match.index+match[0].length,ids:[...new Set(ids)]});}
   }return tokens;
 }
 
