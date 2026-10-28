@@ -23,7 +23,7 @@ export class ZlibSessionError extends Error{constructor(){super('Z-Library 登�
 export class ZlibApiError extends Error{}
 /** No usable JSON envelope came back: blocked by bot protection, gateway failure or unreachable mirror. */
 export class ZlibMirrorError extends Error{constructor(){super('Z-Library 镜像无法访问或返回异常。');}}
-const str=(value:unknown):string=>value==null||typeof value==='object'?'':String(value);
+const str=(value:unknown):string=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?String(value):'';
 const envelopeError=(body:unknown,fallback:string):string=>{const error=(body as {error?:unknown} | undefined)?.error;return typeof error==='string'&&error.trim()?error.trim():fallback;};
 
 /** Accepts bare HTTPS origins only: no path, query, hash or embedded credentials. */
@@ -36,7 +36,7 @@ export function normalizeZlibDomain(value:string):string|null{
 
 /** A filename may come from server-controlled headers or metadata: never trust it as a path. */
 export function sanitizeZlibFilename(name:string):string{
- let base=(name||'').replace(/[\\/]/g,' ').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e]/g,'').replace(/[<>:"|?*]/g,'_').replace(/^[.\s]+/,'').replace(/[.\s]+$/,'').replace(/\s+/g,' ').trim();
+ let base=(name||'').replace(/[\\/]/g,' ').split('').filter(char=>{const n=char.charCodeAt(0);return !(n<=8||n>=11&&n<=31||n>=127&&n<=159||n===0x200e||n===0x200f||n>=0x202a&&n<=0x202e);}).join('').replace(/[<>:"|?*]/g,'_').replace(/^[.\s]+/,'').replace(/[.\s]+$/,'').replace(/\s+/g,' ').trim();
  return base||'download';
 }
 
@@ -150,15 +150,15 @@ export function parseMirrorList(value:string):string[]{
 export interface ZlibProbe{domain:string;ok:boolean;ms:number;error?:string}
 /** Cheap unauthenticated health check against /eapi/info/domains with an abandon-after timeout. */
 export async function probeMirror(domain:string,fetcher:ZlibFetcher,timeoutMs=8000):Promise<ZlibProbe>{
- const started=Date.now();let timer:ReturnType<typeof setTimeout>|undefined;
+ const started=Date.now();let timer:number|undefined;
  try{
   const response=await Promise.race([
    fetcher(domain+'/eapi/info/domains',{method:'GET',headers:{'Accept':'application/json','User-Agent':'BananaReader'}}),
-   new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('超时')),timeoutMs);})]);
+   new Promise<never>((_,reject)=>{timer=window.setTimeout(()=>reject(new Error('超时')),timeoutMs);})]);
   const envelope=await Promise.resolve(response.json).catch(()=>undefined) as {success?:unknown}|undefined;
   if(!envelope||typeof envelope.success==='undefined')return{domain,ok:false,ms:Date.now()-started,error:'响应异常'};
   return{domain,ok:envelope.success===1,ms:Date.now()-started,error:envelope.success===1?undefined:'被拒绝'};
- }catch(error){return{domain,ok:false,ms:Date.now()-started,error:error instanceof Error?error.message:'网络错误'};}finally{clearTimeout(timer);}
+ }catch(error){return{domain,ok:false,ms:Date.now()-started,error:error instanceof Error?error.message:'网络错误'};}finally{window.clearTimeout(timer);}
 }
 
 /** Runs op against the active mirror and fails over down the list on mirror-level failures only. */

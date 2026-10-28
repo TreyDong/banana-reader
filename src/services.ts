@@ -11,7 +11,7 @@ export function serviceChoices(setup:ModelSetup,type:ModelType='chat'){return se
 /** A phone may inherit API assignments once, but never writes the desktop routes. */
 export function deviceAssignments(setup:ModelSetup,mobile=false):Record<string,ModelRef|null>{
  if(!mobile)return setup.taskModels;
- if(!setup.mobileTaskModels){setup.mobileTaskModels={};for(const [task,ref]of Object.entries(setup.taskModels)){const service=setup.services.find(s=>s.id===ref?.serviceId);if(service?.kind==='api'&&validRef(setup,ref,task==='embedding'?'embedding':'chat'))setup.mobileTaskModels[task]={...ref!};}}
+ if(!setup.mobileTaskModels){setup.mobileTaskModels={};for(const [task,ref]of Object.entries(setup.taskModels)){const service=setup.services.find(s=>s.id===ref?.serviceId);if(service?.kind==='api'&&validRef(setup,ref,task==='embedding'?'embedding':'chat'))setup.mobileTaskModels[task]={...ref};}}
  return setup.mobileTaskModels;
 }
 export function setupForDevice(setup:ModelSetup,mobile=false):ModelSetup{return{services:mobile?setup.services.filter(s=>s.kind==='api'):setup.services,taskModels:deviceAssignments(setup,mobile)};}
@@ -19,7 +19,7 @@ export function validRef(setup:ModelSetup,ref:ModelRef|null|undefined,type:Model
 export function resolveModel(setup:ModelSetup,task='default',override?:ModelRef):{service:ModelService;model:ModelOption}{
  const ref=override||setup.taskModels[task]||setup.taskModels.default;if(!ref)throw new Error('请先在设置中分配默认问答模型。');const service=setup.services.find(s=>s.id===ref.serviceId),model=service?.models.find(m=>m.id===ref.modelId);if(!service||!model)throw new Error('所选模型已移除，请重新分配模型。');if(model.type==='embedding')throw new Error('嵌入模型不能用于聊天，请重新选择问答模型。');return{service,model};
 }
-export function resolveEmbeddingModel(setup:ModelSetup):{service:ModelService;model:ModelOption}{const ref=setup.taskModels.embedding;if(!validRef(setup,ref,'embedding'))throw new Error('请在设置 → 模型服务 → 嵌入中选择嵌入模型。');const service=setup.services.find(s=>s.id===ref.serviceId)!;return{service,model:service.models.find(m=>m.id===ref.modelId)!};}
+export function resolveEmbeddingModel(setup:ModelSetup):{service:ModelService;model:ModelOption}{const ref=setup.taskModels.embedding;if(!validRef(setup,ref,'embedding'))throw new Error('请在设置 → 模型服务 → 嵌入中选择嵌入模型。');const service=setup.services.find(s=>s.id===ref.serviceId);return{service,model:service.models.find(m=>m.id===ref.modelId)};}
 export function setModelType(setup:ModelSetup,service:ModelService,model:ModelOption,type:ModelType){if(type==='embedding'&&!supportsEmbedding(service))throw new Error('嵌入类型需要 OpenAI 兼容 API 服务。');model.type=type;pruneAssignments(setup);}
 /** Preserve legacy endpoint/credential separation unless the caller confirms a shared service uses the same key. */
 export function migrateEmbeddingModel(setup:ModelSetup,legacy:{base?:string;model?:string},reuse:(service:ModelService)=>boolean=()=>true):{service:ModelService;created:boolean}|null{
@@ -35,7 +35,7 @@ export function pruneAssignments(setup:ModelSetup){
 }
 export function migrateSetup(legacy:AgentSettings&{services?:ModelService[];taskModels?:Record<string,ModelRef|null>;mobileTaskModels?:Record<string,ModelRef|null>;modelLists?:Record<string,ModelOption[]>;apiProfiles?:Record<string,{base:string;model:string}>}):ModelSetup{
   if(Array.isArray(legacy.services)){
-    const seen=new Set<string>();const services=legacy.services.filter(s=>s&&typeof s.id==='string'&&/^[a-z0-9-]+$/.test(s.id)&&!seen.has(s.id)&&!!SERVICE_NAMES[s.kind]&&(seen.add(s.id),true)).map(s=>({...s,name:s.name?.trim().slice(0,80)||SERVICE_NAMES[s.kind],path:s.path||'',protocol:API_DEFAULTS[s.protocol]?s.protocol:'openai' as ApiProtocol,base:s.base||API_DEFAULTS.openai,models:normalizeModels(s.models)}));
+    const seen=new Set<string>();const services=legacy.services.filter(s=>s&&typeof s.id==='string'&&/^[a-z0-9-]+$/.test(s.id)&&!seen.has(s.id)&&!!SERVICE_NAMES[s.kind]&&(seen.add(s.id),true)).map(s=>({...s,name:s.name?.trim().slice(0,80)||SERVICE_NAMES[s.kind],path:s.path||'',protocol:API_DEFAULTS[s.protocol]?s.protocol:'openai',base:s.base||API_DEFAULTS.openai,models:normalizeModels(s.models)}));
     return{services,taskModels:{...(legacy.taskModels||{})},...(legacy.mobileTaskModels&&typeof legacy.mobileTaskModels==='object'&&!Array.isArray(legacy.mobileTaskModels)?{mobileTaskModels:{...legacy.mobileTaskModels}}:{})};
   }
   const services:ModelService[]=[];

@@ -1,5 +1,5 @@
 import {desktopModule,hasMobileTransport,mobileRequest} from './agent';
-import {makeAnchor,blockedPath,referenceTokens,type Anchor,type Thread} from './core';
+import {objectValue,arrayValue,makeAnchor,blockedPath,referenceTokens,type Anchor,type Thread} from './core';
 
 export interface EmbeddingSettings {base:string;model:string;dimensions:number;topK:number}
 export const EMBEDDING_DEFAULTS:EmbeddingSettings={base:'https://api.openai.com/v1',model:'',dimensions:0,topK:6};
@@ -26,24 +26,31 @@ export function hash(value:string):string{
 }
 export function embeddingEndpoint(base:string){let url:URL;try{url=new URL(base.trim().replace(/\/+$/,'')+'/embeddings');}catch{throw new Error('Embedding API 地址无效。');}if(url.username||url.password||url.search||url.hash||!['http:','https:'].includes(url.protocol)||url.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Embedding 地址须使用 HTTPS；本机服务可使用 HTTP。');return url;}
 export function embeddingIdentity(s:EmbeddingSettings){return hash(JSON.stringify([embeddingEndpoint(s.base).href,s.model.trim(),s.dimensions||0]));}
-export function normalizeEmbedding(s:Partial<EmbeddingSettings>|undefined):EmbeddingSettings{return{base:typeof s?.base==='string'?s.base:EMBEDDING_DEFAULTS.base,model:typeof s?.model==='string'?s.model:'',dimensions:Number.isInteger(s?.dimensions)&&s!.dimensions!>=0&&s!.dimensions!<=8192?s!.dimensions!:0,topK:Number.isInteger(s?.topK)&&s!.topK!>=2&&s!.topK!<=12?s!.topK!:6};}
+export function normalizeEmbedding(s:Partial<EmbeddingSettings>|undefined):EmbeddingSettings{return{base:typeof s?.base==='string'?s.base:EMBEDDING_DEFAULTS.base,model:typeof s?.model==='string'?s.model:'',dimensions:Number.isInteger(s?.dimensions)&&s.dimensions>=0&&s.dimensions<=8192?s.dimensions:0,topK:Number.isInteger(s?.topK)&&s.topK>=2&&s.topK<=12?s.topK:6};}
 function check(signal:AbortSignal){if(signal.aborted)throw new Error('已停止');}
-export function unitVector(value:unknown,dimensions?:number):number[]{if(!Array.isArray(value)||!value.length||value.length>8192||dimensions&&value.length!==dimensions||value.some(n=>typeof n!=='number'||!Number.isFinite(n)))throw new Error('Embedding 返回的向量维度或数值无效。');const norm=Math.sqrt(value.reduce((s,n)=>s+n*n,0));if(!Number.isFinite(norm)||norm===0)throw new Error('Embedding 返回了无效的零向量。');return value.map(n=>n/norm);}
+export function unitVector(value:unknown,dimensions?:number):number[]{
+ const numbers=arrayValue(value);if(!numbers.length||numbers.length>8192||dimensions&&numbers.length!==dimensions||!numbers.every((n):n is number=>typeof n==='number'&&Number.isFinite(n)))throw new Error('Embedding 返回的向量维度或数值无效。');
+ const norm=Math.sqrt(numbers.reduce((sum,n)=>sum+n*n,0));if(!Number.isFinite(norm)||norm===0)throw new Error('Embedding 返回了无效的零向量。');return numbers.map(n=>n/norm);
+}
+function embeddingResponse(value:unknown,length:number,dimensions:number):{vectors:number[][];inputTokens?:number}{
+ const data=objectValue(value),items=arrayValue(data.data);if(items.length!==length)throw new Error();
+ const vectors:(number[]|undefined)[]=new Array<number[]|undefined>(length).fill(undefined);
+ for(const raw of items){const item=objectValue(raw),index=item.index;if(typeof index!=='number'||!Number.isInteger(index)||index<0||index>=length||vectors[index])throw new Error();vectors[index]=unitVector(item.embedding,dimensions||vectors.find(Boolean)?.length);}
+ if(vectors.some(vector=>!vector))throw new Error();const reported=objectValue(data.usage).prompt_tokens;
+ return{vectors:vectors,inputTokens:typeof reported==='number'&&Number.isSafeInteger(reported)&&reported>=0?reported:undefined};
+}
 export async function embedTexts(settings:EmbeddingSettings,key:string,input:string[],signal:AbortSignal):Promise<{vectors:number[][];inputTokens?:number}>{
  check(signal);const model=settings.model.trim();if(!model||model.length>200||/[\r\n]/.test(model))throw new Error('请先配置 Embedding 模型。');if(!input.length||input.length>32||input.some(t=>!t.trim()||t.length>4000))throw new Error('Embedding 输入超过单批限制。');
  const url=embeddingEndpoint(settings.base),body={model,input,encoding_format:'float',...(settings.dimensions?{dimensions:settings.dimensions}:{})};
  if(hasMobileTransport()){
   const raw=await mobileRequest({url:url.href,method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(key?{Authorization:'Bearer '+key}:{})},body:JSON.stringify(body)},signal);
-  try{
-   const value=JSON.parse(raw);if(!Array.isArray(value.data)||value.data.length!==input.length)throw new Error();
-   const vectors:number[][]=new Array(input.length);for(const item of value.data){if(!Number.isInteger(item.index)||item.index<0||item.index>=input.length||vectors[item.index])throw new Error();vectors[item.index]=unitVector(item.embedding,settings.dimensions||vectors.find(Boolean)?.length);}
-   if(vectors.filter(Boolean).length!==input.length)throw new Error();const reported=value.usage?.prompt_tokens;return{vectors,inputTokens:Number.isInteger(reported)&&reported>=0?reported:undefined};
+  try{return embeddingResponse(JSON.parse(raw),input.length,settings.dimensions);
   }catch{throw new Error('Embedding 返回格式或向量维度无效，请检查兼容接口。');}
  }
- const https=desktopModule('node:https') as typeof import('node:https'),http=desktopModule('node:http') as typeof import('node:http');
- return new Promise((resolve,reject)=>{let done=false,data='';const finish=(err?:Error,result?:{vectors:number[][];inputTokens?:number})=>{if(done)return;done=true;clearTimeout(timer);signal.removeEventListener('abort',abort);if(err){req.destroy();reject(err);}else resolve(result!);};const abort=()=>finish(new Error('已停止'));const req=(url.protocol==='https:'?https:http).request(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(key?{Authorization:'Bearer '+key}:{})}},res=>{
-  if(res.statusCode!==200){res.resume();finish(new Error('Embedding 服务返回 HTTP '+res.statusCode+'，请检查地址、模型和额度。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{data+=chunk;if(data.length>16000000)finish(new Error('Embedding 返回数据过大。'));});res.on('error',()=>finish(new Error('Embedding 连接中断。')));res.on('aborted',()=>finish(new Error('Embedding 连接中断。')));res.on('end',()=>{if(done)return;try{const value=JSON.parse(data);if(!Array.isArray(value.data)||value.data.length!==input.length)throw new Error();const vectors:number[][]=new Array(input.length);for(const item of value.data){if(!Number.isInteger(item.index)||item.index<0||item.index>=input.length||vectors[item.index])throw new Error();vectors[item.index]=unitVector(item.embedding,settings.dimensions||vectors.find(Boolean)?.length);}if(vectors.some(v=>!v))throw new Error();const reported=value.usage?.prompt_tokens;finish(undefined,{vectors,inputTokens:Number.isInteger(reported)&&reported>=0?reported:undefined});}catch{finish(new Error('Embedding 返回格式或向量维度无效，请检查兼容接口。'));}});
- });const timer=setTimeout(()=>finish(new Error('Embedding 请求超时。')),60000);req.on('error',()=>finish(new Error('无法连接 Embedding 服务，请检查配置。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end(JSON.stringify(body));});
+ const https=desktopModule('node:https'),http=desktopModule('node:http');
+ return new Promise((resolve,reject)=>{let done=false,data='';const finish=(err?:Error,result?:{vectors:number[][];inputTokens?:number})=>{if(done)return;done=true;window.clearTimeout(timer);signal.removeEventListener('abort',abort);if(err){req.destroy();reject(err);}else resolve(result);};const abort=()=>finish(new Error('已停止'));const req=(url.protocol==='https:'?https:http).request(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(key?{Authorization:'Bearer '+key}:{})}},res=>{
+  if(res.statusCode!==200){res.resume();finish(new Error('Embedding 服务返回 HTTP '+res.statusCode+'，请检查地址、模型和额度。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{data+=chunk;if(data.length>16000000)finish(new Error('Embedding 返回数据过大。'));});res.on('error',()=>finish(new Error('Embedding 连接中断。')));res.on('aborted',()=>finish(new Error('Embedding 连接中断。')));res.on('end',()=>{if(done)return;try{finish(undefined,embeddingResponse(JSON.parse(data),input.length,settings.dimensions));}catch{finish(new Error('Embedding 返回格式或向量维度无效，请检查兼容接口。'));}});
+ });const timer=window.setTimeout(()=>finish(new Error('Embedding 请求超时。')),60000);req.on('error',()=>finish(new Error('无法连接 Embedding 服务，请检查配置。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end(JSON.stringify(body));});
 }
 /** Chunks never cross page/chapter boundaries; anchors refer to the unchanged source. */
 export function chunkSections(sections:SourceSection[],size=1000,overlap=120):BookChunk[]{
@@ -58,11 +65,11 @@ export async function createBookIndex(stamp:BookStamp,sections:SourceSection[],s
  check(signal);return{version:1,stamp:{...stamp},identity,created:Date.now(),model:settings.model,dimensions,chunks,skippedPages,inputTokens:tokens};
 }
 export function usableIndex(index:BookIndex,stamp:BookStamp,settings:EmbeddingSettings){return index.version===1&&index.stamp.path===stamp.path&&index.stamp.mtime===stamp.mtime&&index.stamp.size===stamp.size&&index.identity===embeddingIdentity(settings);}
-function terms(text:string){const clean=text.toLowerCase(),words=clean.match(/[a-z0-9_]{2,}|[\u3400-\u9fff]+/g)||[];return [...new Set(words.flatMap(w=>/^[\u3400-\u9fff]+$/.test(w)?(w.length===1?[w]:Array.from({length:w.length-1},(_,i)=>w.slice(i,i+2))):[w]))];}
+function terms(text:string){const clean=text.toLowerCase(),words:string[]=clean.match(/[a-z0-9_]{2,}|[\u3400-\u9fff]+/g)||[];return [...new Set(words.flatMap(w=>/^[\u3400-\u9fff]+$/.test(w)?(w.length===1?[w]:Array.from({length:w.length-1},(_,i)=>w.slice(i,i+2))):[w]))];}
 /** Reciprocal rank fusion of lexical and vector ranks; suppress overlapping copies. */
 export function retrieve(index:BookIndex,query:string,vector:number[],topK:number){
  const q=unitVector(vector,index.dimensions),tokens=terms(query).slice(0,128),n=index.chunks.length,docs=index.chunks.map(c=>new Set(terms(c.text))),df=new Map(tokens.map(t=>[t,docs.filter(d=>d.has(t)).length]));
- const semantic=index.chunks.map((c,i)=>({i,score:c.vector!.reduce((sum,v,j)=>sum+v*q[j],0)})).sort((a,b)=>b.score-a.score),lexical=index.chunks.map((c,i)=>({i,score:tokens.reduce((s,t)=>s+(docs[i].has(t)?Math.log(1+(n-(df.get(t)||0)+.5)/((df.get(t)||0)+.5)):0),0)})).filter(r=>r.score>0).sort((a,b)=>b.score-a.score),scores=new Map<number,number>();
+ const semantic=index.chunks.map((c,i)=>({i,score:c.vector.reduce((sum,v,j)=>sum+v*q[j],0)})).sort((a,b)=>b.score-a.score),lexical=index.chunks.map((c,i)=>({i,score:tokens.reduce((s,t)=>s+(docs[i].has(t)?Math.log(1+(n-(df.get(t)||0)+.5)/((df.get(t)||0)+.5)):0),0)})).filter(r=>r.score>0).sort((a,b)=>b.score-a.score),scores=new Map<number,number>();
  for(const ranked of [semantic,lexical])ranked.forEach((r,rank)=>scores.set(r.i,(scores.get(r.i)||0)+1/(60+rank+1)));
  const hits:BookChunk[]=[];for(const [i]of [...scores].sort((a,b)=>b[1]-a[1])){const c=index.chunks[i];if(hits.some(h=>h.label===c.label&&Math.abs(h.anchor.start-c.anchor.start)<Math.min(h.text.length,c.text.length)*.65))continue;hits.push(c);if(hits.length>=topK)break;}return hits;
 }
@@ -85,8 +92,8 @@ export interface IndexStorage {
 }
 /** The plugin injects Vault.adapter; the Node fallback is only for standalone desktop callers. */
 function nodeIndexStorage():IndexStorage{
- const fs=desktopModule('node:fs').promises as typeof import('node:fs').promises;
- return{exists:async path=>{try{await fs.stat(path);return true;}catch(error:any){if(error?.code==='ENOENT')return false;throw error;}},stat:path=>fs.stat(path),read:path=>fs.readFile(path,'utf8'),write:(path,data)=>fs.writeFile(path,data,{mode:0o600}),mkdir:path=>fs.mkdir(path,{recursive:true}),rename:(from,to)=>fs.rename(from,to),remove:path=>fs.rm(path,{force:true})};
+ const fs=desktopModule('node:fs').promises;
+ return{exists:async path=>{try{await fs.stat(path);return true;}catch(error:unknown){if(objectValue(error).code==='ENOENT')return false;throw error;}},stat:path=>fs.stat(path),read:path=>fs.readFile(path,'utf8'),write:(path,data)=>fs.writeFile(path,data,{mode:0o600}),mkdir:path=>fs.mkdir(path,{recursive:true}),rename:(from,to)=>fs.rename(from,to),remove:path=>fs.rm(path,{force:true})};
 }
 export class BookIndexCache {
  private storage:IndexStorage;

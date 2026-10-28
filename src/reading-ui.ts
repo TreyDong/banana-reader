@@ -1,3 +1,4 @@
+import {documentWindow} from './core';
 // Native DOM annotation helpers for Banana Reader.
 // Historical references and the replaced layout routine are recorded in notes/community-release-audit.md.
 import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
@@ -58,7 +59,7 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
     for(const n of nodes.reverse()) for(const s of segments.slice().reverse()) {
       const start=Math.max(n.start,s.start),end=Math.min(n.end,s.end);
       if(end<=start||(!s.highlights.length&&!s.threads.length&&!s.pending))continue;
-      const span=block.ownerDocument.createElement('span');span.dataset.glossMark='';
+      const span=documentWindow(block.ownerDocument).createSpan();span.dataset.glossMark='';
       if(s.highlights.length){span.classList.add('m-hl');span.dataset.h=s.highlights.map(h=>h.id).join(' ');const fill=s.highlights.filter(h=>markStyle(h.style)==='highlight').at(-1),line=s.highlights.filter(h=>markStyle(h.style)!=='highlight').at(-1);span.dataset.c=fill?.color||line?.color||'yellow';span.dataset.fill=String(!!fill);if(line){span.dataset.line=markStyle(line.style);span.dataset.lc=line.color||'yellow';}}
       if(s.threads.length){span.classList.add('m-gloss');span.dataset.g=s.threads.map(g=>g.id).join(' ');}
       if(s.pending)span.classList.add('m-pending');
@@ -66,7 +67,7 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
       if(active&&ids.includes(active))span.classList.add('is-active');if(fresh&&ids.includes(fresh))span.classList.add('is-new');
       const range=block.ownerDocument.createRange();range.setStart(n.node,start-n.start);range.setEnd(n.node,end-n.start);range.surroundContents(span);
       const note=s.highlights.find(h=>h.note&&h.end===end);
-      if(note){const dot=block.ownerDocument.createElement('span');dot.className='gloss-note-dot';dot.dataset.h=note.id;dot.setAttribute('aria-hidden','true');span.after(dot);}
+      if(note){const dot=documentWindow(block.ownerDocument).createSpan();dot.className='gloss-note-dot';dot.dataset.h=note.id;dot.setAttribute('aria-hidden','true');span.after(dot);}
     }
   }
 }
