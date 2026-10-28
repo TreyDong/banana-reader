@@ -68,3 +68,7 @@ Native acceptance caught an existing global-worker collision: PDF.js registers b
 After reloading only the synthetic test window, native Obsidian displayed the original PDF with page count 1/1; opening Reader reflow and then switching to Original pages both displayed the actual synthetic text. Personal-vault files were not changed. An additional lifecycle test covers native initialization and cancellation while showing the source.
 
 The user explicitly approved uploading to `https://github.com/TreyDong/banana-reader`, running provenance and official review, and publishing 0.14.8 only after verification. The earlier upload rejection performed no remote mutation.
+
+### Official preview reconciliation
+
+The official preview of `55e8913` completed with one remaining source warning: an unnecessary type assertion on the bound modal-close callback (`src/main.ts:1198`). The local compiler had inferred that bind result as `any` because strictBindCallApply was unset. Enable TypeScript's strictBindCallApply and remove the assertion, so both local and official checks use the real callback type without suppression. A second exact-source preview is required before release.
