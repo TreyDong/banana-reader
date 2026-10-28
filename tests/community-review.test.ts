@@ -4,6 +4,7 @@ import {build} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
+import {MessageChannel} from 'node:worker_threads';
 import {pdfNoEval,assertNoDynamicCode,buildPlugin} from '../scripts/build.mjs';
 import {parseApiEvent,parseClaudeLine,parseCodexLine,parsePiLine,usageFromEvent,normalizeModels} from '../src/agent';
 import {configureMobileTransport} from '../src/agent';
@@ -21,9 +22,9 @@ function pdfFixture(){
 test('the shipped PDF engine extracts real source text with dynamic code generation blocked',async()=>{
  const built=await build({entryPoints:[fileURLToPath(new URL('../src/pdf-engine.ts',import.meta.url))],bundle:true,write:false,format:'cjs',platform:'browser',target:'es2022',plugins:[pdfNoEval],logLevel:'silent'});
  const source=built.outputFiles[0].text;assertNoDynamicCode(source);
- const context:any={module:{exports:{}},exports:{},console,URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,AbortSignal,ReadableStream,structuredClone,queueMicrotask,setTimeout,clearTimeout};context.window=context;
+ const context:any={module:{exports:{}},exports:{},console,URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,AbortSignal,MessageChannel,ReadableStream,structuredClone,queueMicrotask,setTimeout,clearTimeout};context.window=context;const hostWorker={WorkerMessageHandler:{host:true}};context.pdfjsWorker=hostWorker;const hostLibrary={host:true};context.pdfjsLib=hostLibrary;
  vm.createContext(context,{codeGeneration:{strings:false,wasm:false}});vm.runInContext(source,context);
- const book=await context.module.exports.parsePdfFile(pdfFixture());assert.equal(book.kind,'pdf');assert.ok(book.sections.flatMap((s:any)=>s.blocks).some((block:any)=>block.text.includes('original source paragraph')));
+ const book=await context.module.exports.parsePdfFile(pdfFixture());assert.equal(context.pdfjsWorker,hostWorker);assert.equal(context.pdfjsLib,hostLibrary);assert.equal(book.kind,'pdf');assert.ok(book.sections.flatMap((s:any)=>s.blocks).some((block:any)=>block.text.includes('original source paragraph')));
 });
 
 test('the installation bundle rejects eval and Function constructors and retains a single host import',async()=>{

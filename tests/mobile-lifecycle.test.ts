@@ -16,6 +16,7 @@ function dom(){
   el.querySelectorAll=()=>[];el.querySelector=()=>null;el.remove=()=>el.parentNode?.removeChild(el);el.empty=()=>{while(el.firstChild)el.removeChild(el.firstChild);};
   el.addEventListener=(name:string,callback:any)=>el.listeners.set(name,callback);el.dispatch=(name:string)=>el.listeners.get(name)?.({preventDefault(){}});
   el.createEl=(tag:string,options:any={})=>{const child=prepare(doc.createElement(tag));if(options.text!==undefined)child.appendChild(doc.createTextNode(options.text));if(options.cls)child.setAttribute('class',options.cls);for(const [key,value]of Object.entries(options.attr||{}))child.setAttribute(key,value);el.appendChild(child);return child;};
+  el.append=(...nodes:any[])=>{for(const node of nodes)el.appendChild(typeof node==='string'?doc.createTextNode(node):node);};
   el.createDiv=(options:any={})=>el.createEl('div',options);el.createSpan=(options:any={})=>el.createEl('span',options);return el;
  }
  return prepare(doc.body);
@@ -65,4 +66,14 @@ test('input protection keeps composition keystrokes inside the editor while Esca
  const f=await fixture(),input=f.root.createEl('textarea'),handler=()=>input.listeners.get('keydown');f.view.protectInput(input);let stopped=0;
  handler()({key:'Process',isComposing:true,stopPropagation:()=>stopped++});handler()({key:'Enter',isComposing:true,stopPropagation:()=>stopped++});assert.equal(stopped,2);
  handler()({key:'Escape',isComposing:false,stopPropagation:()=>stopped++});assert.equal(stopped,2);
+});
+
+test('native PDF source is shown before mounting and a superseded show never moves its container',async()=>{
+ for(const superseded of [false,true]){
+  const f=await fixture(),article=f.root.createDiv(),native=f.root.createDiv(),controller=new AbortController(),events:string[]=[];f.view.article=article;
+  const source={view:{file:f.file,containerEl:native,onResize(){}},loadIfDeferred:async()=>{}};f.app.workspace.getLeavesOfType=()=>[source];
+  f.app.workspace.revealLeaf=async(leaf:any)=>{events.push(leaf===source?'source':'reader');if(leaf===source){assert.equal(native.parentNode,f.root);if(superseded)f.view.article=f.root.createDiv();}};
+  if(superseded){await assert.rejects(f.view.mountPdfSource(f.file,controller.signal),/已取消打开 PDF/);assert.equal(native.parentNode,f.root);assert.equal(f.view.pdfSource,undefined);}
+  else{await f.view.mountPdfSource(f.file,controller.signal);assert.equal(native.parentNode,article);assert.deepEqual(events,['source','reader']);}
+ }
 });

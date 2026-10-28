@@ -54,9 +54,17 @@ The concrete tests/fixtures will be selected after the boundary changes are impl
 ## Implementation and current verification
 
 - Local strict recommended ESLint: zero errors and zero warnings. Recommended severities are no longer downgraded; warnings block the release. Manifest/package/lockfile/version metadata receive explicit validation.
-- 196 regression tests passed (188 existing plus eight targeted cases), including real PDF extraction with dynamic string/wasm generation prohibited, final-bundle syntax inspection, malformed provider payloads, complete embedding vectors, settings search, composition events and scoped shelf enumeration.
+- 197 regression tests passed (188 existing plus nine targeted cases), including real PDF extraction with dynamic string/wasm generation prohibited, final-bundle syntax inspection, malformed provider payloads, complete embedding vectors, settings search, composition events and scoped shelf enumeration.
 - TypeScript and the complete 0.14.8 installation build passed. Dynamic PDF code constructors are removed by a pinned, structure-checked build transform; the dependency installation itself remains untouched.
 - Native Obsidian 1.14.5 in `/private/tmp/reader-community-0148-qa`: plugin 0.14.8 loaded; existing four-tab settings editor rendered; global search for Bookshelf folder found the plugin settings; configured Books folder was visible; synthetic saved annotation and unsent draft survived; Markdown export was created with the annotation and source links; the scoped shelf opened its synthetic EPUB successfully.
 - The personal vault installation has not been modified. The test vault contains synthetic fixtures only.
 - Necessary file enumeration and clipboard-write behavior notices are retained and documented rather than concealed.
 - GitHub workflow proof, official preview scan and publication remain to be verified.
+
+### PDF native-view acceptance follow-up
+
+Native acceptance caught an existing global-worker collision: PDF.js registers both `pdfjsLib` and `pdfjsWorker` globally when its modules load, which can replace the host viewer's worker version. The build now removes both registrations with exact structure checks. Text extraction uses a dedicated MessageChannel and disposes its task, worker and ports. The protected VM test supplies host library/worker sentinels and verifies their identity remains unchanged. Native PDF mounting also reveals the source leaf before moving it and resizes it in the reader window, with cancellation checked again after reveal.
+
+After reloading only the synthetic test window, native Obsidian displayed the original PDF with page count 1/1; opening Reader reflow and then switching to Original pages both displayed the actual synthetic text. Personal-vault files were not changed. An additional lifecycle test covers native initialization and cancellation while showing the source.
+
+The user explicitly approved uploading to `https://github.com/TreyDong/banana-reader`, running provenance and official review, and publishing 0.14.8 only after verification. The earlier upload rejection performed no remote mutation.

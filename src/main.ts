@@ -738,7 +738,21 @@ class GlossView extends ItemView {
   }
   private async mountPdfSource(file:TFile,signal:AbortSignal){
     const article=this.article;
-    let leaf=this.app.workspace.getLeavesOfType('pdf').find(l=>(l.view as FileView).file?.path===file.path);if(!leaf){leaf=this.app.workspace.getLeaf('tab');await leaf.openFile(file,{active:false});}await leaf.loadIfDeferred();if(signal.aborted||this.article!==article)throw new Error('已取消打开 PDF。');const container=leaf.view.containerEl,parent=container.parentNode;if(!parent)throw new Error('PDF 原生视图尚未就绪。');const placeholder=container.ownerDocument.createComment(ui("沉浸阅读 PDF 视图原位置"));parent.insertBefore(placeholder,container);this.pdfSource={leaf,container,placeholder};container.classList.add('gloss-native-pdf');this.article.append(container);await this.app.workspace.revealLeaf(this.leaf);
+    let leaf=this.app.workspace.getLeavesOfType('pdf').find(l=>(l.view as FileView).file?.path===file.path);
+    if(!leaf){leaf=this.app.workspace.getLeaf('tab');await leaf.openFile(file,{active:false});}
+    await leaf.loadIfDeferred();
+    const current=()=>!signal.aborted&&this.article===article;
+    if(!current())throw new Error('已取消打开 PDF。');
+    // Native PDF views defer their renderer until first shown. Initialize the
+    // source leaf before reparenting, then resize it in the reader's window.
+    await this.app.workspace.revealLeaf(leaf);
+    if(!current())throw new Error('已取消打开 PDF。');
+    const container=leaf.view.containerEl,parent=container.parentNode;
+    if(!parent)throw new Error('PDF 原生视图尚未就绪。');
+    const placeholder=container.ownerDocument.createComment(ui("沉浸阅读 PDF 视图原位置"));parent.insertBefore(placeholder,container);
+    const source=this.pdfSource={leaf,container,placeholder};container.classList.add('gloss-native-pdf');article.append(container);
+    await this.app.workspace.revealLeaf(this.leaf);
+    this.win.requestAnimationFrame(()=>{if(current()&&this.pdfSource===source)leaf.view.onResize();});
   }
   private releasePdfSource(){const source=this.pdfSource;if(!source)return;this.pdfSource=undefined;source.container.classList.remove('gloss-native-pdf');if(source.placeholder.parentNode){source.placeholder.replaceWith(source.container);this.win.requestAnimationFrame(()=>source.leaf.view.onResize());}else source.container.remove();}
   private makeReadingAnchor(start:number,end:number):Anchor{const a=makeAnchor(this.text,start,end);if(this.pdf){a.pdfPage=this.pdf.page;a.pdfOffset=a.start;}else if(this.book?.kind==='pdf'){const index=this.passages.findIndex(p=>p.end>start);const page=Number(index>=0?this.blocks[index]?.dataset.bookPage:0)||0;if(page){a.pdfPage=page;a.pdfOffset=a.start;}}return a;}
