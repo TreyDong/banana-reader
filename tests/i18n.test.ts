@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
@@ -52,23 +54,23 @@ test('every explicit UI message has an English catalog entry with matching forma
  visit(source);assert.ok(checked>450);
 });
 
-async function loadPlugin(saved:unknown,host='zh'){
+async function loadPlugin(saved:unknown,host='zh',identity?:{root:string;id:string;legacyActive:boolean;events:string[]}){
  const output=await build({entryPoints:[fileURLToPath(new URL('../src/main.ts',import.meta.url))],bundle:true,write:false,format:'cjs',platform:'node',target:'es2022',external:['obsidian','electron'],logLevel:'silent'});
- const views=new Map<string,(leaf:any)=>any>();const commands=new Map<string,{id:string;name:string}>();const writes:any[]=[];let failSave=false;let modelCalls=0;
+ const views=new Map<string,(leaf:any)=>any>();const commands=new Map<string,{id:string;name:string}>();const writes:any[]=[];const protocols=new Map<string,(params:any)=>Promise<void>>();let failSave=false;let modelCalls=0;
  const source=structuredClone(saved);
- const vault={adapter:{getBasePath:()=>'/synthetic-banana-reader'},configDir:'.obsidian',on:()=>()=>{}};
+ const vault={adapter:{getBasePath:()=>identity?.root||'/synthetic-banana-reader'},configDir:'.obsidian',on:()=>()=>{}};
  class Plugin{
-  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{},getLeavesOfType:()=>[] as any[]},secretStorage:{getSecret:()=>''}};
-  manifest={id:'gloss-reader',dir:'.obsidian/plugins/gloss-reader',version:'0.12.5'};
-  loadData(){return Promise.resolve(structuredClone(source));}
-  saveData(value:unknown){if(failSave)return Promise.reject(new Error('Synthetic save failure'));writes.push(structuredClone(value));return Promise.resolve();}
-  registerView(id:string,factory:(leaf:any)=>any){views.set(id,factory);}registerExtensions(){}addSettingTab(){}registerEvent(){}registerObsidianProtocolHandler(){}
+  app={vault,workspace:{on:()=>()=>{},onLayoutReady:()=>{},getLeavesOfType:()=>[] as any[]},secretStorage:{getSecret:()=>''},plugins:{enabledPlugins:new Set(identity?.legacyActive?['gloss-reader']:[])}};
+  manifest={id:identity?.id||'gloss-reader',dir:'.obsidian/plugins/'+(identity?.id||'gloss-reader'),version:'0.12.5'};
+  async loadData(){if(identity){identity.events.push('load');return JSON.parse(await readFile(join(identity.root,this.manifest.dir,'data.json'),'utf8'));}return structuredClone(source);}
+  saveData(value:unknown){identity?.events.push('save');if(failSave)return Promise.reject(new Error('Synthetic save failure'));writes.push(structuredClone(value));return Promise.resolve();}
+  registerView(id:string,factory:(leaf:any)=>any){views.set(id,factory);}registerExtensions(){}addSettingTab(){}registerEvent(){}registerObsidianProtocolHandler(id:string,handler:(params:any)=>Promise<void>){protocols.set(id,handler);}
   addRibbonIcon(){return syntheticDom().createEl('button',{});}
   addCommand(command:{id:string;name:string}){commands.set(command.id,command);return command;}
   removeCommand(id:string){commands.delete(id);}
  }
  const nativeRequire=createRequire(import.meta.url);
- const stub={Plugin,ItemView:class{},FileView:class{},FuzzySuggestModal:class{},Modal:class{},PluginSettingTab:class{},getLanguage:()=>host};
+ const stub={Notice:class{},TFile:class{constructor(public path:string){}},Plugin,ItemView:class{},FileView:class{},FuzzySuggestModal:class{},Modal:class{},PluginSettingTab:class{},getLanguage:()=>host};
  const context={module:{exports:{}},exports:{},crypto:globalThis.crypto,console,URL,AbortController,setTimeout,clearTimeout,require:(id:string)=>{
   if(id==='obsidian')return stub;
   if(['node:child_process','node:http','node:https'].includes(id))return new Proxy({}, {get:()=>()=>{modelCalls++;throw new Error('Language changes must not call a model service');}});
@@ -76,7 +78,7 @@ async function loadPlugin(saved:unknown,host='zh'){
  }};
  vm.runInNewContext(output.outputFiles[0].text,context);
  const Constructor=(context.module.exports as any).default;const plugin=new Constructor();await plugin.onload();
- return{plugin,commands,writes,views,fail:()=>{failSave=true;},modelCalls:()=>modelCalls};
+ return{plugin,commands,writes,views,protocols,TFile:stub.TFile,fail:()=>{failSave=true;},modelCalls:()=>modelCalls};
 }
 const fixture=()=>({version:5,settings:{language:'zh-CN',services:[{id:'local',name:'我的服务',kind:'codex',path:'',protocol:'openai',base:'https://api.openai.com/v1',models:[{id:'model-a',name:'自定义模型',type:'chat'}]}],taskModels:{default:{serviceId:'local',modelId:'model-a'},summary:{serviceId:'local',modelId:'model-a'}},translationEngine:'google',translationTarget:'ja',commands:[{id:'explain',name:'自定解释',prompt:'请保留 {{selection}} 原文。',builtin:true}],taskPrompts:{default:'我的问答提示词',summary:'我的总结提示词'},embedding:{topK:8,autoIndex:false}},documents:{'sample.md':{progress:.42,draft:'尚未发送的问题',updated:1,highlights:[{id:'h',anchor:{start:0,quote:'原文'},note:'我的批注',color:'yellow',created:1}],threads:[{id:'t',messages:[{role:'user',content:'问题'},{role:'assistant',content:'回答',model:'model-a'}],created:1}]}}});
 test('real plugin language setting persists and changes commands without rewriting models, prompts or documents',async()=>{
@@ -85,7 +87,7 @@ test('real plugin language setting persists and changes commands without rewriti
  await run.plugin.changeLanguage('en');
  assert.equal(run.plugin.store.settings.language,'en');assert.equal(run.commands.get('open-reader')?.name,'Enter immersive reading');
  const after=structuredClone(run.plugin.store);after.settings.language=before.settings.language;
- assert.deepEqual(after,before);assert.equal(run.writes.at(-1).settings.language,'en');assert.equal(run.modelCalls(),0);assert.equal(run.commands.size,4);
+ assert.deepEqual(after,before);assert.equal(run.writes.at(-1).settings.language,'en');assert.equal(run.modelCalls(),0);assert.equal(run.commands.size,6);
  const reopened=await loadPlugin(run.writes.at(-1),'zh');assert.equal(reopened.plugin.store.settings.language,'en');assert.equal(reopened.commands.get('open-reader')?.name,'Enter immersive reading');
  await run.plugin.changeLanguage('zh-CN');assert.equal(run.commands.get('open-reader')?.name,'进入沉浸阅读');
 });
@@ -162,4 +164,31 @@ test('dynamic reader metadata and index labels switch both ways without retainin
  view.refreshModelButtons=()=>{};view.paintWebButton=()=>{};view.scheduleLayout=()=>{};run.plugin.app.workspace.getLeavesOfType=()=>[{view}];
  await run.plugin.changeLanguage('en');assert.equal(stats.textContent,'1 min read · 2 paragraphs');assert.equal(indexLabel.textContent,'Index');assert.equal(view.indexButton.getAttribute('title'),'Choose an embedding model first');assert.equal(stale.parentNode,null);assert.ok(live.parentNode);
  await run.plugin.changeLanguage('zh-CN');assert.equal(stats.textContent,'1 分钟阅读 · 2 个段落');assert.equal(indexLabel.textContent,'索引');assert.equal(view.indexButton.getAttribute('title'),'先选择嵌入模型');assert.equal(run.modelCalls(),0);
+});
+
+test('compiled new-ID plugin imports old data before loading settings and registering reader commands',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'reader-id-runtime-')),plugins=join(root,'.obsidian/plugins'),saved=fixture(),bytes=JSON.stringify(saved,null,2)+'\n',events:string[]=[];
+ try{
+  await mkdir(join(plugins,'gloss-reader'),{recursive:true});await mkdir(join(plugins,'banana-reader'));await writeFile(join(plugins,'gloss-reader/data.json'),bytes);await writeFile(join(plugins,'banana-reader/manifest.json'),JSON.stringify({id:'banana-reader'}));
+  const run=await loadPlugin(undefined,'zh',{root,id:'banana-reader',legacyActive:false,events});
+  assert.equal(events[0],'load');assert.equal(await readFile(join(plugins,'banana-reader/data.json'),'utf8'),bytes);assert.equal(await readFile(join(plugins,'gloss-reader/data.json'),'utf8'),bytes);
+  assert.deepEqual(structuredClone(run.plugin.store.documents),saved.documents);assert.equal(run.plugin.store.settings.taskModels.default.serviceId,'local');assert.equal(run.plugin.store.settings.translationTarget,'ja');assert.equal(run.plugin.store.settings.commands[0].name,'自定解释');assert.equal(run.modelCalls(),0);assert.equal(run.commands.size,6);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('compiled new-ID plugin stops before loadData or saveData if the old plugin is still enabled',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'reader-id-runtime-stop-')),events:string[]=[];
+ try{await assert.rejects(loadPlugin(undefined,'zh',{root,id:'banana-reader',legacyActive:true,events}),/inactive state must be confirmed/);assert.deepEqual(events,[]);}finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('new and legacy note links resolve the same saved marks and citations without a model request',async()=>{
+ const run=await loadPlugin(fixture());assert.deepEqual([...run.protocols.keys()],['banana-reader','gloss-reader']);
+ const opened:string[]=[],revealed:any[]=[];const file=new run.TFile('reading/one book.md');
+ run.plugin.app.vault.getName=()=> 'synthetic';run.plugin.app.vault.getAbstractFileByPath=(path:string)=>path===file.path?file:null;
+ run.plugin.openFile=async(value:any)=>{opened.push(value.path);return{revealSaved:(id:string)=>revealed.push([id]),revealReference:async(id:string,citation:string)=>{revealed.push([id,citation]);}};};
+ for(const protocol of ['banana-reader','gloss-reader']){
+  await run.protocols.get(protocol)!({vault:'synthetic',path:file.path,anchor:'h'});
+  await run.protocols.get(protocol)!({vault:'synthetic',path:file.path,anchor:'t',citation:'2'});
+  await run.protocols.get(protocol)!({vault:'other-vault',path:file.path,anchor:'h'});
+ }
+ assert.deepEqual(opened,Array(4).fill(file.path));assert.deepEqual(revealed,[['h'],['t','2'],['h'],['t','2']]);assert.equal(run.modelCalls(),0);
 });

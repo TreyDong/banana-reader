@@ -1,6 +1,6 @@
 {
   "name": "banana-reader",
-  "version": "0.13.2",
+  "version": "0.14.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,8 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "pdfjs-dist": "4.10.38"
   },
   "license": "MIT"
 }
