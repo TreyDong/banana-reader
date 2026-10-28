@@ -1,6 +1,9 @@
 # Banana Reader
 
-版本 **0.14.1**。新增「书籍来源」（搜索 Z-Library 下载到库内）与「书架」（木板书脊书架视图）；支持简体中文、English 和跟随 Obsidian。
+> **2026-10-28：恢复原社区条目。** 正式社区发行沿用 `gloss-reader` ID，显示名仍为 Banana Reader，正式仓库为 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)。0.14.7 为桌面版。下文涉及 `banana-reader` ID、替换安装及移动候选的历史说明不再适用于本社区安装包。已装 `banana-reader` 的用户请先继续使用现有安装；不要同时启用两个插件。切换前须停用两者、备份并核对最新记录，禁止直接覆盖旧数据。详见 [恢复与数据衔接](docs/plugin-id-migration.md)。
+
+
+版本 **0.14.7**。新增「书籍来源」（搜索 Z-Library 下载到库内）与「书架」（木板书脊书架视图）；支持简体中文、English 和跟随 Obsidian。
 
 在 Obsidian 里边读、边问、边记。读到不懂的句子，选中提问；觉得值得留下的段落，划线或写批注；读完后，把摘录和理解导出成一份带出处的 Markdown 笔记。
 

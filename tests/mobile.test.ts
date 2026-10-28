@@ -75,5 +75,5 @@ test('bundled plugin loads and initializes without any Node or Electron modules,
   Object.assign(app.workspace,{getLeavesOfType:()=>[leaf],revealLeaf:async()=>{},setActiveLeaf:(target:any,options:any)=>{active=target;assert.equal(options.focus,true);}});
   await plugin.openFile(Object.assign(new obsidian.TFile(),{path:'fixture.md',extension:'md'}));assert.equal(active,leaf);
  }
- const manifest=JSON.parse(await readFile(new URL('../manifest.json',import.meta.url),'utf8'));assert.equal(manifest.isDesktopOnly,false);assert.equal(manifest.id,'banana-reader');
+ const manifest=JSON.parse(await readFile(new URL('../manifest.json',import.meta.url),'utf8'));assert.equal(manifest.isDesktopOnly,true);assert.equal(manifest.id,'gloss-reader');
 });
