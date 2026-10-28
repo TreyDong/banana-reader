@@ -247,3 +247,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## PDF.js
+
+pdf.js — Mozilla 的 JavaScript PDF 引擎，用于 PDF 文字重排（文本与大纲抽取）。
+以 Apache License 2.0 授权使用，版权归 The pdf.js Authors（Mozilla）所有。
+完整许可证文本见 https://github.com/mozilla/pdf.js/blob/main/LICENSE，要点如下：
+
+> Copyright 2012 Mozilla
+>
+> Licensed under the Apache License, Version 2.0 (the "License");
+> you may not use this file except in compliance with the License.
+> You may obtain a copy of the License at
+>
+>     http://www.apache.org/licenses/LICENSE-2.0
+>
+> Unless required by applicable law or agreed to in writing, software
+> distributed under the License is distributed on an "AS IS" BASIS,
+> WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+> See the License for the specific language governing permissions and
+> limitations under the License.

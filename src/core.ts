@@ -6,7 +6,15 @@ export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cach
 export interface WebSource {title:string;url:string;snippet:string}
 export interface WebReceipt {provider?:string;query:string;sources:WebSource[]}
 export interface Message { web?:WebReceipt; role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
-export interface Thread { interrupted?:boolean;followupDraft?:string;translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Thread { pending?:boolean;recovery?:ThreadRecovery;mobileModel?:{serviceId:string;modelId:string};interrupted?:boolean;followupDraft?:string;translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export type ThreadRecovery=Pick<Thread,'messages'|'context'|'citations'|'contextInfo'|'anchor'|'selection'>;
+/** Save the last complete answer and evidence before a regeneration replaces them. */
+export function beginThreadRequest(thread:Thread,regenerating=false){
+ thread.pending=true;
+ if(regenerating){const {messages,context,citations,contextInfo,anchor,selection}=thread;thread.recovery=JSON.parse(JSON.stringify({messages,context,citations,contextInfo,anchor,selection})) as ThreadRecovery;}
+ else delete thread.recovery;
+}
+export function settleThreadRequest(thread:Thread){delete thread.pending;delete thread.recovery;}
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
@@ -63,7 +71,7 @@ export function blockedPath(path: string): boolean {
 export function exportReading(path: string, data: Reading, vault: string): string {
   const source = `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(path)}`;
   let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
-  const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
+  const back = (id: string) => `obsidian://banana-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}${h.anchor.pdfPage?' · PDF 第 '+h.anchor.pdfPage+' 页':''}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
   }
