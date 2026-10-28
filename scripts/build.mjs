@@ -27,6 +27,10 @@ export const pdfNoEval={name:'pdf-no-dynamic-code',setup(builder){
   let source=await readFile(path,'utf8');
   if(source.split(probe).length!==2)throw new Error('Unexpected PDF feature probe');
   source=source.replace(probe,'function isEvalSupported() { return false; }');
+  const globalExport=path.endsWith('pdf.worker.mjs')?'globalThis.pdfjsWorker':'globalThis.pdfjsLib';
+  const registration='var __webpack_exports__ = '+globalExport+' = {};';
+  if(source.split(registration).length!==2)throw new Error('Unexpected PDF global registration');
+  source=source.replace(registration,'var __webpack_exports__ = {};');
   if(path.endsWith('pdf.worker.mjs')){
    if(source.split(compiler).length!==2)throw new Error('Unexpected PDF PostScript compiler');
    source=source.replace(compiler,'    // Banana Reader: use the upstream PostScript interpreter below.');

@@ -252,7 +252,7 @@ SOFTWARE.
 
 PDF.js 4.10.38, copyright Mozilla and the pdf.js Authors, is bundled for local text and outline extraction. Original-page rendering remains in Obsidian's native viewer.
 
-Modifications by Banana Reader (2026-10-28): the build removes dynamic-code feature probes and the PostScript compilation branch from the pinned PDF.js distribution. PostScript functions use the existing upstream interpreter. The build rejects unrecognized versions or changed code structure; it does not modify installed dependency files. Document loading also sets `isEvalSupported: false`.
+Modifications by Banana Reader (2026-10-28): the build removes dynamic-code feature probes and the PostScript compilation branch from the pinned PDF.js distribution. PostScript functions use the existing upstream interpreter. The bundled worker and library global registrations are also removed; the engine uses an isolated MessageChannel to preserve Obsidian's native PDF engine. The build rejects unrecognized versions or changed code structure; it does not modify installed dependency files. Document loading also sets `isEvalSupported: false`.
 
 Complete upstream license:
 

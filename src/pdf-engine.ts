@@ -1,24 +1,29 @@
 /**
- * Lazy-loaded PDF engine (built as pdf-engine.js): pdf.js text extraction and
- * outline → buildPdfBook. Loaded only when a PDF opens with reflow, so main.js
- * stays light. pdf.js runs on the main thread via its bundled
- * WorkerMessageHandler (fake worker) — acceptable for text-only extraction,
- * and it avoids CSP-sensitive worker/eval paths.
+ * Bundled PDF text/outline extraction over an isolated MessageChannel.
+ * The upstream worker handler runs locally without registering globals,
+ * starting an external worker, or sharing Obsidian's native PDF worker.
  */
-import {getDocument} from 'pdfjs-dist';
-import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs';
+import {getDocument,PDFWorker} from 'pdfjs-dist';
+import {WorkerMessageHandler} from 'pdfjs-dist/build/pdf.worker.mjs';
 import {buildPdfBook,type PdfItem,type PdfOutlineEntry} from './pdfbook';
 import {type Book} from './formats';
 import {arrayValue,objectValue} from './core';
 import type {TextItem} from 'pdfjs-dist/types/src/display/api';
 
-Object.assign(window,{pdfjsWorker});
+
 
 
 export type PdfEngine={parsePdfFile:(bytes:Uint8Array,signal?:AbortSignal,onProgress?:(done:number,total:number)=>void)=>Promise<Book>};
 export async function parsePdfFile(bytes:Uint8Array,signal?:AbortSignal,onProgress?:(done:number,total:number)=>void):Promise<Book>{
- const doc=await getDocument({data:bytes,isEvalSupported:false,disableFontFace:true}).promise;
- try{
+ // A dedicated port keeps our worker entirely separate from Obsidian's PDF.js.
+ // PDF.js 4.10.38's generated constructor declaration incorrectly narrows port
+ // to null; its runtime and PDFWorkerParameters accept a message port.
+ const channel=new MessageChannel();
+ WorkerMessageHandler.initializeFromPort(channel.port1);channel.port1.start();channel.port2.start();
+ const PortWorker=PDFWorker as unknown as {new(options:{port:MessagePort}):PDFWorker};
+ const worker=new PortWorker({port:channel.port2});
+ const task=getDocument({data:bytes,worker,isEvalSupported:false,disableFontFace:true});
+ try{const doc=await task.promise;
   const metadata=await doc.getMetadata().catch(()=>undefined) as {info?:{Title?:unknown;Author?:unknown}}|undefined;
   const outline:PdfOutlineEntry[]=[];
   const walk=async(entries:unknown[],level:number)=>{
@@ -52,5 +57,5 @@ export async function parsePdfFile(bytes:Uint8Array,signal?:AbortSignal,onProgre
   return buildPdfBook(pages,outline.length?outline:undefined,
    {title:typeof metadata?.info?.Title==='string'?metadata.info.Title:undefined,author:typeof metadata?.info?.Author==='string'?metadata.info.Author:undefined},
    {signal,onProgress:(done,total)=>onProgress?.(done,total)});
- }finally{await doc.destroy().catch(()=>{});}
+ }finally{await task.destroy().catch(()=>{});worker.destroy();channel.port1.close();channel.port2.close();}
 }
