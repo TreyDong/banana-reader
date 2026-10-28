@@ -1,40 +1,36 @@
 # Banana Reader
 
-Version **0.14.8** adds a Z-Library book source (search inside the plugin, download into the vault) and a bookshelf view of cloth spines on wooden planks. English, Simplified Chinese and following Obsidian are supported.
+Version **0.14.8** is the current desktop community release. It includes Markdown, PDF and EPUB reading, Z-Library book search/download and the bookshelf, with English, Simplified Chinese and following Obsidian supported.
 
 **Read a passage. Ask about it. Keep the understanding beside the source.**
 
 Turn Markdown notes, PDFs and EPUB books into a reading workspace inside Obsidian. Highlight a sentence, ask a question in the margin, follow the answer back to its source, and export what you learned as a Markdown note.
 
-[Simplified Chinese guide](README.zh-CN.md) · [Install](https://github.com/TreyDong/banana-reader/releases) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
+[Simplified Chinese guide](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [Release files](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
 
-## Mobile development build (separate beta)
+## Repository and mobile status
 
-This 0.14.7 community release is desktop-only. The separate `codex/mobile-support` development branch enables mobile loading, with the same minimum Obsidian version of 1.11.4. This adaptation has not been published to the community directory and is awaiting physical iOS / Android testing.
+[TreyDong/banana-reader](https://github.com/TreyDong/banana-reader) is the maintained source and release repository. The community ID and installation folder are `gloss-reader`; the visible name is **Banana Reader**. The former `TreyDong/banana-reader-plugin` repository and its `banana-reader` identity are archived historical releases, including the retired BRAT/mobile beta channel.
 
-- Use **Enter immersive reading**, **Choose a document to read** or **Open bookshelf** from the command palette. Long-press to select text, then use the bottom selection tools.
-- Read answers and send follow-up questions in the notebook. On mobile, Enter inserts a newline; use the send button to submit. Inputs grow with text, and a focused follow-up stays visible as the keyboard viewport shrinks. Citations close the notebook and reveal the source. Markdown, EPUB, native PDF, annotations and exports retain their existing data formats.
-- Add a **Custom API** in **Model services**, choose **Mobile question model** and use **Test connection**. Mobile task assignments are saved separately from desktop assignments. OpenAI-compatible, Responses, Anthropic and Gemini connections use Obsidian's cross-origin request interface and display complete responses. Stop discards late results; the already-sent request may still finish on the provider's side.
-- Local Codex, Claude and Pi CLIs require desktop. Synced CLI configurations remain saved but cannot run on mobile; model assignments are never silently replaced. A loopback address on a phone points to that phone, so desktop-local APIs need a phone-accessible HTTPS endpoint.
-- Install and enable **BRAT** from Community plugins, then add `TreyDong/banana-reader-plugin` and explicitly select the **0.14.0 pre-release**. Do not select Latest, which currently resolves to the desktop-only 0.13.3 stable release. BRAT installs the three release assets automatically; configure API secrets on the phone. See the [mobile guide](docs/mobile-candidate.md).
+The 0.14.8 package is **desktop-only**, requiring Obsidian **1.11.4+**. Mobile adaptations remain in source, but there is no currently maintained mobile installation package. Historical beta assets have not received the 0.14.8 fixes and are no longer recommended for installation. Physical iOS and Android acceptance is still pending; see [mobile status and acceptance](docs/mobile-candidate.md).
 
-Obsidian 1.14.4 mobile emulation passed selection events, marking, API questions and follow-ups, citation jumps, note export, EPUB/PDF opening and bookshelf rendering. No page overflow was found at 320, 390 or 768 px. Physical selection handles, soft keyboards, PDF gestures, secret storage and book-source login/download still need device testing.
+Existing `banana-reader` users should preserve their current records and follow the [identity and data cutover guide](docs/plugin-id-migration.md) before switching. Repository archival does not update an installed plugin or migrate its data.
 
 ## What you can do
 
 - **Ask where you are reading.** Select a passage for an explanation, a counterexample or a translation. Keep follow-up questions in the same conversation. Responses show their actual model and available usage.
 - **Return to the evidence.** Click a paragraph citation or PDF page number to jump back to the passage behind an answer.
 - **Mark what matters.** Add highlights, straight or wavy underlines and personal notes. Review them alongside your questions in the notebook.
-- **Keep the original page.** Read PDF pages in their original layout with continuous scrolling. Read EPUB chapters in book order, with contents navigation and adjustable typography.
+- **Choose PDF text or original pages.** Read extractable PDF text in reflow mode, or switch to Obsidian's original-page view to retain images, tables and layout. Read EPUB chapters in book order, with contents navigation and adjustable typography.
 - **Leave with a useful note.** Export excerpts, annotations and conversations to a new Markdown file with source links. Original documents stay unchanged.
 - **Use your own models.** Connect a supported API or an authenticated Codex, Claude or Pi CLI. Choose question, translation and article-brief models independently. Optional book indexing retrieves passages across a longer document.
 - **Fetch books from Z-Library.** Search with format, language and sort filters, download into a vault folder and start reading immediately. Requires your own Z-Library account.
-- **Bookshelf.** Markdown, PDF and EPUB in the vault stand on wooden planks as cloth spines — plain, paper-label, foil-stamped or banded bindings, each with its own width and height. A red bookmark on the spine marks how far you have read; hover to pull a book out, click to continue. The shelf only holds PDF and EPUB; set **Settings → Banana Reader → Book sources → Bookshelf folder** to scope it to one folder, or leave it empty for the whole vault. No buttons on the page, only books.
+- **Bookshelf.** PDF and EPUB books stand on wooden planks as cloth spines — plain, paper-label, foil-stamped or banded bindings, each with its own width and height. A red bookmark on the spine marks how far you have read; hover to pull a book out, click to continue. The shelf only holds PDF and EPUB; set **Settings → Banana Reader → Book sources → Bookshelf folder** to scope it to one folder, or leave it empty for the whole vault. No buttons on the page, only books.
 
 ## Get started
 
-1. Install from [GitHub Releases](https://github.com/TreyDong/banana-reader/releases) and enable **Banana Reader**.
+1. Install **Banana Reader** from [Community plugins](https://community.obsidian.md/plugins/gloss-reader), or use the matching three files from the [0.14.8 release](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8), then enable it.
 2. Open a Markdown, PDF or EPUB file. Click **Open Banana Reader** in the ribbon, or run **Banana Reader: Enter immersive reading** from the command palette.
 3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → Model services** and choose a question model first.
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
@@ -42,7 +38,7 @@ Obsidian 1.14.4 mobile emulation passed selection events, marking, API questions
 
 These instructions use English interface labels. Choose **English** in **Settings → Banana Reader → Appearance → Interface language**. For instructions using Chinese labels, see the [Chinese guide](README.zh-CN.md#%E7%95%8C%E9%9D%A2%E8%AF%AD%E8%A8%80).
 
-Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **Obsidian 1.11.4+**; see the mobile development-build limitations above.
+Reading, marking, annotation and export work without an AI account. AI features need your own service access and may incur provider charges. The interface supports **English and Simplified Chinese**, on **desktop Obsidian 1.11.4+**.
 
 ## Make it comfortable
 
@@ -62,13 +58,13 @@ The file picker lists vault paths only when opened. Copy buttons **write** the r
 
 ## Before you install
 
-- Desktop release and mobile development candidate; English and Simplified Chinese interfaces are available.
-- PDF selection needs a text layer. This version has no OCR or cross-page selection. Reading font settings do not reflow PDF pages.
+- Desktop only; English and Simplified Chinese interfaces are available. Physical mobile validation is pending.
+- PDF selection needs a text layer. Reflow mode follows reading typography; original pages preserve the source layout. Scanned, oversized or unparseable PDFs fall back to original pages. This version has no OCR or cross-page selection.
 - EPUB supports text chapters and local raster images. DRM and original fixed-layout styling are not supported.
 - Use models available to your own account. Discovery does not guarantee access; failed requests show an error and do not silently switch providers.
 - The Z-Library source is unofficial: mirrors, domains and endpoints may change at any time, some mirrors block automated clients, and free accounts have daily download limits. The book-source settings keep a mirror list with automatic failover and one-click probing; only fetch content you are entitled to access.
 
-For community updates, retain the existing `gloss-reader` installation and its `data.json` and `indices/`. The visible name remains **Banana Reader**. For a manual installation, use the matching three assets from this repository's 0.14.7 release in `<vault>/.obsidian/plugins/gloss-reader/`.
+For community updates, retain the existing `gloss-reader` installation and its `data.json` and `indices/`. The visible name remains **Banana Reader**. For a manual installation, place `main.js`, `manifest.json` and `styles.css` from this repository's [0.14.8 release](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8) in `<vault>/.obsidian/plugins/gloss-reader/`. For a custom configuration directory, replace `.obsidian` with that directory.
 
 If you currently use the replacement `banana-reader` identity, do not enable both plugins or copy over the older data. Keep using that installation until you have made a verified local backup and transferred its current records with both plugins stopped. Restoration does not automatically move data between folders. Both exported-note protocols remain supported. See [identity restoration](docs/plugin-id-migration.md).
 
@@ -82,7 +78,9 @@ Current project code: [MIT](LICENSE). Newsreader and Schibsted Grotesk fonts: SI
 
 ## Repository changes
 
-- 2026-10-28 · 0.14.8 candidate: Repair the 0.14.7 Community source warnings, remove PDF.js dynamic compilation from the installation bundle, preserve popout-window ownership, add searchable settings, and verify/attest all three installation files. Clipboard copying and user-opened file selection remain intentional capabilities. Community review and publication status are tracked in `notes/community-review-repair-plan.md`.
+- 2026-10-28: Consolidate supported releases in this repository and archive the former `banana-reader-plugin` channel without changing historical tags or assets. Correct installation links, identity/data paths, PDF and mobile status; see [repository consolidation](notes/repository-consolidation-2026-10-28.md).
+
+- 2026-10-28 · 0.14.8: Published with zero source/CSS warnings, 197 passing tests, tagged provenance for all three installation files and completed automated Community review. Official Build Verification reproduced main.js byte-for-byte. Dynamic PDF compilation and host-worker pollution are removed; clipboard copying and user-opened file selection remain documented capabilities. See [acceptance evidence](notes/community-review-repair-plan.md).
 
 - 2026-10-28 · 0.14.7: Restore the existing `gloss-reader` community identity and the Banana Reader display name. Preserve stored records, both note-link protocols and all current reading features. Refuse simultaneous activation with `banana-reader`. The community package remains desktop-only; mobile acceptance is pending.
 

@@ -2,12 +2,18 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Published GitHub release: **0.14.7**. Community-review repair candidate: **0.14.8**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. Physical iOS/Android validation is pending; local checks are not directory approval.
+Published GitHub and community release: **0.14.8**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. The complete automated Community review passed, including verified provenance and byte-for-byte build reproduction. This is not a claim of manual staff review or physical iOS/Android acceptance; see [release evidence](../notes/community-review-repair-plan.md).
 
 ```sh
 npm ci
 npm run check
 ```
+
+## Source and release ownership
+
+The maintained source and release repository is [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader), branch `main`. The former `banana-reader-plugin` repository is archived; its mobile/BRAT assets are historical and have not received the 0.14.8 fixes. Do not publish new packages there or change historical tags to make them appear reproducible.
+
+Before resuming an older local checkout, inspect its branch, remotes, manifest and uncommitted changes against the maintained `main`. A successful remote release does not update that working copy. Preserve unrelated work and reconcile it explicitly before building or publishing. New mobile candidates must derive from the maintained source and pass their own exact-source, provenance and physical-device checks; do not relabel 0.14.8 as mobile-ready.
 
 ## Layout
 
@@ -43,7 +49,7 @@ The 0.13.2 release previously replaced static style assignments and manual setti
 
 `auto` uses Obsidian's `getLanguage()`: Chinese locales resolve to Simplified Chinese, while other locales resolve to English. The setting is per vault. UI language does not change the model's answer language or translate existing default prompts. Preserve canonical PDF source labels and other stored identity strings; translate their display labels without changing selection or citation matching.
 
-The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The latest complete suite passed 180 tests, including two compiled-plugin lifecycle regressions for recoverable PDF loading and cancelled mounts. After automatic approval service access recovered, independent Obsidian mobile emulation also verified native PDF retry, rapid document switching, multiline entry, keyboard-sized viewports and the complete selection-to-export flow. Physical iOS/Android acceptance remains pending; see [mobile release validation](mobile-release-validation.md) for the exact scope. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
+The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The 0.14.8 suite passed 197 tests, covering recoverable PDF loading, cancelled/native mounts, host-worker isolation, identity guards, scoped shelves, settings search and composition input. Historical 0.14.0 candidate validation in independent Obsidian mobile emulation verified native PDF retry, rapid document switching, multiline entry, keyboard-sized viewports and the complete selection-to-export flow. Physical iOS/Android acceptance remains pending; see [mobile release validation](mobile-release-validation.md) for the exact scope. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
 
 `bindUi()` registers explicitly translated text nodes and accessibility attributes; `refreshUi()` updates only those bindings, retaining child icons and skipping nodes changed by another renderer. User-authored content and input values are never registered. `refreshLanguage()` refreshes reader chrome, notebook labels and reading statistics without reloading documents, restarting services or triggering model requests. Index progress retains a label callback so counts can be rendered in the current locale; repainting does not restart indexing. After notebook rendering, remove only generated accessibility captions no longer referenced by `aria-labelledby`.
 
@@ -53,7 +59,9 @@ Keep `package.json`, the root package entries in `package-lock.json`, `manifest.
 
 Before a community release, obtain a successful official **Review branch** scan. Retain documented necessary file-enumeration and clipboard-write behavior notices; do not claim they are code failures or conceal them. Keep official review results separate from local verification.
 
-A release tag is the manifest version without a `v` prefix. Build and attest again on the exact tag. Publish the three installation files from that attested artifact, then download the actual published bytes, compare all hashes and run `gh attestation verify` against the tag commit. Adding a workflow file or passing local checks alone does not establish artifact provenance.
+A release tag is the manifest version without a `v` prefix. Build and attest again on the exact tag. Publish the three installation files from that attested artifact, then download the actual published bytes, compare all hashes and run `gh attestation verify` against the tag commit. Adding a workflow file or passing local checks alone does not establish artifact provenance. Each tag must contain the source and matching manifest for its actual installation assets; the historical 0.14.1/0.14.2 replacement tags did not satisfy this contract.
+
+After publication, synchronize the maintained default branch with the reviewed source and current manifest. The Community **Check for new releases** action reads that manifest; a GitHub release alone is insufficient. Wait for the exact release review to show Completed and record the results separately from the preview. Documentation-only follow-ups do not move the release tag or replace its attested files.
 
 Preserve existing `data.json` and `indices/`; they are not release assets. Physical mobile acceptance remains pending and `isDesktopOnly` stays true. Do not change the personal installation during isolated release validation.
 

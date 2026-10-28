@@ -1,10 +1,10 @@
-# Mobile candidate validation
+# Historical mobile candidate validation
 
-Candidate: 0.14.0, distributed as a GitHub pre-release through BRAT. This is a test version awaiting physical iOS and Android acceptance. The stable release remains 0.13.3.
+Historical candidate: **0.14.0**, source `759fba57f3b246a8f263901f3fd489734d21f742`, previously distributed through BRAT under ID `banana-reader`. The old repository/channel was archived on 2026-10-28. The current maintained release is **0.14.8**, desktop-only, in `TreyDong/banana-reader` with ID `gloss-reader`. The results below describe the old candidate and do not establish mobile acceptance of 0.14.8.
 
-## Installation contract
+## Historical package contract
 
-The release tag and manifest version are both `0.14.0`; ID is `banana-reader`; minimum Obsidian is 1.11.4; `isDesktopOnly` is false. The only installation assets are `main.js`, `manifest.json` and `styles.css`. Vault records, indexes and secrets are excluded. Select the explicit 0.14.0 pre-release in BRAT.
+The release tag and manifest version are both `0.14.0`; ID is `banana-reader`; minimum Obsidian is 1.11.4; `isDesktopOnly` is false. The only installation assets are `main.js`, `manifest.json` and `styles.css`. Vault records, indexes and secrets are excluded. These historical assets are retained for reference and are no longer an installation recommendation. The 0.14.1/0.14.2 tags in that repository do not reproduce their uploaded assets and must not inherit this exact-source claim.
 
 ## Validation scope
 
@@ -16,4 +16,4 @@ The release tag and manifest version are both `0.14.0`; ID is `banana-reader`; m
 
 ## Outstanding physical-device acceptance
 
-Real iOS and Android system selection handles, keyboards, safe areas, WebViews, PDF gestures, credential persistence, memory behavior and book-source account/download flows still need device testing. Desktop emulation and unit tests do not establish those results. Follow the [mobile candidate guide](mobile-candidate.md) to install and test.
+Real iOS and Android system selection handles, keyboards, safe areas, WebViews, PDF gestures, credential persistence, memory behavior and book-source account/download flows still need device testing. Desktop emulation and unit tests do not establish those results. See [mobile status and acceptance](mobile-candidate.md) for the requirements of a future candidate from the maintained source; there is no current supported mobile installation package.

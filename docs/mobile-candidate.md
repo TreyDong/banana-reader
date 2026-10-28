@@ -1,18 +1,15 @@
-# 手机候选版：安装与验收
+# 手机适配状态与验收
 
-适用 iOS / Android 最新 Obsidian。0.14.0 是手机测试版，尚未通过两端真机验收。通过 BRAT 安装，不需要手动解压或复制隐藏目录。
+截至 2026-10-28，正式社区版为 **0.14.8，仅桌面**。`banana-reader-plugin` 旧仓库和 0.14.0～0.14.2 的 BRAT 测试通道已归档；这些旧安装包未获得 0.14.8 的修复，不再推荐新装。
 
-## 通过 BRAT 安装
+## 当前安装边界
 
-1. 在手机 Obsidian 的 **设置 → 第三方插件 → 浏览** 搜索 **BRAT**，安装并启用（作者 TfTHacker）。
-2. 打开 BRAT 设置，选择 **Add beta plugin**（添加测试插件）。
-3. 仓库输入 `TreyDong/banana-reader-plugin`，获取版本后明确选择 **0.14.0**（Pre-release），点击添加/安装并启用。不要选 Latest：当前稳定版 0.13.3 仅支持桌面。
-4. 在 **设置 → Banana Reader → 模型服务** 添加 **自定义 API**，选择 **手机问答模型**，点击 **测试连接**。手机不运行 Codex / Claude / Pi CLI；API 地址必须能被手机访问，密钥在本设备设置中填写。
-5. 用命令面板的 **进入沉浸阅读** 或 **打开书架** 开始。普通阅读、标记、批注与导出不需要模型。
+- 桌面安装与更新统一到 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)，当前[正式安装文件为 0.14.8](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8)，社区 ID 为 `gloss-reader`。
+- 移动适配代码仍保留，但没有持续维护的手机安装包。不能通过修改 `isDesktopOnly` 把现有桌面包当作手机正式版。
+- 已有 `banana-reader` 测试安装请保留当前记录；归档不会自动迁移数据。需要切换时按[身份与数据衔接](plugin-id-migration.md)处理，不要同时启用两个 ID 或删除旧数据强行导入。
+- 后续测试候选应基于正式仓库主线准备，标签、manifest、安装包与来源证明必须对应同一源码，再决定测试分发方式。历史模拟结果见[验收记录](mobile-release-validation.md)。
 
-[0.14.0 测试版本](https://github.com/TreyDong/banana-reader-plugin/releases/tag/0.14.0) · [BRAT 官方说明](https://tfthacker.com/BRAT)
-
-建议先使用测试库。已有同 ID 插件可以由 BRAT 更新三个安装文件，保留阅读记录。若仍有旧 `gloss-reader` 数据，先停用旧版并在电脑完成迁移，再用于手机；不要删除旧数据来强行跳过保护。
+以下表格是未来候选的设备验收要求，不是当前可下载安装的手机版本承诺。
 
 ## 两端各验收一次
 
@@ -30,4 +27,4 @@
 
 记录设备系统、实际 Obsidian 版本、文件格式、失败步骤和提示文字即可。无需提供私人文章、完整阅读数据、账号密码或 API Key。
 
-目前已通过独立桌面 Obsidian 的官方移动模拟与禁 Node 沙箱验证。它们无法证明 iOS / Android 真机上的系统选区、键盘、WebView、密钥存储或内存表现；这些项目完成前，候选版不标为正式手机版。
+历史 0.14.0 候选曾通过独立桌面 Obsidian 的官方移动模拟与禁 Node 沙箱验证。它们无法证明 iOS / Android 真机上的系统选区、键盘、WebView、密钥存储或内存表现；这些项目完成前，候选版不标为正式手机版。
