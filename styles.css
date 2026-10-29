@@ -302,6 +302,10 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gr-settings .gr-settings-group-body{min-width:0;padding:4px var(--size-4-4);}
 .gr-settings .gr-settings-row{min-height:64px;padding:16px 0;gap:24px;border-bottom:1px solid var(--gr-line);}
 .gr-settings .gr-settings-row:last-child{border-bottom:0;}
+/* Simple controls keep their labels alongside them, including narrow settings panes. */
+.gr-settings .gr-settings-row-inline{flex-direction:row;align-items:center;gap:16px;min-height:56px;padding:12px 0;}
+.gr-settings .gr-settings-row-inline>.gr-settings-controls{width:280px;max-width:60%;flex:0 1 280px;}
+.gr-settings .gr-settings-row-toggle>.gr-settings-controls{width:auto;max-width:none;flex:0 0 auto;}
 .gr-settings .gr-settings-label{font-size:var(--gr-item-size);font-weight:500;line-height:1.5;color:var(--gr-ink);}
 .gr-settings .gr-settings-description,.gr-settings .gr-command-preview{font-size:var(--font-ui-smaller);line-height:1.6;}
 .gr-settings .gr-settings-description{margin-top:4px;}
@@ -346,8 +350,8 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gr-model-modal .gr-model-browser-row{padding:12px;min-height:56px;}
 .gr-model-modal .gr-settings-footer,.gr-command-editor .gr-settings-footer{margin-top:20px;padding-top:16px;border-top:1px solid var(--background-modifier-border);}
 @container(max-width:600px){
- .gr-settings .gr-settings-row{flex-direction:column;align-items:stretch;gap:12px;}
- .gr-settings .gr-settings-controls{width:100%;max-width:none;}
+ .gr-settings .gr-settings-row:not(.gr-settings-row-inline){flex-direction:column;align-items:stretch;gap:12px;}
+ .gr-settings .gr-settings-row:not(.gr-settings-row-inline)>.gr-settings-controls{width:100%;max-width:none;}
  .gr-settings .gr-service-workspace{grid-template-columns:minmax(0,1fr);gap:16px;}
  .gr-settings .gr-service-nav{flex-direction:row;overflow-x:auto;padding:0 0 12px;border-right:0;border-bottom:1px solid var(--gr-line);}
  .gr-settings button.gr-service-nav-item{flex:0 0 140px;min-width:0;}
@@ -473,7 +477,7 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 
 .gr-shelf-tip-meta{font-size:11.5px;color:var(--text-muted);}
 
-/* Settings navigation stays above its panel at every width. */
+/* Main settings navigation and shelf controls. */
 .gr-settings :is(.gr-settings-tab,.gr-service-nav-item):focus-visible{outline:2px solid var(--interactive-accent);outline-offset:2px;}
 .gr-settings .gr-shelf-folder-controls{gap:8px;}
 .gr-settings .gr-shelf-folder-controls input{flex:1;min-width:0;width:0;}
