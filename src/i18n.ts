@@ -9,6 +9,21 @@ let language:UiLanguage='zh-CN';
 export function configureLanguage(preference:unknown,hostLanguage:string){language=resolveLanguage(preference,hostLanguage);return language;}
 export function currentLanguage(){return language;}
 export const ENGLISH:Readonly<Record<string,string>> = {
+  "请填写笔记库内的文件夹路径。": "Enter a folder path inside the vault.",
+  "书架目录不存在，请重新选择。": "The bookshelf folder does not exist. Choose another folder.",
+  "该目录受隐私边界保护，请选择其他文件夹。": "This folder is protected. Choose another folder.",
+  "选择书架目录…": "Choose a bookshelf folder…",
+  "整个笔记库": "Entire vault",
+  "书架设置": "Bookshelf settings",
+  "范围：{0} · 类型：{1}": "Folder: {0} · Types: {1}",
+  "未选择": "None selected",
+  "请在书架设置中勾选文件类型。": "Select file types in Bookshelf settings.",
+  "当前范围内没有匹配的文件。": "No matching files in this folder scope.",
+  "扫描所选文件夹及子文件夹；留空时使用整个笔记库。隐私目录始终排除。": "Scan the selected folder and its subfolders; leave empty for the entire vault. Protected folders are always excluded.",
+  "选择文件夹": "Choose folder",
+  "文件类型": "File types",
+  "可同时选择多种类型；默认显示 PDF 和 EPUB，Markdown 可按需加入。": "Select multiple formats. PDF and EPUB are enabled by default; add Markdown when needed.",
+  "书架设置已保存，打开的书架会立即更新。": "Bookshelf preferences saved. Open shelves update immediately.",
   "问答模型连接成功":"Question model connected successfully",
   "API 地址需要手机可以访问；127.0.0.1 指手机自身。密钥需在本设备配置。":"Use an API address reachable from the phone; 127.0.0.1 refers to the phone itself. Configure the API key on this device.",
   "无效的下载大小限制。":"Invalid download size limit.",

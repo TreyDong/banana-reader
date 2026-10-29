@@ -20,7 +20,7 @@ import {NativePdf} from './pdf-ui';
 import {googleTranslate,TRANSLATION_LANGUAGES} from './translation';
 import {BookIndexCache,normalizeEmbedding,embeddingIdentity,embedTexts,createBookIndex,usableIndex,retrieve,wholeDocumentContext,retrievalContext,type EmbeddingSettings,type BookIndex,type SourceSection,type ContextInfo} from './rag';
 import {ZLIB_DEFAULT_DOMAIN,ZLIB_EXTENSIONS,ZLIB_LANGUAGES,ZLIB_LANGUAGE_LABELS,ZLIB_MIRRORS,ZLIB_ORDERS,normalizeZlibDomain,parseMirrorList,probeMirror,withMirrorFailover,ZLibraryClient,ZlibSessionError,type ZlibFetcher,type ZlibBook,type ZlibCredentials,type ZlibSearchPage} from './zlibrary';
-import {shelfBooks,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,type ShelfBook,type SpineStyle} from './bookshelf';
+import {shelfBooks,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,normalizeShelfTypes,normalizeShelfFolder,SHELF_FILE_TYPES,type ShelfFileType,type ShelfBook,type SpineStyle} from './bookshelf';
 import {LEGACY_PLUGIN_ID,TARGET_PLUGIN_ID,preparePluginIdentity} from './plugin-migration';
 
 const PDF_FALLBACK_NOTICES:Record<string,string|undefined>={[PDF_SCAN_CODE]:'这本 PDF 没有可提取的文字层（可能为扫描版），已按原版页面打开。',[PDF_TOO_LARGE_CODE]:'这本 PDF 文字量超出重排上限，已按原版页面打开。',['pdf-engine-unavailable']:undefined};
@@ -29,9 +29,9 @@ const VIEW = 'gloss-reader';
 const EPUB_VIEW='gloss-epub-file';
 const SHELF_VIEW='gloss-bookshelf';
 interface RetrievalPreferences {topK:number;autoIndex:boolean}
-interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string }
+interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[] }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: ''};
+const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub']};
 const uid = () => crypto.randomUUID();
 const modelKey=(s:AgentSettings,provider=s.provider)=>provider==='api'?'api:'+(s.apiProtocol||'openai'):provider;
 const modelId=(s:AgentSettings,provider=s.provider)=>provider==='codex'?s.codexModel:provider==='claude'?s.claudeModel||'':provider==='pi'?s.piModel||'':s.apiModel;
@@ -90,7 +90,7 @@ export default class GlossPlugin extends Plugin {
     this.store = {version: 5, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
     let recoveredRequests=false;for(const reading of Object.values(this.store.documents))if(recoverInterruptedReading(reading))recoveredRequests=true;
     this.store.settings.language=normalizeLanguage(saved?.settings?.language);configureLanguage(this.store.settings.language,getLanguage());
-    this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.zlibFolder=typeof saved?.settings?.zlibFolder==='string'&&saved.settings.zlibFolder.trim()?saved.settings.zlibFolder.trim().slice(0,200):'收集箱';this.store.settings.shelfFolder=typeof saved?.settings?.shelfFolder==='string'?saved.settings.shelfFolder.trim().slice(0,200):'';
+    this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.zlibFolder=typeof saved?.settings?.zlibFolder==='string'&&saved.settings.zlibFolder.trim()?saved.settings.zlibFolder.trim().slice(0,200):'收集箱';this.store.settings.shelfFolder=typeof saved?.settings?.shelfFolder==='string'?saved.settings.shelfFolder.trim().slice(0,200):'';this.store.settings.shelfTypes=normalizeShelfTypes(saved?.settings?.shelfTypes);
     const legacyEmbedding=normalizeEmbedding(saved?.settings?.embedding);this.store.settings.embedding={topK:legacyEmbedding.topK,autoIndex:saved?.settings?.embedding?.autoIndex===true};
     this.indexCache=new BookIndexCache((this.manifest.dir||this.app.vault.configDir+'/plugins/'+this.manifest.id)+'/indices',this.app.vault.adapter);
     this.store.settings.commands=normalizeCommands(saved?.settings?.commands).map(command=>{const original=DEFAULT_COMMANDS.find(c=>c.id===command.id);return original&&command.prompt===original.prompt.replaceAll('选中文本','选文')?{...command,prompt:original.prompt}:command;});this.store.settings.webSearch=saved?.settings?.webSearch===true;this.store.settings.questionSuggestions=saved?.settings?.questionSuggestions===true;this.store.settings.translationEngine=saved?.settings?.translationEngine==='model'?'model':'google';this.store.settings.translationTarget=TRANSLATION_LANGUAGES[saved?.settings?.translationTarget]?saved.settings.translationTarget:'zh-CN';this.store.settings.taskPrompts={};for(const task of ['default','summary']){const value=saved?.settings?.taskPrompts?.[task];if(typeof value==='string')this.store.settings.taskPrompts[task]=value.slice(0,8000);}
@@ -167,6 +167,19 @@ export default class GlossPlugin extends Plugin {
     const next = this.saveQueue.catch(() => {}).then(() => this.saveData(snapshot));
     this.saveQueue = next; return next;
   }
+  private shelfPreferencesQueue:Promise<void>=Promise.resolve();
+  updateShelfPreferences(change:{folder?:string;types?:readonly ShelfFileType[]}):Promise<void>{
+    const next=this.shelfPreferencesQueue.catch(()=>{}).then(async()=>{
+      const settings=this.store.settings,previousFolder=settings.shelfFolder,previousTypes=[...settings.shelfTypes];
+      const folder=change.folder===undefined?settings.shelfFolder:normalizeShelfFolder(change.folder);
+      if(folder===undefined)throw new Error('请填写笔记库内的文件夹路径。');
+      if(folder){const node=this.app.vault.getAbstractFileByPath(folder);if(!(node instanceof TFolder))throw new Error('书架目录不存在，请重新选择。');if(blockedPath(folder))throw new Error('该目录受隐私边界保护，请选择其他文件夹。');}
+      settings.shelfFolder=folder;if(change.types!==undefined)settings.shelfTypes=normalizeShelfTypes(change.types);
+      try{await this.persist();}catch(error){settings.shelfFolder=previousFolder;settings.shelfTypes=previousTypes;throw error;}
+      for(const leaf of this.app.workspace.getLeavesOfType(SHELF_VIEW))if(leaf.view instanceof BookshelfView)leaf.view.refreshPreferences();
+    });
+    this.shelfPreferencesQueue=next;return next;
+  }
   choose() {new DocumentPicker(this.app, file => {void this.openFile(file).catch(showError);}).open();}
   async openShelf(){
     const existing=this.app.workspace.getLeavesOfType(SHELF_VIEW)[0]||this.app.workspace.getLeaf('tab');
@@ -200,6 +213,12 @@ class DocumentPicker extends FuzzySuggestModal<TFile> {
   getItems() {return this.app.vault.getFiles().filter(f=>readableExtension(f.extension)).filter(f => !blockedPath(f.path));}
   getItemText(file: TFile) {return file.path;}
   onChooseItem(file: TFile) {this.pick(file);}
+}
+class ShelfFolderPicker extends FuzzySuggestModal<TFolder>{
+ constructor(app:App,private pick:(folder:TFolder)=>Promise<void>){super(app);this.setPlaceholder(ui("选择书架目录…"));}
+ getItems(){const folders:TFolder[]=[];const visit=(folder:TFolder)=>{if(blockedPath(folder.path))return;folders.push(folder);for(const child of folder.children)if(child instanceof TFolder)visit(child);};visit(this.app.vault.getRoot());return folders.sort((a,b)=>a.path.localeCompare(b.path));}
+ getItemText(folder:TFolder){return folder.path&&folder.path!=='/'?folder.path:ui("整个笔记库");}
+ onChooseItem(folder:TFolder){void this.pick(folder).catch(showError);}
 }
 class EpubFileView extends FileView {
  constructor(leaf:WorkspaceLeaf,private plugin:GlossPlugin){super(leaf);}
@@ -358,7 +377,7 @@ class ZLibraryModal extends Modal {
 class BookshelfView extends ItemView {
  private get win(){return this.contentEl.ownerDocument.win||window;}
 
- private grid?:HTMLElement;private count?:HTMLElement;private tip?:HTMLElement;
+ private grid?:HTMLElement;private count?:HTMLElement;private scopeLabel?:HTMLElement;private tip?:HTMLElement;
  private resizeObserver?:ResizeObserver;private renderTimer?:number;private signature='';
  constructor(leaf:WorkspaceLeaf,readonly plugin:GlossPlugin){super(leaf);}
  getViewType(){return SHELF_VIEW;}getIcon(){return 'library';}
@@ -366,8 +385,10 @@ class BookshelfView extends ItemView {
  async onOpen(){
   this.contentEl.addClass('gr-shelf-host');
   const head=this.contentEl.createDiv({cls:'gr-shelf-head'});
-  bindUi(head.createEl('h2',{cls:'gr-shelf-title',text:ui("书架")}), {"text":()=>ui("书架")});
-  this.count=head.createEl('p',{cls:'gr-shelf-meta'});
+  const title=head.createDiv({cls:'gr-shelf-heading'});
+  bindUi(title.createEl('h2',{cls:'gr-shelf-title',text:ui("书架")}), {"text":()=>ui("书架")});
+  const settings=bindUi(button(title,'',()=>this.plugin.openSettings('shelf'),'gr-shelf-settings'),{'aria-label':()=>ui("书架设置")});setIcon(settings.createSpan(),'settings-2');bindUi(settings.createSpan({text:ui("书架设置")}),{'text':()=>ui("书架设置")});
+  this.count=head.createEl('p',{cls:'gr-shelf-meta'});this.scopeLabel=head.createEl('p',{cls:'gr-shelf-scope'});
   this.grid=this.contentEl.createDiv({cls:'gr-shelf'});
   this.resizeObserver=new ResizeObserver(()=>{this.win.clearTimeout(this.renderTimer);this.renderTimer=this.win.setTimeout(()=>this.renderShelf(),120);});
   this.resizeObserver.observe(this.contentEl);
@@ -379,26 +400,32 @@ class BookshelfView extends ItemView {
   this.registerEvent(this.app.vault.on('modify',file=>{if(file.path.endsWith(this.plugin.manifest.id+'/data.json'))refresh();}));
  }
  async onClose(){this.resizeObserver?.disconnect();this.win.clearTimeout(this.renderTimer);this.card?.remove();this.card=undefined;this.contentEl.empty();}
+ refreshPreferences(){this.signature='';this.card?.remove();this.card=undefined;this.renderShelf();}
  private shelf(){
-  const folder=normalizePath(this.plugin.store.settings.shelfFolder||'');let files:TFile[];
+  const folder=normalizeShelfFolder(this.plugin.store.settings.shelfFolder||'');if(folder===undefined)return[];let files:TFile[];
   if(folder&&folder!=='.'&&folder!=='/'){
    // Respect an explicit shelf scope before enumerating paths outside it.
    const root=this.app.vault.getAbstractFileByPath(folder);files=[];
    const visit=(node:TFile|TFolder)=>{if(blockedPath(node.path))return;if(node instanceof TFile){files.push(node);return;}for(const child of node.children)if(child instanceof TFile||child instanceof TFolder)visit(child);};
    if(root instanceof TFolder&&!blockedPath(root.path))visit(root);
   }else files=this.app.vault.getFiles();
-  return shelfBooks(files.filter(f=>['pdf','epub'].includes(f.extension.toLowerCase())&&!blockedPath(f.path)&&shelfPathMatches(f.path,folder)).map(f=>({path:f.path,basename:f.basename,extension:f.extension})),this.plugin.store.documents);
+  return shelfBooks(files.filter(f=>!blockedPath(f.path)&&shelfPathMatches(f.path,folder)).map(f=>({path:f.path,basename:f.basename,extension:f.extension})),this.plugin.store.documents,normalizeShelfTypes(this.plugin.store.settings.shelfTypes));
  }
  private renderShelf(){
   if(!this.grid||!this.grid.isConnected)return;
-  const books=this.shelf(),signature=books.map(b=>b.path+':'+b.progress).join('|');
+  const preferences=this.plugin.store.settings,types=normalizeShelfTypes(preferences.shelfTypes),folder=normalizeShelfFolder(preferences.shelfFolder||'');
+  const books=this.shelf(),signature=JSON.stringify([folder,types,books.map(b=>b.path+':'+b.progress)]);
+  if(this.scopeLabel)this.scopeLabel.textContent=ui("范围：{0} · 类型：{1}",folder||ui("整个笔记库"),types.map(type=>type==='md'?'Markdown':type.toUpperCase()).join(' / ')||ui("未选择"));
   if(this.count)this.count.textContent=ui("共 {0} 本 · 已读 {1} 本",books.length,books.filter(b=>b.updated>0).length);
   if(signature===this.signature&&this.grid.childElementCount)return;
   this.signature=signature;this.grid.empty();this.hideTip();
   if(!books.length){
    const empty=this.grid.createDiv({cls:'gr-shelf-empty'});setIcon(empty.createSpan(),'library');
    bindUi(empty.createEl('p',{text:ui("书架空空如也。")}), {"text":()=>ui("书架空空如也。")});
-   bindUi(empty.createEl('p',{cls:'gr-shelf-empty-sub',text:ui("从 Z-Library 找一本书，或选择库内的文档开始阅读。")}), {"text":()=>ui("从 Z-Library 找一本书，或选择库内的文档开始阅读。")});
+   const invalidFolder=folder===undefined||!!folder&&!(this.app.vault.getAbstractFileByPath(folder) instanceof TFolder);
+   const message=invalidFolder?"书架目录不存在，请重新选择。":!types.length?"请在书架设置中勾选文件类型。":"当前范围内没有匹配的文件。";
+   bindUi(empty.createEl('p',{cls:'gr-shelf-empty-sub',text:ui(message)}), {"text":()=>ui(message)});
+   bindUi(button(empty,ui("书架设置"),()=>this.plugin.openSettings('shelf'),'gr-shelf-settings'),{'text':()=>ui("书架设置")});
    return;
   }
   const shelved=books.map(book=>({book,style:spineStyle(book.title)}));
@@ -1281,7 +1308,7 @@ class GlossSettings extends PluginSettingTab {
   private settingsRoot?:HTMLElement;
   getSettingDefinitions():SettingDefinitionItem[]{
     // Index all labels without I/O. The custom row keeps the existing tabbed editor.
-    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架目录"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
+    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架","书架目录","文件类型"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
   }
   display(){this.settingsRoot=undefined;this.renderSettings();}
   redraw(){this.renderSettings();if(requireApiVersion('1.13.0'))this.update();}
@@ -1291,7 +1318,7 @@ class GlossSettings extends PluginSettingTab {
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
     identity.createSpan({cls:'gr-settings-name',text:'Banana Reader'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
     const tabs=bindUi(head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':ui("Banana Reader 设置")}}), {"aria-label":()=>ui("Banana Reader 设置")});
-    for(const[key,label,icon]of [['reading',ui("外观配置"),'book-open'],['models',ui("模型服务"),'plug'],['commands',ui("指令配置"),'wand-sparkles'],['sources',ui("书籍来源"),'library']]){
+    for(const[key,label,icon]of [['reading',ui("外观配置"),'book-open'],['models',ui("模型服务"),'plug'],['commands',ui("指令配置"),'wand-sparkles'],['shelf',ui("书架"),'library-big'],['sources',ui("书籍来源"),'library']]){
       const b=button(tabs,'',()=>{this.tab=key;this.redraw();},'gr-settings-tab');const mark=b.createSpan();setIcon(mark,icon);b.createSpan({text:label});b.classList.toggle('is-active',this.tab===key);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(this.tab===key));b.id='gr-tab-'+key;b.setAttribute('aria-controls','gr-settings-panel');
     }
     const body=el.createDiv({cls:'gr-settings-body',attr:{id:'gr-settings-panel',role:'tabpanel','aria-labelledby':'gr-tab-'+this.tab}});
@@ -1302,6 +1329,7 @@ class GlossSettings extends PluginSettingTab {
     if(this.tab==='models'){
       this.renderModelsPage(body);this.renderIndexSettings(body);
     }else if(this.tab==='commands'){this.renderCommands(body);
+    }else if(this.tab==='shelf'){this.renderShelfSettings(body);
     }else if(this.tab==='sources'){this.renderZlibSource(body);
     }else if(this.tab==='reading'){
       section(ui('界面语言'));
@@ -1357,14 +1385,29 @@ class GlossSettings extends PluginSettingTab {
     bindUi(button(controls,ui("账号登录"),()=>new ZLibraryModal(this.app,this.plugin).open(),'gr-settings-button'), {"text":()=>ui("账号登录")});
     bindUi(button(controls,ui("清除登录"),()=>{this.plugin.saveZlibCredentials({userId:'',userKey:''});statusSpan.textContent=ui("未登录");},'gr-settings-button'), {"text":()=>ui("清除登录")});
     bindUi(section.createDiv({cls:'gr-settings-description',text:ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")}), {"text":()=>ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")});
-    const shelfSection=body.createEl('section',{cls:'gr-settings-group'});bindUi(this.heading(shelfSection,ui("书架"),'gr-settings-section'), {"text":()=>ui("书架")});
-    const shelfGroup=shelfSection.createDiv({cls:'gr-settings-group-body'});
-    const shelfRow=shelfGroup.createDiv({cls:'gr-settings-row'}),shelfInfo=shelfRow.createDiv({cls:'gr-settings-info'});
-    bindUi(shelfInfo.createDiv({cls:'gr-settings-label',text:ui("书架目录")}), {"text":()=>ui("书架目录")});
-    bindUi(shelfInfo.createDiv({cls:'gr-settings-description',text:ui("留空时书架显示全库的 PDF 与 EPUB；填写后只显示这个文件夹（含子文件夹）里的书。隐私目录始终排除。")}), {"text":()=>ui("留空时书架显示全库的 PDF 与 EPUB；填写后只显示这个文件夹（含子文件夹）里的书。隐私目录始终排除。")});
-    const shelfFolder=shelfRow.createDiv({cls:'gr-settings-controls'}).createEl('input',{cls:'gr-settings-input',attr:{'aria-label':ui("书架目录"),type:'text',placeholder:ui("例如：收集箱")}});
-    shelfFolder.value=s.shelfFolder;shelfFolder.autocomplete='off';shelfFolder.spellcheck=false;
-    shelfFolder.addEventListener('change',()=>{s.shelfFolder=shelfFolder.value.trim();void this.save().catch(showError);});
+  }
+  private renderShelfSettings(body:HTMLElement){
+    const s=this.plugin.store.settings,section=body.createEl('section',{cls:'gr-settings-group'});
+    bindUi(this.heading(section,ui("书架"),'gr-settings-section'),{'text':()=>ui("书架")});
+    const group=section.createDiv({cls:'gr-settings-group-body'}),folderRow=group.createDiv({cls:'gr-settings-row'}),folderInfo=folderRow.createDiv({cls:'gr-settings-info'});
+    bindUi(folderInfo.createDiv({cls:'gr-settings-label',text:ui("书架目录")}),{'text':()=>ui("书架目录")});
+    bindUi(folderInfo.createDiv({cls:'gr-settings-description',text:ui("扫描所选文件夹及子文件夹；留空时使用整个笔记库。隐私目录始终排除。")}),{'text':()=>ui("扫描所选文件夹及子文件夹；留空时使用整个笔记库。隐私目录始终排除。")});
+    const controls=folderRow.createDiv({cls:'gr-settings-controls gr-shelf-folder-controls'}),folder=controls.createEl('input',{cls:'gr-settings-input',attr:{type:'text','aria-label':ui("书架目录"),placeholder:ui("整个笔记库")}});
+    folder.value=s.shelfFolder;folder.autocomplete='off';folder.spellcheck=false;
+    const browse=bindUi(button(controls,ui("选择文件夹"),()=>new ShelfFolderPicker(this.app,node=>save({folder:node.path})).open(),'gr-settings-button'),{'text':()=>ui("选择文件夹")});
+    const typeRow=group.createDiv({cls:'gr-settings-row'}),typeInfo=typeRow.createDiv({cls:'gr-settings-info'});
+    bindUi(typeInfo.createDiv({cls:'gr-settings-label',text:ui("文件类型")}),{'text':()=>ui("文件类型")});
+    bindUi(typeInfo.createDiv({cls:'gr-settings-description',text:ui("可同时选择多种类型；默认显示 PDF 和 EPUB，Markdown 可按需加入。")}),{'text':()=>ui("可同时选择多种类型；默认显示 PDF 和 EPUB，Markdown 可按需加入。")});
+    const types=typeRow.createDiv({cls:'gr-settings-controls gr-shelf-types',attr:{role:'group','aria-label':ui("文件类型")}}),checks=new Map<ShelfFileType,HTMLInputElement>();
+    for(const type of SHELF_FILE_TYPES){const name=type==='md'?'Markdown':type.toUpperCase(),label=types.createEl('label',{cls:'gr-shelf-type'}),check=label.createEl('input',{attr:{type:'checkbox','aria-label':name}});check.checked=s.shelfTypes.includes(type);label.createSpan({text:name});checks.set(type,check);check.addEventListener('change',()=>{void save({types:SHELF_FILE_TYPES.filter(value=>checks.get(value)?.checked)});});}
+    const status=group.createDiv({cls:'gr-settings-description gr-shelf-save-status',attr:{role:'status','aria-live':'polite'}});
+    const save=async(change:{folder?:string;types?:readonly ShelfFileType[]})=>{
+      folder.disabled=true;browse.disabled=true;checks.forEach(check=>check.disabled=true);status.textContent='';
+      try{await this.plugin.updateShelfPreferences(change);status.textContent=ui("书架设置已保存，打开的书架会立即更新。");}
+      catch(error){status.textContent=ui(error instanceof Error?error.message:'保存失败');showError(error);}
+      finally{folder.value=s.shelfFolder;folder.disabled=false;browse.disabled=false;checks.forEach((check,type)=>{check.checked=s.shelfTypes.includes(type);check.disabled=false;});}
+    };
+    folder.addEventListener('change',()=>{void save({folder:folder.value});});
   }
   private renderModelsPage(body:HTMLElement){
     if(Platform?.isMobile)bindUi(body.createEl('p',{cls:'gr-settings-description',text:ui('手机端使用自定义 API；本机 CLI 仅桌面可用。回答完成后显示，停止会忽略尚未返回的结果。')}),{'text':()=>ui('手机端使用自定义 API；本机 CLI 仅桌面可用。回答完成后显示，停止会忽略尚未返回的结果。')});
