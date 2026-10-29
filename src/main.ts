@@ -387,7 +387,7 @@ class BookshelfView extends ItemView {
   const head=this.contentEl.createDiv({cls:'gr-shelf-head'});
   const title=head.createDiv({cls:'gr-shelf-heading'});
   bindUi(title.createEl('h2',{cls:'gr-shelf-title',text:ui("书架")}), {"text":()=>ui("书架")});
-  const settings=bindUi(button(title,'',()=>this.plugin.openSettings('shelf'),'gr-shelf-settings'),{'aria-label':()=>ui("书架设置")});setIcon(settings.createSpan(),'settings-2');bindUi(settings.createSpan({text:ui("书架设置")}),{'text':()=>ui("书架设置")});
+  const settings=bindUi(button(title,'',()=>this.plugin.openSettings('reading'),'gr-shelf-settings'),{'aria-label':()=>ui("书架设置")});setIcon(settings.createSpan(),'settings-2');bindUi(settings.createSpan({text:ui("书架设置")}),{'text':()=>ui("书架设置")});
   this.count=head.createEl('p',{cls:'gr-shelf-meta'});this.scopeLabel=head.createEl('p',{cls:'gr-shelf-scope'});
   this.grid=this.contentEl.createDiv({cls:'gr-shelf'});
   this.resizeObserver=new ResizeObserver(()=>{this.win.clearTimeout(this.renderTimer);this.renderTimer=this.win.setTimeout(()=>this.renderShelf(),120);});
@@ -425,7 +425,7 @@ class BookshelfView extends ItemView {
    const invalidFolder=folder===undefined||!!folder&&!(this.app.vault.getAbstractFileByPath(folder) instanceof TFolder);
    const message=invalidFolder?"书架目录不存在，请重新选择。":!types.length?"请在书架设置中勾选文件类型。":"当前范围内没有匹配的文件。";
    bindUi(empty.createEl('p',{cls:'gr-shelf-empty-sub',text:ui(message)}), {"text":()=>ui(message)});
-   bindUi(button(empty,ui("书架设置"),()=>this.plugin.openSettings('shelf'),'gr-shelf-settings'),{'text':()=>ui("书架设置")});
+   bindUi(button(empty,ui("书架设置"),()=>this.plugin.openSettings('reading'),'gr-shelf-settings'),{'text':()=>ui("书架设置")});
    return;
   }
   const shelved=books.map(book=>({book,style:spineStyle(book.title)}));
@@ -1318,7 +1318,7 @@ class GlossSettings extends PluginSettingTab {
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
     identity.createSpan({cls:'gr-settings-name',text:'Banana Reader'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
     const tabs=bindUi(head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':ui("Banana Reader 设置")}}), {"aria-label":()=>ui("Banana Reader 设置")});
-    for(const[key,label,icon]of [['reading',ui("外观配置"),'book-open'],['models',ui("模型服务"),'plug'],['commands',ui("指令配置"),'wand-sparkles'],['shelf',ui("书架"),'library-big'],['sources',ui("书籍来源"),'library']]){
+    for(const[key,label,icon]of [['reading',ui("外观配置"),'book-open'],['models',ui("模型服务"),'plug'],['commands',ui("指令配置"),'wand-sparkles'],['sources',ui("书籍来源"),'library']]){
       const b=button(tabs,'',()=>{this.tab=key;this.redraw();},'gr-settings-tab');const mark=b.createSpan();setIcon(mark,icon);b.createSpan({text:label});b.classList.toggle('is-active',this.tab===key);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(this.tab===key));b.id='gr-tab-'+key;b.setAttribute('aria-controls','gr-settings-panel');
     }
     const body=el.createDiv({cls:'gr-settings-body',attr:{id:'gr-settings-panel',role:'tabpanel','aria-labelledby':'gr-tab-'+this.tab}});
@@ -1329,9 +1329,9 @@ class GlossSettings extends PluginSettingTab {
     if(this.tab==='models'){
       this.renderModelsPage(body);this.renderIndexSettings(body);
     }else if(this.tab==='commands'){this.renderCommands(body);
-    }else if(this.tab==='shelf'){this.renderShelfSettings(body);
     }else if(this.tab==='sources'){this.renderZlibSource(body);
     }else if(this.tab==='reading'){
+      this.renderShelfSettings(body);
       section(ui('界面语言'));
       const language=bindUi(row(ui('语言'),ui('设置页和已打开的阅读页立即切换，保留选区、草稿和正在进行的问答。不会更改提示词或翻译目标语言。')).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui('界面语言')}}), {"aria-label":()=>ui('界面语言')});
       for(const [value,label]of [['auto',ui('跟随 Obsidian')],['zh-CN',ui('中文（简体）')],['en','English']])language.createEl('option',{value,text:label});language.value=s.language;
