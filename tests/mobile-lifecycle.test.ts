@@ -116,6 +116,23 @@ test('the first settings page contains bookshelf preferences without a separate 
  const f=await fixture('gloss-reader',false,{shelfFolder:'Books',shelfTypes:['md']}),before=JSON.stringify(f.plugin.store.documents);f.settingsTab.display();
  const page=f.settingsTab.containerEl,buttons=Array.from(page.getElementsByTagName('button')) as any[],tabs=buttons.filter(button=>button.getAttribute('role')==='tab');
  assert.deepEqual(tabs.map(tab=>tab.id),['gr-tab-reading','gr-tab-models','gr-tab-commands','gr-tab-sources']);assert.equal(f.settingsTab.tab,'reading');
- const sections=Array.from(page.getElementsByTagName('section')) as any[];assert.ok(sections[0].textContent.startsWith('书架'));assert.ok(sections[1].textContent.startsWith('界面语言'));
+ const sections=Array.from(page.getElementsByTagName('section')) as any[];assert.ok(sections[0].textContent.startsWith('书架'));assert.ok(sections[1].textContent.startsWith('阅读笔记'));assert.ok(sections[2].textContent.startsWith('界面语言'));
  const inputs=Array.from(sections[0].getElementsByTagName('input')) as any[];assert.equal(inputs.find(input=>input.getAttribute('aria-label')==='书架目录').value,'Books');assert.equal(inputs.find(input=>input.getAttribute('aria-label')==='Markdown').checked,true);assert.equal(JSON.stringify(f.plugin.store.documents),before);
+});
+
+
+test('Markdown export uses its saved folder, creates nested paths and retains snapshot content and unique files',async()=>{
+ const f=await fixture(),nodes=new Map<string,any>(),created:{path:string;text:string}[]=[],folders:string[]=[];assert.equal(f.plugin.store.settings.exportFolder,'收集箱');
+ f.app.vault.getAbstractFileByPath=(path:string)=>nodes.get(path)||null;f.app.vault.getName=()=>'Synthetic QA';f.app.vault.createFolder=async(path:string)=>{folders.push(path);nodes.set(path,new f.TFolder(path));};f.app.vault.create=async(path:string,text:string)=>{assert.equal(nodes.has(path),false);nodes.set(path,Object.assign(new f.TFile(),{path}));created.push({path,text});};
+ const before=JSON.stringify(f.plugin.store.documents);await f.plugin.updateExportFolder('Exports/Nested');const restored=await fixture('banana-reader',false,f.persisted().settings);assert.equal(restored.plugin.store.settings.exportFolder,'Exports/Nested');f.view.path='Mobile.pdf';await f.view.exportNotes();await f.view.exportNotes();
+ assert.deepEqual(folders,['Exports','Exports/Nested']);assert.equal(created.length,2);assert.notEqual(created[0].path,created[1].path);assert.ok(created.every(file=>file.path.startsWith('Exports/Nested/')));assert.ok(created[0].text.includes('PDF source'));assert.ok(created[0].text.includes('Keep my annotation'));assert.equal(JSON.stringify(f.plugin.store.documents),before);
+ await f.plugin.updateExportFolder('');await f.view.exportNotes();assert.ok(!created[2].path.includes('/'));assert.equal(JSON.stringify(f.plugin.store.documents),before);
+});
+
+test('Markdown export folder rejects unsafe paths and file collisions, and failed saves restore the previous directory',async()=>{
+ const f=await fixture();f.app.vault.getAbstractFileByPath=(path:string)=>path==='Existing.md'?new f.TFile():null;const before=f.writes();
+ for(const path of ['../Outside','日记/Exports','.obsidian/plugins','Existing.md/Nested'])await assert.rejects(f.plugin.updateExportFolder(path));assert.equal(f.writes(),before);assert.equal(f.plugin.store.settings.exportFolder,'收集箱');
+ const save=f.plugin.saveData;f.plugin.saveData=async()=>{throw new Error('Synthetic export preference failure');};await assert.rejects(f.plugin.updateExportFolder('Exports'),/Synthetic export preference failure/);assert.equal(f.plugin.store.settings.exportFolder,'收集箱');f.plugin.saveData=save;
+ const body=f.root.createDiv();f.settingsTab.renderExportSettings(body);const input=Array.from(body.getElementsByTagName('input'))[0] as any;input.value='Exports';input.dispatch('change');await new Promise(resolve=>setTimeout(resolve,0));assert.equal(f.plugin.store.settings.exportFolder,'Exports');
+ const choose=Array.from(body.getElementsByTagName('button'))[0] as any;f.app.vault.getRoot=()=>new f.TFolder('/',[new f.TFolder('Chosen')]);choose.dispatch('click');f.openedPicker().onChooseItem(new f.TFolder('Chosen'));await new Promise(resolve=>setTimeout(resolve,0));assert.equal(f.plugin.store.settings.exportFolder,'Chosen');assert.equal(input.value,'Chosen');
 });

@@ -38,7 +38,7 @@ The current development branch keeps the main plugin categories above their cont
 2. Open a Markdown, PDF or EPUB file. Click **Open Banana Reader** in the ribbon, or run **Banana Reader: Enter immersive reading** from the command palette.
 3. Select a sentence. Highlight it or add a note immediately. For AI questions, add a connection in **Settings → Banana Reader → Model services** and choose a question model first.
 4. Ask about the selection, for example: *“Which claim does this paragraph support?”* Click a citation to check the answer against the source.
-5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in the vault’s export folder. Choose **Back to document** to return to the normal file view.
+5. Open the notebook and click the download icon (**Export Markdown notes**) to save a new Markdown note in the vault’s export folder. Choose **Back to document** to return to the normal file view. The default is the existing inbox folder. In the development preview, choose **Settings → Banana Reader → Appearance → Reading notes → Markdown export folder** to select a folder or enter a new path; an empty path uses the vault root.
 
 These instructions use English interface labels. Choose **English** in **Settings → Banana Reader → Appearance → Interface language**. For instructions using Chinese labels, see the [Chinese guide](README.zh-CN.md#%E7%95%8C%E9%9D%A2%E8%AF%AD%E8%A8%80).
 

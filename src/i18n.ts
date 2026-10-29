@@ -9,6 +9,13 @@ let language:UiLanguage='zh-CN';
 export function configureLanguage(preference:unknown,hostLanguage:string){language=resolveLanguage(preference,hostLanguage);return language;}
 export function currentLanguage(){return language;}
 export const ENGLISH:Readonly<Record<string,string>> = {
+  "阅读笔记": "Reading notes",
+  "Markdown 导出目录": "Markdown export folder",
+  "每次导出在此目录新建 Markdown 笔记。默认使用收集箱；留空使用笔记库根目录。": "Each export creates a new Markdown note in this folder. The default is the inbox folder; leave empty for the vault root.",
+  "笔记库根目录": "Vault root",
+  "选择 Markdown 导出目录…": "Choose a Markdown export folder…",
+  "导出目录已保存。": "Export folder saved.",
+  "导出路径包含同名文件，请选择其他目录。": "The export path contains a file. Choose another folder.",
   "请填写笔记库内的文件夹路径。": "Enter a folder path inside the vault.",
   "书架目录不存在，请重新选择。": "The bookshelf folder does not exist. Choose another folder.",
   "该目录受隐私边界保护，请选择其他文件夹。": "This folder is protected. Choose another folder.",
