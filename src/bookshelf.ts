@@ -8,6 +8,20 @@ export interface ShelfReading{progress?:number;updated?:number}
 export interface ShelfBook{path:string;title:string;extension:string;progress:number;updated:number}
 export type SpineVariant='plain'|'label'|'foil'|'bands';
 export interface SpineStyle{color:string;dark:string;width:number;height:number;variant:SpineVariant}
+export const SHELF_FILE_TYPES=['pdf','epub','md'] as const;
+export type ShelfFileType=typeof SHELF_FILE_TYPES[number];
+export function normalizeShelfTypes(value:unknown):ShelfFileType[]{
+ if(!Array.isArray(value))return['pdf','epub'];
+ const selected=new Set(value.filter((item):item is string=>typeof item==='string').map(item=>item.toLowerCase()));
+ return SHELF_FILE_TYPES.filter(type=>selected.has(type));
+}
+/** A vault-relative folder; undefined is invalid, while empty selects the whole vault. */
+export function normalizeShelfFolder(value:string):string|undefined{
+ const path=value.trim().replace(/\\/g,'/').replace(/^\/+|\/+$/g,'');
+ if(!path||path==='.')return '';
+ if(path.includes(':')||path.split('/').some(part=>!part||part==='.'||part==='..'))return undefined;
+ return path;
+}
 
 /** Muted cloth tones; [base, dark edge] pairs. */
 const PALETTE:[string,string][]=[
@@ -19,9 +33,11 @@ const VARIANTS:SpineVariant[]=['plain','plain','plain','label','foil','bands'];
 export function shelfTitle(basename:string):string{return basename.replace(/\.(md|pdf|epub)$/i,'').trim()||basename;}
 
 /** Recently read first (by last update), then unread books by title. */
-export function shelfBooks(files:ShelfFile[],readings:Record<string,ShelfReading>):ShelfBook[]{
+export function shelfBooks(files:ShelfFile[],readings:Record<string,ShelfReading>,types:readonly ShelfFileType[]=SHELF_FILE_TYPES):ShelfBook[]{
  const read:ShelfBook[]=[],unread:ShelfBook[]=[];
+ const allowed=new Set<string>(types);
  for(const file of files){
+  if(!allowed.has(file.extension.toLowerCase()))continue;
   const reading=readings[file.path];
   const progress=reading&&typeof reading.progress==='number'?Math.max(0,Math.min(1,reading.progress)):0;
   const updated=reading&&typeof reading.updated==='number'?reading.updated:0;
