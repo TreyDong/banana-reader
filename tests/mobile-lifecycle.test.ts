@@ -29,8 +29,9 @@ async function fixture(pluginId="banana-reader",replacementActive=false,savedSet
  class ItemView{app=app;contentEl=root.createDiv();addChild(){}removeChild(){}}
  class Setting{settingEl:any;nameEl:any;constructor(parent:any){this.settingEl=parent.createDiv();this.nameEl=this.settingEl.createDiv();}setName(name:string){this.nameEl.textContent=name;return this;}setHeading(){return this;}}
  class FuzzySuggestModal{constructor(public app:any){}setPlaceholder(){}open(){openedPicker=this;}}
- class PluginSettingTab{containerEl=root.createDiv();constructor(public app:any){}}
- const obsidian={Plugin,ItemView,TFile,TFolder,Setting,FuzzySuggestModal,PluginSettingTab,normalizePath:(path:string)=>path,requireApiVersion:()=>true,Platform:{isMobile:true},FileView:class{},Modal:class{},Component:class{},getLanguage:()=>'zh',getFrontMatterInfo:()=>({contentStart:0}),setIcon:()=>{},Notice:class{}};
+ class PluginSettingTab{containerEl=root.createDiv();constructor(public app:any){}update(){}}
+ class ToggleComponent{toggleEl:any;constructor(parent:any){this.toggleEl=parent.createEl('input');}setTooltip(){return this;}setValue(){return this;}onChange(){return this;}}
+ const obsidian={Plugin,ItemView,TFile,TFolder,Setting,FuzzySuggestModal,PluginSettingTab,ToggleComponent,normalizePath:(path:string)=>path,requireApiVersion:()=>true,Platform:{isMobile:true},FileView:class{},Modal:class{},Component:class{},getLanguage:()=>'zh',getFrontMatterInfo:()=>({contentStart:0}),setIcon:()=>{},Notice:class{}};
  const context={module:{exports:{}},exports:{},crypto:globalThis.crypto,TextEncoder,TextDecoder,Error,console,URL,AbortController,setTimeout,clearTimeout,requestAnimationFrame:()=>0,cancelAnimationFrame:()=>{},require:(id:string)=>{assert.equal(id,'obsidian','Mobile attempted to load '+id);return obsidian;}};
  Object.assign(context,{window:context});vm.runInNewContext(bundle,context);const plugin=new (context.module.exports as any).default();await plugin.onload();const view=views.get('gloss-reader')({});return{plugin,view,file,root,app,views,settingsTab,TFile,TFolder,writes:()=>writes,persisted:()=>persisted,openedPicker:()=>openedPicker};
 }
@@ -108,4 +109,13 @@ test('bookshelf settings controls save format selection and folder picking lists
  const choose=Array.from(body.getElementsByTagName('button')).find((node:any)=>node.textContent==='选择文件夹') as any;choose.dispatch('click');await new Promise(resolve=>setTimeout(resolve,0));
  assert.deepEqual(Array.from(f.openedPicker().getItems(),(node:any)=>node.path),['','Books','Books/Sub']);
  assert.equal(f.openedPicker().getItemText(new f.TFolder('/')),'整个笔记库');
+});
+
+
+test('the first settings page contains bookshelf preferences without a separate navigation tab',async()=>{
+ const f=await fixture('gloss-reader',false,{shelfFolder:'Books',shelfTypes:['md']}),before=JSON.stringify(f.plugin.store.documents);f.settingsTab.display();
+ const page=f.settingsTab.containerEl,buttons=Array.from(page.getElementsByTagName('button')) as any[],tabs=buttons.filter(button=>button.getAttribute('role')==='tab');
+ assert.deepEqual(tabs.map(tab=>tab.id),['gr-tab-reading','gr-tab-models','gr-tab-commands','gr-tab-sources']);assert.equal(f.settingsTab.tab,'reading');
+ const sections=Array.from(page.getElementsByTagName('section')) as any[];assert.ok(sections[0].textContent.startsWith('书架'));assert.ok(sections[1].textContent.startsWith('界面语言'));
+ const inputs=Array.from(sections[0].getElementsByTagName('input')) as any[];assert.equal(inputs.find(input=>input.getAttribute('aria-label')==='书架目录').value,'Books');assert.equal(inputs.find(input=>input.getAttribute('aria-label')==='Markdown').checked,true);assert.equal(JSON.stringify(f.plugin.store.documents),before);
 });

@@ -19,7 +19,7 @@ Existing `banana-reader` users should preserve their current records and follow 
 
 ## Development preview
 
-The current development branch places plugin categories and model-service choices above their content, wrapping them on narrow windows. It adds a dedicated Bookshelf settings tab, folder picking and saved file-type filters, with immediate updates to open shelves. These changes are not part of the published 0.14.8 package. Copy buttons retain their existing behavior. See the [implementation and validation record](notes/settings-shelf-improvements-2026-10-29.md).
+The current development branch keeps the main plugin categories above their content and restores the previous model-service configuration layout. Bookshelf preferences appear first under Appearance, with folder picking and saved file-type filters that immediately update open shelves. These changes are not part of the published 0.14.8 package. Copy buttons retain their existing behavior. See the [implementation and validation record](notes/settings-shelf-improvements-2026-10-29.md).
 
 ## What you can do
 
@@ -30,7 +30,7 @@ The current development branch places plugin categories and model-service choice
 - **Leave with a useful note.** Export excerpts, annotations and conversations to a new Markdown file with source links. Original documents stay unchanged.
 - **Use your own models.** Connect a supported API or an authenticated Codex, Claude or Pi CLI. Choose question, translation and article-brief models independently. Optional book indexing retrieves passages across a longer document.
 - **Fetch books from Z-Library.** Search with format, language and sort filters, download into a vault folder and start reading immediately. Requires your own Z-Library account.
-- **Bookshelf.** Books stand on wooden planks as cloth spines — plain, paper-label, foil-stamped or banded bindings, each with its own width and height. A red bookmark marks reading progress; hover to preview a book and click to continue. In the development preview, open **Settings → Banana Reader → Bookshelf**, or **Bookshelf settings** on the shelf, to select a folder and include its subfolders. Leave the folder empty to use the whole vault; protected folders stay excluded. Select any combination of PDF, EPUB and Markdown; PDF and EPUB are enabled by default.
+- **Bookshelf.** Books stand on wooden planks as cloth spines — plain, paper-label, foil-stamped or banded bindings, each with its own width and height. A red bookmark marks reading progress; hover to preview a book and click to continue. In the development preview, open **Settings → Banana Reader → Appearance → Bookshelf**, or **Bookshelf settings** on the shelf, to select a folder and include its subfolders. Leave the folder empty to use the whole vault; protected folders stay excluded. Select any combination of PDF, EPUB and Markdown; PDF and EPUB are enabled by default.
 
 ## Get started
 
