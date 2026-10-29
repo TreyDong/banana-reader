@@ -1,15 +1,15 @@
 # Banana Reader
 
-> **当前正式版：0.14.8，仅桌面。** 正式社区发行沿用 `gloss-reader` ID，显示名仍为 Banana Reader，后续开发与发布统一到 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)。旧 `banana-reader-plugin` 仓库及手机／BRAT 测试通道已归档。已装 `banana-reader` 的用户请保留现有数据；切换前停用两者、备份并核对最新记录，不要同时启用或直接覆盖。详见 [恢复与数据衔接](docs/plugin-id-migration.md)。
+> **当前正式版：0.14.9，仅桌面。** 正式社区发行沿用 `gloss-reader` ID，显示名仍为 Banana Reader，后续开发与发布统一到 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)。旧 `banana-reader-plugin` 仓库及手机／BRAT 测试通道已归档。已装 `banana-reader` 的用户请保留现有数据；切换前停用两者、备份并核对最新记录，不要同时启用或直接覆盖。详见 [恢复与数据衔接](docs/plugin-id-migration.md)。
 
 
-正式版本 **0.14.8**。支持 Markdown、PDF、EPUB 阅读、「书籍来源」（搜索 Z-Library 下载到库内）与「书架」（木板书脊视图），提供简体中文、English 和跟随 Obsidian。
+正式版本 **0.14.9**。支持 Markdown、PDF、EPUB 阅读、「书籍来源」（搜索 Z-Library 下载到库内）与「书架」（木板书脊视图），提供简体中文、English 和跟随 Obsidian。
 
-本版已修复 0.14.7 审核中的源码警告、窗口兼容、设置检索、PDF 动态编译与原生 PDF worker 冲突。197 项测试通过，官方自动复审完成，安装文件来源证明和官方重建一致性检查通过。文档选择、书架和主动复制功能保留；见[验收记录](notes/community-review-repair-plan.md)。
+本版调整顶部设置菜单，收紧开关与指令操作的排列，书架支持选择目录和 PDF／EPUB／Markdown 类型过滤，并增加 Markdown 导出目录设置。205 项测试通过；原有阅读记录、复制功能及每次导出新建笔记的方式保留。发布验证状态见[0.14.9 记录](notes/release-0.14.9.md)。
 
 在 Obsidian 里边读、边问、边记。读到不懂的句子，选中提问；觉得值得留下的段落，划线或写批注；读完后，把摘录和理解导出成一份带出处的 Markdown 笔记。
 
-[社区安装](https://community.obsidian.md/plugins/gloss-reader) · [0.14.8 安装文件](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
+[社区安装](https://community.obsidian.md/plugins/gloss-reader) · [0.14.9 安装文件](https://github.com/TreyDong/banana-reader/releases/tag/0.14.9) · [English](README.md) · [反馈问题](https://github.com/TreyDong/banana-reader/issues)
 
 
 ## 可以用它做什么
@@ -21,19 +21,19 @@
 - **读完得到一份笔记**：导出摘录、批注和完整对话，保留回到原文的链接。
 - **用自己选择的模型**：接入 API 或本机已登录的 Codex、Claude、Pi；问答、翻译、文章解读可分别选择模型。
 - **从 Z-Library 找书**：在插件内按格式、语言与排序搜索 Z-Library，选中后直接下载到库内并进入沉浸阅读。需要你自己的 Z-Library 账号。
-- **书架**：PDF 与 EPUB 以布面书脊立在木板上——书脊有素面、糊纸标签、烫金、竹节四种装帧，宽窄高矮各不相同；读到哪儿，脊顶就垂出多长的红书签；悬停抽出可预览进度，点击继续读。页面上没有按钮，只有书。
+- **书架**：PDF 与 EPUB 以布面书脊立在木板上——书脊有素面、糊纸标签、烫金、竹节四种装帧，宽窄高矮各不相同；读到哪儿，脊顶就垂出多长的红书签；悬停抽出可预览进度，点击继续读。可在「外观配置」页顶部选择书架目录和文件类型。
 
 ## 三步开始
 
-1. 从[社区插件](https://community.obsidian.md/plugins/gloss-reader)安装 Banana Reader，或按下文使用 0.14.8 三文件手动安装；启用后打开 Markdown、PDF 或 EPUB，点击左侧 **打开 Banana Reader**。
+1. 从[社区插件](https://community.obsidian.md/plugins/gloss-reader)安装 Banana Reader，或按下文使用 0.14.9 三文件手动安装；启用后打开 Markdown、PDF 或 EPUB，点击左侧 **打开 Banana Reader**。
 2. 选中一段文字，就能划线、写批注。需要 AI 问答时，先在 **设置 → Banana Reader → 模型服务** 添加连接并选择问答模型，再发送问题。
-3. 阅读结束后，打开笔记本，点击下载图标（**导出 Markdown 笔记**）。新笔记保存在 `收集箱/`，原文保持不变。
+3. 阅读结束后，打开笔记本，点击下载图标（**导出 Markdown 笔记**）。新笔记默认保存在 `收集箱/`，原文保持不变。可在 **设置 → Banana Reader → 外观配置 → 阅读笔记 → Markdown 导出目录** 选择文件夹或填写新路径；留空导出到笔记库根目录。
 
 阅读、标记、批注和导出不需要 AI 账号。AI 功能使用你自己的服务，可能产生第三方费用。桌面正式版要求 **Obsidian 1.11.4+**，提供简体中文和英文界面；手机版开发测试说明见下文。上述按钮名称以中文界面为例。
 
 ## 手机版状态
 
-0.14.8 正式包仅支持桌面，iOS / Android 真机验收尚未完成。移动端适配代码仍保留，但目前没有持续维护的手机安装包。
+0.14.9 正式包仅支持桌面，iOS / Android 真机验收尚未完成。移动端适配代码仍保留，但目前没有持续维护的手机安装包。
 
 旧 `banana-reader-plugin` 仓库的 0.14.0～0.14.2 测试包仅作历史保留，未获得本次修复，不再推荐通过 BRAT 新装。归档仓库不会自动更新已安装插件或迁移其数据。后续手机验收须基于正式仓库的同一份源码重新准备候选，见[手机状态与验收](docs/mobile-candidate.md)。
 
@@ -49,7 +49,7 @@
 
 ## 详细使用说明
 
-在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的阅读插件。当前桌面正式版 0.14.8。
+在 Markdown、PDF、EPUB 旁边阅读、提问、划线和留下理解的阅读插件。当前桌面正式版 0.14.9。
 
 使用 Obsidian 原生视图、MarkdownRenderer 与本地文档数据，提供选文问答、页边理解和沉浸阅读。问答、翻译与文章解读分别选择模型；现有配置、划线、问答和导出格式保持兼容。
 
@@ -74,7 +74,7 @@
 - 底部提问栏默认收起。选中文字后，浮动工具条提供提问、指令、批注和标记；点击“提问”或直接打字进入输入条，可切换联网并发送，点击“提问”还会显示推荐问题；点击已有划线也可打开工具条。按 / 打开的提问框面向整篇文档。单行输入旁可切换模型及联网，Enter 发送；发送后清空，每次在右侧建立独立回答，翻译与提问分别保存。按 Esc 收起，未发送草稿保留。右侧页边卡片内的“继续追问”延续这张卡片的历史、原文依据与原回答模型，不清空底部新问题的草稿。普通卡片收起后显示三行回答预览，原文锚点相距不足 88 px 的邻近注解才压缩为单行。回答可展开、停止、重新生成、删除或复制，完成后显示模型与实际用量；引用以内嵌标签回跳，不额外追加来源列表或停止文案。窄分栏通过笔记本查看回答。
 - 回答中的 `[¶n]` 返回对应原文。每条对话保留开始时的上下文与引用锚点；原文变化后用摘录重新定位，无法可靠匹配会明确提示。
 - Esc 先收起当前回答或输入层，再退出阅读；工具栏“返回文档”直接回到原来的普通文档；/ 新建文档提问（已有索引时检索整书）；可为“显示 / 收起提问框”命令自定义快捷键。工具栏可调整纸张、字体、字号、行距，或打开目录；左侧段落缩略轨道支持点击与拖动。沉浸模式仍可选中文本和与 Agent 交互。
-- “导出 Markdown 笔记”会在 `收集箱/` 新建 Markdown，含摘录、批注、完整对话与原文回跳链接。不会覆盖旧笔记。
+- “导出 Markdown 笔记”默认在 `收集箱/` 新建 Markdown；使用设置中的「Markdown 导出目录」，新路径在实际导出时创建。内容仍包含摘录、批注、完整对话与原文回跳链接，每次新建一份，不覆盖旧笔记。
 
 ## 从 Z-Library 获取书籍
 
@@ -152,7 +152,7 @@ npm run build
 npm test
 ```
 
-将正式仓库 [0.14.8 Release](https://github.com/TreyDong/banana-reader/releases/tag/0.14.8) 中的 `main.js`、`manifest.json`、`styles.css` 三个文件放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。构建会将 MIT、字体 OFL、fflate MIT 和 PDF.js Apache-2.0 许可内嵌到 `main.js`，标准三文件安装即可携带完整许可；不需要额外复制源码或其他人的 `data.json`。
+将正式仓库 [0.14.9 Release](https://github.com/TreyDong/banana-reader/releases/tag/0.14.9) 中的 `main.js`、`manifest.json`、`styles.css` 三个文件放进 `<vault>/.obsidian/plugins/gloss-reader/`，在 Obsidian 第三方插件里启用。工程源码留在项目库，不放进笔记库。`main.js` 和 `node_modules` 不进入 Git。构建会将 MIT、字体 OFL、fflate MIT 和 PDF.js Apache-2.0 许可内嵌到 `main.js`，标准三文件安装即可携带完整许可；不需要额外复制源码或其他人的 `data.json`。
 
 ## 许可、参考与兼容
 
@@ -195,13 +195,21 @@ npm test
 - 重写市场介绍与快速上手，加入真实阅读画面；详细配置和权限用途继续可查。
 - 为安装文件补充可核验的 GitHub 构建来源证明；具体执行结果见发布记录。
 
+## 0.14.9 设置改进
+
+插件主设置菜单放到内容上方，模型服务保留原有配置布局。书架目录与文件类型放在第一个「外观配置」页的最前面，阅读笔记的 Markdown 导出目录也在该页。开关、短选项和指令操作优先同排，空间不足时按内容换行；见[发布与验证记录](notes/release-0.14.9.md)。
+
 ## 书架
 
-- 左侧边栏的图书馆图标或命令面板 `Banana Reader: 打开书架` 进入。库内所有 Markdown、PDF 与 EPUB（不含隐私目录）按最近阅读排布，新书按文件名排在后侧的板架上。
+- 左侧边栏的图书馆图标或命令面板 `Banana Reader: 打开书架` 进入。匹配扫描范围和文件类型的书按最近阅读排布，新书按文件名排在后侧的板架上。
 - 每本书显示为一册布面书脊：颜色与高度由书名稳定生成，读到哪儿，书脊顶部就有多长的红书签；悬停抽出书本可预览书名、格式与进度，点击进入沉浸阅读。
-- 书脊为示意装帧，不代表真实封面；阅读进度来自本书的批注与问答记录，未打开过的书没有进度。书架只收 PDF 与 EPUB；在 设置 → Banana Reader → 书籍来源 → 书架目录 填写文件夹后，书架只显示该文件夹（含子文件夹）内的书，留空则显示全库。
+- 书脊为示意装帧，不代表真实封面；阅读进度来自本书的批注与问答记录，未打开过的书没有进度。
+- **书架设置**：进入 设置 → Banana Reader → 外观配置 → 书架，或点击书架顶部的「书架设置」。可选择或填写笔记库内的文件夹，扫描包含子文件夹；留空则使用整个笔记库，隐私目录始终排除。无效目录不会覆盖已有设置。
+- 文件类型支持 PDF、EPUB、Markdown 多选，默认勾选 PDF 与 EPUB。取消全部类型时会显示提示；保存后打开的书架立即更新，重启后仍保留所选目录和类型。
 
 ## 仓库变更日志
+
+- 2026-10-29 · 0.14.9：调整设置布局，增加书架目录选择与类型过滤、Markdown 导出目录设置；205 项测试通过，原有阅读数据与导出方式保持；见[发布验证](notes/release-0.14.9.md)。
 
 - 2026-10-28：后续开发与发行统一到 `TreyDong/banana-reader`，归档旧 `banana-reader-plugin` 仓库并保留历史标签、发行文件。统一安装链接、`gloss-reader` 数据路径、0.14.8 正式状态及 PDF／手机说明，停止推荐旧 BRAT 测试包；见[仓库整合记录](notes/repository-consolidation-2026-10-28.md)。
 
