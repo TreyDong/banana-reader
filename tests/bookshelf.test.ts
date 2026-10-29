@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shelfBooks,shelfTitle,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,type ShelfFile,type ShelfReading,type SpineVariant} from '../src/bookshelf';
+import {shelfBooks,shelfTitle,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,normalizeShelfTypes,normalizeShelfFolder,type ShelfFile,type ShelfReading,type SpineVariant} from '../src/bookshelf';
 
 const file=(path:string):ShelfFile=>({path,basename:path.split('/').pop()!,extension:path.split('.').pop()!});
 
@@ -57,4 +57,23 @@ test('book sizes format for the card and accession numbers stay stable',()=>{
  assert.equal(formatBookSize(0),'');assert.equal(formatBookSize(500000),'488 KB');
  assert.equal(formatBookSize(2400000),'2.3 MB');assert.equal(formatBookSize(25000000),'24 MB');
  assert.equal(bookNumber('三体'),bookNumber('三体'));assert.ok(bookNumber('x')>=100&&bookNumber('x')<=999);
+});
+
+test('saved shelf types preserve old defaults, explicit empty choices and supported formats only',()=>{
+ assert.deepEqual(normalizeShelfTypes(undefined),['pdf','epub']);
+ assert.deepEqual(normalizeShelfTypes('md'),['pdf','epub']);
+ assert.deepEqual(normalizeShelfTypes(['MD','pdf','PDF','exe',null]),['pdf','md']);
+ assert.deepEqual(normalizeShelfTypes([]),[]);
+ const files=[file('a.PDF'),file('b.epub'),file('c.md'),file('d.exe')],readings={'c.md':{progress:.7,updated:300}};
+ const before=JSON.stringify(readings);
+ assert.deepEqual(shelfBooks(files,readings,['md']).map(book=>book.path),['c.md']);
+ assert.deepEqual(shelfBooks(files,readings,['pdf','epub']).map(book=>book.path),['a.PDF','b.epub']);
+ assert.deepEqual(shelfBooks(files,readings,[]),[]);assert.equal(JSON.stringify(readings),before);
+});
+
+test('shelf folder input remains vault-relative and rejects traversal instead of broadening scope',()=>{
+ assert.equal(normalizeShelfFolder(' Books/Sub/ '),'Books/Sub');
+ assert.equal(normalizeShelfFolder('Books\\Sub'),'Books/Sub');
+ assert.equal(normalizeShelfFolder('/'),'');assert.equal(normalizeShelfFolder(''),'');
+ for(const path of ['../Books','Books/../Other','C:/Books','Books//Sub'])assert.equal(normalizeShelfFolder(path),undefined);
 });
