@@ -1,5 +1,6 @@
 # Settings navigation and bookshelf preferences — 2026-10-29
 
+Release delivery for the accepted final implementation is tracked in [0.14.9 verification](release-0.14.9.md). Earlier preview statements below describe their original test stage.
 ## Requested direction
 
 The maintainer asked for plugin settings navigation above its content, rather than a side-by-side menu, and for an explicit bookshelf folder and file-type filter. Automatic copying stays unchanged; the earlier proposal to replace it with manual copying was not approved and is not part of this work.

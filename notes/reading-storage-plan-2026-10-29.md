@@ -1,5 +1,6 @@
 # Markdown 导出目录设置 — 2026-10-29
 
+Release delivery for the accepted final implementation is tracked in [0.14.9 verification](release-0.14.9.md). Earlier preview statements below describe their original test stage.
 用户明确取消此前的 13 文件存储改造方案，只要求设置导出 Markdown 的目标目录。原提案未执行，副本保留在 `/private/tmp/reader-cancelled-storage-plan-20261029.md`。
 
 ## 本轮范围
