@@ -25,7 +25,7 @@ export async function paginateEpub(article:HTMLElement,passages:Passage[],height
     const pageAt=(offset:number)=>{range.setStart(node,offset);range.setEnd(node,offset+1);const rect=range.getClientRects()[0];return rect?pageOf(rect.left):0;};
     let start=0,current=pageAt(0),last=pageAt(len-1);if(current){maxPage=Math.max(maxPage,current,last);if(!starts.has(current))starts.set(current,passages[i].start+local);}
     while(current&&last>current&&start<len-1){let lo=start+1,hi=len-1;while(lo<hi){const mid=Math.floor((lo+hi)/2),p=pageAt(mid);if(p&&p>current)hi=mid;else lo=mid+1;}start=lo;const next=pageAt(start);if(next<=current)break;current=next;if(!starts.has(current))starts.set(current,passages[i].start+local+start);}
-    range.detach();local+=len;
+    local+=len;
    }
    if(i%100===99)await new Promise<void>(resolve=>win.setTimeout(resolve,0));
   }
