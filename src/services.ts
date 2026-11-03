@@ -1,6 +1,6 @@
 import {type AgentSettings, type ApiProtocol, API_DEFAULTS, type ModelOption,type ModelType, normalizeModels, mergeModels} from './agent';
 export type ServiceKind='codex'|'claude'|'pi'|'api';
-export interface ModelService {id:string;name:string;kind:ServiceKind;path:string;protocol:ApiProtocol;base:string;models:ModelOption[]}
+export interface ModelService {id:string;name:string;kind:ServiceKind;path:string;protocol:ApiProtocol;base:string;models:ModelOption[];secretRef?:string}
 export interface ModelRef {serviceId:string;modelId:string}
 export interface ModelSetup {services:ModelService[];taskModels:Record<string,ModelRef|null>;mobileTaskModels?:Record<string,ModelRef|null>}
 export const SERVICE_NAMES:Record<ServiceKind,string>={codex:'Codex',claude:'Claude',pi:'Pi',api:'自定义 API'};
