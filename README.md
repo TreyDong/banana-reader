@@ -6,6 +6,10 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 [Simplified Chinese](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [User guide (Chinese)](docs/guide.zh-CN.md) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
+**Available in the Obsidian community plugin directory.** Open **Settings → Community plugins → Browse**, search for **Banana Reader**, install it, and select **Enable**.
+
+[Install and enable](#installation) · [Features](#features) · [Get started](#get-started) · [Author](#author)
+
 ## Features
 
 - **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. PDFs can use text reflow or original pages.
@@ -19,11 +23,13 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 The current community release is **desktop-only** and requires **Obsidian 1.11.4 or later**. The interface supports English and Simplified Chinese.
 
-1. In Obsidian, open **Settings → Community plugins → Browse**.
-2. Search for **Banana Reader**, install it, and enable it.
+1. In Obsidian, open **Settings → Community plugins**. If prompted, turn on community plugins first.
+2. Select **Browse**, search for **Banana Reader** by **Trey**, and select **Install → Enable**. If it is already installed, enable it in the community plugins list.
 3. Open a Markdown, PDF, or EPUB file, then use the **Open Banana Reader** ribbon button or the **Enter immersive reading** command.
 
-For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, then enable the plugin. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, see the [data migration guide](docs/plugin-id-migration.md) before switching.
+You can also open the [official plugin page](https://community.obsidian.md/plugins/gloss-reader), select **Add to Obsidian**, and install and enable it in Obsidian. Check for updates under **Settings → Community plugins**.
+
+For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, reload Obsidian, and enable the plugin under **Community plugins**. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, see the [data migration guide](docs/plugin-id-migration.md) before switching.
 
 ## Get started
 
@@ -48,6 +54,12 @@ npm run check
 ```
 
 See the [development guide](docs/development.md) for build, test, and release details.
+
+## Author
+
+Banana Reader is maintained by [Trey (TreyDong)](https://github.com/TreyDong). The project brings reading, thinking, and note-taking together in Obsidian, with links back to the original text.
+
+Share feedback, ideas, or problems through [GitHub Issues](https://github.com/TreyDong/banana-reader/issues).
 
 ## License and credits
 

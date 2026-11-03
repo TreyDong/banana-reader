@@ -550,6 +550,7 @@ class GlossView extends ItemView {
   private webError='';private webButton?:HTMLButtonElement;private suggestionHost?:HTMLElement;private suggestionJob?:AbortController;private suggestionKey='';private suggestionCache=new Map<string,string[]>();
   private composeLabel!: HTMLElement;
   private sendButton!: HTMLButtonElement;
+  private composerStopButton!: HTMLButtonElement;
   private hoverThread?:string;private referenceFocus?:{threadId:string;anchor:Anchor};private runningThread?:string;private answerStage='';private wholeBookCache?:{stamp:string;sections:SourceSection[];skipped:number};
   private briefHost!:HTMLElement;
   private briefCollapsed=false;
@@ -740,6 +741,7 @@ class GlossView extends ItemView {
     const row=inputRow;row.addClass('gloss-compose-row');button(row,'/',()=>this.showKeys(),'gloss-key-hint');const modelRow=row.createDiv({cls:'gloss-compose-model-row'});this.modelPicker(modelRow,()=>ui("模型"));
     const web=this.webButton=button(row,'',async()=>{if(this.aborter||this.retrievalJob)return;this.plugin.store.settings.webSearch=!this.plugin.store.settings.webSearch;this.webError='';this.paintWebButton();this.updateContext();await this.plugin.persist();},'gloss-web-toggle');setIcon(web.createSpan(),'globe');bindUi(web.createSpan({text:ui("联网")}), {"text":()=>ui("联网")});this.paintWebButton();
     this.sendButton=bindUi(this.iconButton(row,'arrow-up',ui("发送问题"),()=>this.send(),'gloss-send'), {"label":()=>ui("发送问题")});
+    this.composerStopButton=this.answerStop(row,'gloss-send');this.composerStopButton.hidden=true;
     this.drawer=bindUi(this.root.createEl('aside',{cls:'gloss-notebook',attr:{'aria-label':ui("阅读笔记本")}}), {"aria-label":()=>ui("阅读笔记本")});this.drawer.hidden=!this.notebookOpen;this.root.toggleClass('gloss-notebook-open',this.notebookOpen);
     const drawerHead=this.drawer.createDiv({cls:'gloss-notebook-head'}),heading=drawerHead.createDiv({cls:'gloss-notebook-heading'});bindUi(heading.createEl('h2',{text:ui("笔记本")}), {"text":()=>ui("笔记本")});this.drawerSubtitle=heading.createEl('p',{cls:'gloss-notebook-subtitle'});
     bindUi(this.iconButton(drawerHead,'copy',ui("复制 Markdown 笔记"),async()=>{await navigator.clipboard.writeText(exportReading(this.path,this.data,this.app.vault.getName()));new Notice(ui("已复制阅读笔记"));}), {"label":()=>ui("复制 Markdown 笔记")});bindUi(this.iconButton(drawerHead,'download',ui("导出 Markdown 笔记"),()=>this.exportNotes()), {"label":()=>ui("导出 Markdown 笔记")});drawerHead.createSpan({cls:'gloss-notebook-head-divider'});bindUi(this.iconButton(drawerHead,'x',ui("收起笔记本"),()=>this.toggleNotebook(false)), {"label":()=>ui("收起笔记本")});
@@ -1086,11 +1088,11 @@ class GlossView extends ItemView {
       if(follow){const counter=row.createSpan({cls:'gloss-collapsed-follow',text:'+'+follow});counter.title=follow+ui(" 次追问");bindUi(counter, {"aria-label":()=>follow+ui(" 次追问")});}
       if(source&&t.anchor){const cite=button(row,source,()=>this.focusReference(t,t.anchor),'gloss-citation gloss-collapsed-source');bindUi(cite, {"aria-label":()=>ui("定位原文 ")+source});}else if(source)row.createSpan({cls:'gloss-collapsed-source',text:source});
       const answer=t.messages.find(m=>m.role==='assistant'&&m.content.trim()),preview=card.createDiv({cls:'gloss-card-preview gloss-answer markdown-rendered'});if(answer){await MarkdownRenderer.render(this.app,passiveEmbeds(answer.content),preview,this.path,component);if(component!==this.marginRender)return;this.citeButtons(preview,t);}else if(streaming)bindUi(preview.createDiv({cls:'gloss-writing',attr:{role:'status','aria-label':ui("正在回答")}}), {"aria-label":()=>ui("正在回答")});else if(visibleThreadError(t))bindUi(preview.createSpan({text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});else preview.hidden=true;
-      preview.addEventListener('click',e=>{if(!(e.target as Element).closest('button,a')&&preview.ownerDocument.getSelection()?.isCollapsed)this.activateThread(t);});if(streaming)this.answerStop(card,'gloss-collapsed-stop');
+      preview.addEventListener('click',e=>{if(!(e.target as Element).closest('button,a')&&preview.ownerDocument.getSelection()?.isCollapsed)this.activateThread(t);});
     }else{
       const head=card.createDiv({cls:'gloss-card-heading'});head.createSpan({cls:'gloss-card-kind',text:kind});
       if(source&&source!==ui("整篇"))button(head,source,()=>{if(t.anchor)this.focusReference(t,t.anchor);},'gloss-citation');
-      if(follow)bindUi(head.createSpan({cls:'gloss-followup-count',text:follow+ui(" 次追问")}), {"text":()=>follow+ui(" 次追问")});if(streaming)this.answerStop(head,'gloss-answer-stop');bindUi(this.iconButton(head,'chevrons-down-up',ui("收起回答 · Esc"),()=>this.collapseThread(),'gloss-collapse'), {"label":()=>ui("收起回答 · Esc")});
+      if(follow)bindUi(head.createSpan({cls:'gloss-followup-count',text:follow+ui(" 次追问")}), {"text":()=>follow+ui(" 次追问")});bindUi(this.iconButton(head,'chevrons-down-up',ui("收起回答 · Esc"),()=>this.collapseThread(),'gloss-collapse'), {"label":()=>ui("收起回答 · Esc")});
       if(t.anchor&&t.selection!==false)button(card,t.anchor.quote,()=>this.focusReference(t,t.anchor),'gloss-thread-quote');
       for(const [index,m]of t.messages.entries()){if(index===0&&m.role==='user'&&t.commandId&&t.commandId!=='default')continue;
         const message=card.createDiv({cls:'gloss-message '+(m.role==='user'?'is-user':'is-assistant')});bindUi(message.createSpan({cls:'gloss-sr-only',text:m.role==='user'?ui("问题"):ui("回答")}), {"text":()=>m.role==='user'?ui("问题"):ui("回答")});
@@ -1235,7 +1237,7 @@ class GlossView extends ItemView {
     bindUi(button(actions,ui("整书提问"),()=>{this.readingScope='rag';this.selected=undefined;modal.close();this.toggleComposer(true);},'gr-settings-button'), {"text":()=>ui("整书提问")});
     let updating=false;const refresh=()=>{draw();if(!this.indexJob&&!updating){updating=true;void this.plugin.indexCache.load(path).then(value=>{index=value;draw();}).catch(()=>{}).finally(()=>updating=false);}};this.indexListeners.add(refresh);const priorClose=modal.onClose.bind(modal);modal.onClose=()=>{this.indexListeners.delete(refresh);if(initiatedHere)this.cancelIndex();priorClose();};draw();modal.open();
   }
-  private syncComposerBusy(){if(this.sendButton)this.sendButton.disabled=!!this.aborter||!!this.retrievalJob;if(this.composer)this.composer.disabled=false;}
+  private syncComposerBusy(){const busy=!!this.aborter||!!this.retrievalJob,answering=busy&&!!this.runningThread;if(this.sendButton){this.sendButton.hidden=answering;this.sendButton.disabled=busy;}if(this.composerStopButton)this.composerStopButton.hidden=!answering;if(this.composer)this.composer.disabled=false;}
   private setAnswerStage(text:string){this.answerStage=text;this.margin?.querySelectorAll<HTMLElement>('.gloss-answer-stage').forEach(el=>el.textContent=text);}
   private async prepareQuestionContext(question:string,target:Thread|undefined,forceWhole:boolean,regenerate:boolean,anchor?:Anchor,scope=this.readingScope):Promise<{context:string;citations:Record<string,Anchor>;info?:ContextInfo}>{
     const legacyPage=!!this.pdf&&target?.selection===false&&target.contextInfo?.label.startsWith(ui("当前页"));
