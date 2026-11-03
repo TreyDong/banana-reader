@@ -20,6 +20,7 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.
 - **Find your next read:** browse the vault bookshelf, or search and download books through a configured Z-Library mirror using your own account.
 - **Discover books:** explore and filter Hacker Books recommendations, then search for a title on Z-Library from its details.
+- **Take over the reading view:** turn on **Settings → Banana Reader → Appearance → Default reading → Take over the reading view**, and clicking Obsidian's own reading-view button opens that note in Banana Reader instead. Notes in protected folders are never taken over, and the button still returns to editing as usual.
 
 ## Installation
 
