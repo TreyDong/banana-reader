@@ -6,24 +6,32 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 [Simplified Chinese](README.zh-CN.md) · [Install](https://community.obsidian.md/plugins/gloss-reader) · [User guide (Chinese)](docs/guide.zh-CN.md) · [Report an issue](https://github.com/TreyDong/banana-reader/issues)
 
+**Available in the Obsidian community plugin directory.** Open **Settings → Community plugins → Browse**, search for **Banana Reader**, install it, and select **Enable**.
+
+[Install and enable](#installation) · [Features](#features) · [Get started](#get-started) · [Author](#author)
+
 ## Features
 
-- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. PDFs can use text reflow or original pages.
+- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
 - **Highlight and annotate:** mark text in different styles and colors, write notes, and revisit them in the reading notebook.
+- **Write your own notes:** use the reader toolbar, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
 - **Ask about a passage:** explain, translate, or ask your own questions; follow citations back to the source.
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.
 - **Find your next read:** browse the vault bookshelf, or search and download books through a configured Z-Library mirror using your own account.
+- **Discover books:** explore and filter Hacker Books recommendations, then search for a title on Z-Library from its details.
 
 ## Installation
 
 The current community release is **desktop-only** and requires **Obsidian 1.11.4 or later**. The interface supports English and Simplified Chinese.
 
-1. In Obsidian, open **Settings → Community plugins → Browse**.
-2. Search for **Banana Reader**, install it, and enable it.
+1. In Obsidian, open **Settings → Community plugins**. If prompted, turn on community plugins first.
+2. Select **Browse**, search for **Banana Reader** by **Trey**, and select **Install → Enable**. If it is already installed, enable it in the community plugins list.
 3. Open a Markdown, PDF, or EPUB file, then use the **Open Banana Reader** ribbon button or the **Enter immersive reading** command.
 
-For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, then enable the plugin. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, see the [data migration guide](docs/plugin-id-migration.md) before switching.
+You can also open the [official plugin page](https://community.obsidian.md/plugins/gloss-reader), select **Add to Obsidian**, and install and enable it in Obsidian. Check for updates under **Settings → Community plugins**.
+
+For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, reload Obsidian, and enable the plugin under **Community plugins**. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, see the [data migration guide](docs/plugin-id-migration.md) before switching.
 
 ## Get started
 
@@ -37,6 +45,7 @@ For setup details and format limits, see the [Chinese user guide](docs/guide.zh-
 
 - Annotations, conversations, drafts, and progress are stored in the plugin's `data.json`; optional indexes are stored in `indices/`. Export creates a new Markdown file. Syncing the plugin folder may sync these files too.
 - API keys are stored in Obsidian SecretStorage when available; otherwise they remain in memory for the session. Requests send the relevant text and question to your chosen model or embedding provider. Google translation, optional web search, and Z-Library connect to their respective services.
+- Opening book recommendations contacts Hacker Books for its catalog, topics, and covers; search and filtering run locally.
 - PDF text selection requires a text layer; OCR is not included. EPUB requires supported, unencrypted text content. Z-Library is an unofficial integration whose mirrors and availability can change; access only content you are entitled to use.
 - Mobile support is under development. The community release is desktop-only; a local mobile candidate is not a verified mobile release.
 
@@ -48,6 +57,12 @@ npm run check
 ```
 
 See the [development guide](docs/development.md) for build, test, and release details.
+
+## Author
+
+Banana Reader is maintained by [Trey (TreyDong)](https://github.com/TreyDong). The project brings reading, thinking, and note-taking together in Obsidian, with links back to the original text.
+
+Share feedback, ideas, or problems through [GitHub Issues](https://github.com/TreyDong/banana-reader/issues).
 
 ## License and credits
 

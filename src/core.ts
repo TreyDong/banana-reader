@@ -25,8 +25,15 @@ export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
 export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean; style?:MarkStyle }
-export interface Reading { pdfPage?:number;brief?:ReadingBrief; highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
+export interface PersonalNote {id:string; text:string; created:number; anchor?:Anchor; threadId?:string; removed?:boolean}
+export interface Reading { pdfPage?:number;brief?:ReadingBrief; highlights: Highlight[]; threads: Thread[]; notes?:PersonalNote[]; progress: number; draft: string; updated: number }
 export const freshReading = (): Reading => ({highlights: [], threads: [], progress: 0, draft: '', updated: Date.now()});
+/** A failed save must not leave a phantom note or discard an existing note. */
+export async function savePersonalNote(reading:Reading,note:PersonalNote,text:string,persist:()=>Promise<void>){
+ const previous=note.text,updated=reading.updated,hadNotes=!!reading.notes,exists=reading.notes?.includes(note)??false;
+ note.text=text;if(!exists)(reading.notes||=[]).push(note);reading.updated=Date.now();
+ try{await persist();}catch(error){note.text=previous;reading.updated=updated;if(!exists){reading.notes=reading.notes?.filter(n=>n!==note);if(!hadNotes)delete reading.notes;}throw error;}
+}
 export function makeAnchor(text: string, start: number, end: number): Anchor {
   while (start < end && /\s/.test(text[start])) start++;
   while (end > start && /\s/.test(text[end - 1])) end--;
@@ -80,6 +87,9 @@ export function exportReading(path: string, data: Reading, vault: string): strin
   const back = (id: string) => `obsidian://banana-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}${h.anchor.pdfPage?' · PDF 第 '+h.anchor.pdfPage+' 页':''}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
+  }
+  for(const note of (data.notes||[]).filter(n=>!n.removed)){
+    md+=`## 我的笔记${note.anchor?.pdfPage?' · PDF 第 '+note.anchor.pdfPage+' 页':''}\n\n${note.text}\n\n[↩ 返回阅读位置](${back(note.id)})\n\n`;
   }
   for (const t of data.threads.filter(t=>!t.removed)) {
     md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;

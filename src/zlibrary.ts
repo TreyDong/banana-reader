@@ -23,6 +23,7 @@ export class ZlibSessionError extends Error{constructor(){super('Z-Library 登�
 export class ZlibApiError extends Error{}
 /** No usable JSON envelope came back: blocked by bot protection, gateway failure or unreachable mirror. */
 export class ZlibMirrorError extends Error{constructor(){super('Z-Library 镜像无法访问或返回异常。');}}
+export class ZlibDownloadHttpError extends Error{constructor(readonly status:number){super(`Z-Library 文件下载失败（HTTP ${status}）。`);}}
 const str=(value:unknown):string=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?String(value):'';
 const envelopeError=(body:unknown,fallback:string):string=>{const error=(body as {error?:unknown} | undefined)?.error;return typeof error==='string'&&error.trim()?error.trim():fallback;};
 
@@ -128,8 +129,15 @@ export class ZLibraryClient{
  async downloadFile(ticket:ZlibTicket):Promise<{bytes:ArrayBuffer;filename:string}>{
   const limit=this.maxDownloadBytes;
   if(!Number.isSafeInteger(limit)||limit<1)throw new Error('无效的下载大小限制。');
-  const response=await this.fetcher(ticket.url,{method:'GET',headers:{'Accept':'*/*','User-Agent':'BananaReader','Referer':this.domain+'/',Range:'bytes=0-'+(limit-1)}});
-  if(response.status!==200&&response.status!==206)throw new Error('Z-Library 文件下载失败，请稍后重试。');
+  const headers:Record<string,string>={'Accept':'*/*','User-Agent':'BananaReader','Referer':this.domain+'/'};
+  let response=await this.fetcher(ticket.url,{method:'GET',headers:{...headers,Range:'bytes=0-'+(limit-1)}});
+  if(response.status===416){
+   const size=response.headers['content-range']?.match(/^bytes \*\/(\d+)$/i);
+   if(size&&Number(size[1])>limit)throw new Error('Z-Library 文件超过本设备的下载大小限制，请选择较小的版本。');
+   response=await this.fetcher(ticket.url,{method:'GET',headers});
+  }
+  if(response.status!==200&&response.status!==206)throw new ZlibDownloadHttpError(response.status);
+  if(/^(text\/html|application\/(?:json|xhtml\+xml))\b/i.test(response.headers['content-type']||''))throw new Error('Z-Library 返回了网页或错误信息，而不是书籍文件。');
   const range=response.headers['content-range']?.match(/^bytes 0-(\d+)\/(\d+)$/i),reported=Number(response.headers['content-length']||0);
   if(reported>limit||range&&Number(range[2])>limit)throw new Error('Z-Library 文件超过本设备的下载大小限制，请选择较小的版本。');
   if(response.status===206&&(!range||Number(range[1])+1!==Number(range[2])))throw new Error('Z-Library 文件下载不完整，请重试。');
