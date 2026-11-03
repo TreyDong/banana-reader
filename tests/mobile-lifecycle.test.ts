@@ -54,6 +54,17 @@ test("restored community identity loads preserved data and both identities canno
  await assert.rejects(fixture("gloss-reader",true),/Disable banana-reader/);
 });
 
+test('model services use named secrets without breaking legacy keys or storing their values in plugin data',async()=>{
+ const f=await fixture('gloss-reader'),secrets=new Map([['reader-old','legacy-test-value'],['shared-api','shared-test-value']]);
+ f.app.secretStorage={getSecret:(id:string)=>secrets.get(id)||null,setSecret:(id:string,value:string)=>secrets.set(id,value)};
+ const service={id:'old',name:'API',kind:'api',path:'',protocol:'openai',base:'https://example.test/v1',models:[]};f.plugin.store.settings.services=[service];
+ assert.equal(f.plugin.serviceKey('old'),'legacy-test-value');
+ f.plugin.store.settings.services=[{...service,secretRef:'shared-api'}];assert.equal(f.plugin.serviceKey('old'),'shared-test-value');
+ await f.plugin.persist();const serialized=JSON.stringify(f.persisted());assert.ok(serialized.includes('shared-api'));assert.ok(!serialized.includes('legacy-test-value'));assert.ok(!serialized.includes('shared-test-value'));
+ f.plugin.store.settings.services=[{...service,secretRef:'missing-key'}];assert.throws(()=>f.plugin.serviceKey('old'),/所选密钥不可用/);
+ f.plugin.store.settings.services=[{...service,secretRef:''}];assert.equal(f.plugin.serviceKey('old'),'');assert.equal(secrets.get('reader-old'),'legacy-test-value');
+});
+
 test('an explicit shelf folder is enumerated locally and protected subtrees stay outside the shelf',async()=>{
  const f=await fixture();const book=Object.assign(new f.TFile(),{path:'Books/one.epub',basename:'One',extension:'epub'}),privateBook=Object.assign(new f.TFile(),{path:'Books/日记/private.pdf',basename:'Private'});
  const folder=new f.TFolder('Books',[book,new f.TFolder('Books/日记',[privateBook])]);f.plugin.store.settings.shelfFolder='Books';
