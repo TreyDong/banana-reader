@@ -53,6 +53,14 @@ The regression suite includes locale resolution, catalog coverage, placeholder p
 
 `bindUi()` registers explicitly translated text nodes and accessibility attributes; `refreshUi()` updates only those bindings, retaining child icons and skipping nodes changed by another renderer. User-authored content and input values are never registered. `refreshLanguage()` refreshes reader chrome, notebook labels and reading statistics without reloading documents, restarting services or triggering model requests. Index progress retains a label callback so counts can be rendered in the current locale; repainting does not restart indexing. After notebook rendering, remove only generated accessibility captions no longer referenced by `aria-labelledby`.
 
+## Native reading-view takeover
+
+`src/reading-hijack.ts` decides whether a click belongs to Obsidian's own reading-mode button. The plugin listens for `click` in the capture phase on the workspace document and on every window Obsidian opens, so the native switch can be stopped before Obsidian reacts to it.
+
+The toggle is recognised structurally: the click target must sit in a `view-action` button inside a pane tagged `data-type="markdown"`, carrying Obsidian's `lucide-book-open` icon (the reading-view button while editing) or the matching tooltip text. The decision also requires the user setting, a Markdown note outside the protected folders, and a pane that is not already in reading view, so the button still returns to editing. Nothing is taken over when the setting is off, and the native command and hotkey keep working.
+
+The interception is limited to the reading-view button. No file content is read at interception time, and the note itself is opened through the same path as the ribbon button and the reading command.
+
 ## Release checklist
 
 Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Run `npm run check` on the exact revision being reviewed. The `reader-release-verify.yml` workflow repeats these checks on GitHub, builds the three installation files, generates SHA-256 values, creates provenance attestations for all three and verifies the attestations against the workflow, source ref and source commit before uploading its candidate artifact.
