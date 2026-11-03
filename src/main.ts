@@ -7,6 +7,8 @@ import {type ModelService,type ModelRef,type ModelSetup,type ServiceKind,SERVICE
 
 import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, readingMapSample, mobileLensPlacement, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines} from './reading-ui';
 
+import {isNativeReadingToggle, readingTogglePane, shouldTakeOverReading} from './reading-hijack';
+
 import {DEFAULT_COMMANDS,MAX_COMMANDS,normalizeCommands,saveCommand,renderCommand,type ReadingCommand} from './prompts';
 
 import {notebookCounts,notebookEntries,recoverInterruptedReading,threadType,type NotebookFilter} from './notebook';
@@ -31,9 +33,9 @@ const VIEW = 'gloss-reader';
 const EPUB_VIEW='gloss-epub-file';
 const SHELF_VIEW='gloss-bookshelf';
 interface RetrievalPreferences {topK:number;autoIndex:boolean}
-interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
+interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
+const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
 const uid = () => crypto.randomUUID();
 const modelKey=(s:AgentSettings,provider=s.provider)=>provider==='api'?'api:'+(s.apiProtocol||'openai'):provider;
 const modelId=(s:AgentSettings,provider=s.provider)=>provider==='codex'?s.codexModel:provider==='claude'?s.claudeModel||'':provider==='pi'?s.piModel||'':s.apiModel;
@@ -95,7 +97,7 @@ export default class GlossPlugin extends Plugin {
     this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.zlibFolder=typeof saved?.settings?.zlibFolder==='string'&&saved.settings.zlibFolder.trim()?saved.settings.zlibFolder.trim().slice(0,200):'收集箱';this.store.settings.shelfFolder=typeof saved?.settings?.shelfFolder==='string'?saved.settings.shelfFolder.trim().slice(0,200):'';this.store.settings.shelfTypes=normalizeShelfTypes(saved?.settings?.shelfTypes);this.store.settings.exportFolder=typeof saved?.settings?.exportFolder==='string'?saved.settings.exportFolder:DEFAULTS.exportFolder;
     const legacyEmbedding=normalizeEmbedding(saved?.settings?.embedding);this.store.settings.embedding={topK:legacyEmbedding.topK,autoIndex:saved?.settings?.embedding?.autoIndex===true};
     this.indexCache=new BookIndexCache((this.manifest.dir||this.app.vault.configDir+'/plugins/'+this.manifest.id)+'/indices',this.app.vault.adapter);
-    this.store.settings.commands=normalizeCommands(saved?.settings?.commands).map(command=>{const original=DEFAULT_COMMANDS.find(c=>c.id===command.id);return original&&command.prompt===original.prompt.replaceAll('选中文本','选文')?{...command,prompt:original.prompt}:command;});this.store.settings.webSearch=saved?.settings?.webSearch===true;this.store.settings.questionSuggestions=saved?.settings?.questionSuggestions===true;this.store.settings.translationEngine=saved?.settings?.translationEngine==='model'?'model':'google';this.store.settings.translationTarget=TRANSLATION_LANGUAGES[saved?.settings?.translationTarget]?saved.settings.translationTarget:'zh-CN';this.store.settings.taskPrompts={};for(const task of ['default','summary']){const value=saved?.settings?.taskPrompts?.[task];if(typeof value==='string')this.store.settings.taskPrompts[task]=value.slice(0,8000);}
+    this.store.settings.commands=normalizeCommands(saved?.settings?.commands).map(command=>{const original=DEFAULT_COMMANDS.find(c=>c.id===command.id);return original&&command.prompt===original.prompt.replaceAll('选中文本','选文')?{...command,prompt:original.prompt}:command;});this.store.settings.webSearch=saved?.settings?.webSearch===true;this.store.settings.takeOverReading=saved?.settings?.takeOverReading===true;this.store.settings.questionSuggestions=saved?.settings?.questionSuggestions===true;this.store.settings.translationEngine=saved?.settings?.translationEngine==='model'?'model':'google';this.store.settings.translationTarget=TRANSLATION_LANGUAGES[saved?.settings?.translationTarget]?saved.settings.translationTarget:'zh-CN';this.store.settings.taskPrompts={};for(const task of ['default','summary']){const value=saved?.settings?.taskPrompts?.[task];if(typeof value==='string')this.store.settings.taskPrompts[task]=value.slice(0,8000);}
     const settings=this.store.settings;settings.markStyle=markStyle(settings.markStyle);settings.modelLists={...(saved?.settings?.modelLists||{})};
     if(saved?.settings&&!Array.isArray(saved.settings.services)){
     const local=Platform?.isMobile?[]:await discoverCodexModels();settings.modelLists.codex=settings.modelLists.codex===undefined?local:normalizeModels(settings.modelLists.codex);
@@ -124,6 +126,7 @@ export default class GlossPlugin extends Plugin {
     this.readerRibbon=this.addRibbonIcon('book-open-text', ui("打开 Banana Reader"), () => {void this.openCurrent().catch(showError);});
     this.shelfRibbon=this.addRibbonIcon('library', ui("打开书架"), () => {void this.openShelf().catch(showError);});
     this.registerReaderCommands();
+    this.registerReadingHijack();
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {if (file instanceof TFile && readableExtension(file.extension) && !blockedPath(file.path)) menu.addItem(i => i.setTitle(ui("用 Banana Reader 阅读")).setIcon('book-open-text').onClick(() => {void this.openFile(file).catch(showError);}));}));
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
       // A rename moves the same document state; do not silently overwrite an existing record.
@@ -212,7 +215,36 @@ export default class GlossPlugin extends Plugin {
     this.app.workspace.setActiveLeaf(leaf,{focus:true});
     if(!v.loadError)v.toggleFocus(true); return v;
   }
-  onunload() {this.unloading=true;for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) if (leaf.view instanceof GlossView){leaf.view.stop();leaf.view.cancelIndex();leaf.view.releaseChrome();}}
+  private readingHijackListener?: (event: MouseEvent) => void;
+  private readingHijackDocuments = new Set<Document>();
+  /** Watch Obsidian's own reading-mode button so the reader can take it over. */
+  private registerReadingHijack(){
+    this.readingHijackListener = (event: MouseEvent) => {this.handleReadingToggle(event);};
+    this.registerEvent(this.app.workspace.on('window-open', (_win, window) => {this.attachReadingHijack(window.document);}));
+    this.attachReadingHijack(typeof document==='undefined'?undefined:document);
+  }
+  private attachReadingHijack(doc: Document|undefined){
+    if (!doc || typeof doc.addEventListener!=='function' || !this.readingHijackListener) return;
+    if (this.readingHijackDocuments.has(doc)) return;
+    this.readingHijackDocuments.add(doc);
+    doc.addEventListener('click', this.readingHijackListener, true);
+  }
+  /** A click on the native reading button opens the note here instead of in Obsidian. */
+  private handleReadingToggle(event: MouseEvent){
+    if (!this.store.settings.takeOverReading) return;
+    const target = event.target;
+    if (!isNativeReadingToggle(target)) return;
+    const pane = readingTogglePane(target);
+    const leaf = this.app.workspace.getLeavesOfType('markdown').find(l => l.view?.containerEl === pane);
+    if (!leaf) return;
+    const file = (leaf.view as unknown as {file?: unknown}).file;
+    if (!(file instanceof TFile)) return;
+    const mode = leaf.getViewState().state?.mode;
+    if (!shouldTakeOverReading({enabled:true, path:file.path, extension:file.extension, mode:typeof mode==='string'?mode:undefined})) return;
+    event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
+    void this.openFile(file).catch(showError);
+  }
+  onunload() {this.unloading=true;for (const doc of this.readingHijackDocuments) if (this.readingHijackListener) doc.removeEventListener('click', this.readingHijackListener, true);this.readingHijackDocuments.clear();for (const leaf of this.app.workspace.getLeavesOfType(VIEW)) if (leaf.view instanceof GlossView){leaf.view.stop();leaf.view.cancelIndex();leaf.view.releaseChrome();}}
 }
 
 class DocumentPicker extends FuzzySuggestModal<TFile> {
@@ -1400,7 +1432,7 @@ class GlossSettings extends PluginSettingTab {
   private settingsRoot?:HTMLElement;
   getSettingDefinitions():SettingDefinitionItem[]{
     // Index all labels without I/O. The custom row keeps the existing tabbed editor.
-    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架","书架目录","文件类型","Markdown 导出目录"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
+    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架","书架目录","文件类型","Markdown 导出目录","默认阅读","接管默认阅读模式"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
   }
   display(){this.settingsRoot=undefined;this.renderSettings();}
   redraw(){this.renderSettings();if(requireApiVersion('1.13.0'))this.update();}
@@ -1428,6 +1460,10 @@ class GlossSettings extends PluginSettingTab {
       const language=bindUi(row(ui('语言'),ui('设置页和已打开的阅读页立即切换，保留选区、草稿和正在进行的问答。不会更改提示词或翻译目标语言。')).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui('界面语言')}}), {"aria-label":()=>ui('界面语言')});
       for(const [value,label]of [['auto',ui('跟随 Obsidian')],['zh-CN',ui('中文（简体）')],['en','English']])language.createEl('option',{value,text:label});language.value=s.language;
       language.onchange=()=>{language.disabled=true;void this.plugin.changeLanguage(language.value).then(()=>this.redraw()).catch(error=>{language.value=s.language;language.disabled=false;showError(error);});};
+      section(ui("默认阅读"));
+      const takeover=row(ui("接管默认阅读模式"),ui("开启后，点击 Obsidian 自带的阅读视图切换按钮时，改用 Banana Reader 打开当前笔记。受隐私保护的目录不会被接管。"));
+      takeover.parentElement?.addClass('gr-settings-row-toggle');
+      new ToggleComponent(takeover).setTooltip(ui("接管默认阅读模式")).setValue(s.takeOverReading).onChange(async value=>{s.takeOverReading=value;await this.save();});
       const appearance=section(ui("默认阅读外观"));
       const preview=appearance.createDiv({cls:'gloss-root gr-reading-preview'});preview.dataset.theme=s.theme==='auto'?'paper':s.theme;preview.dataset.font=s.font;preview.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');bindUi(preview.createDiv({cls:'gr-preview-kicker',text:ui("READING / 阅读预览")}), {"text":()=>ui("READING / 阅读预览")});bindUi(preview.createEl('p',{text:ui("阅读时，让问题自然发生。")}), {"text":()=>ui("阅读时，让问题自然发生。")});bindUi(preview.createSpan({text:ui("选中一句话，留下你的理解。")}), {"text":()=>ui("选中一句话，留下你的理解。")});
       const papers=row(ui("默认背景")).createDiv({cls:'gr-paper-choices'});for(const [key,label]of [['auto',ui("跟随系统")],['paper',ui("纸张")],['sepia',ui("暖黄")],['snow',ui("雪白")],['night',ui("夜读")],['ink',ui("墨蓝")]]){const b=button(papers,label,async()=>{s.theme=key;await this.save();this.redraw();},'gr-paper-choice');b.dataset.theme=key;b.classList.toggle('is-active',s.theme===key);b.setAttribute('aria-pressed',String(s.theme===key));}
