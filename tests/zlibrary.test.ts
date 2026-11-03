@@ -10,6 +10,15 @@ function fetcherOf(handler:(call:RecordedCall)=>{status?:number;headers?:Record<
  return{calls,fetcher};
 }
 const credentials={userId:'42',userKey:'secret-key'};
+test('a rejected range retries without Range while keeping size and credential checks',async()=>{
+ const ticket={url:'https://cdn.example/book',description:'Book',author:'QA',extension:'pdf'};
+ const f=fetcherOf(call=>call.headers.Range?{status:416}:{bytes:new Uint8Array([1,2,3])});
+ const result=await new ZLibraryClient('https://z-lib.gd',credentials,f.fetcher,4).downloadFile(ticket);
+ assert.equal(result.bytes.byteLength,3);assert.equal(f.calls.length,2);assert.equal(f.calls[1].headers.Range,undefined);assert.equal(f.calls[1].headers.Cookie,undefined);
+ const oversized=fetcherOf(()=>({status:416,headers:{'content-range':'bytes */20'}}));
+ await assert.rejects(new ZLibraryClient('https://z-lib.gd',credentials,oversized.fetcher,4).downloadFile(ticket),/大小限制/);assert.equal(oversized.calls.length,1);
+ const failed=fetcherOf(()=>({status:416}));await assert.rejects(new ZLibraryClient('https://z-lib.gd',credentials,failed.fetcher,4).downloadFile(ticket),/HTTP 416/);assert.equal(failed.calls.length,2);
+});
 test('bounded downloads accept a complete ranged response and reject partial or oversized books',async()=>{
  const ticket={url:'https://cdn.example/book',description:'Book',author:'QA',extension:'pdf'};
  const complete=fetcherOf(()=>({status:206,headers:{'content-range':'bytes 0-2/3'},bytes:new Uint8Array([1,2,3])}));
@@ -114,6 +123,9 @@ test('downloads resolve the ticket then fetch the CDN link without session crede
  assert.equal(calls.length,2);
  const failing=fetcherOf(()=>({status:403}));
  await assert.rejects(new ZLibraryClient('https://z-lib.gd',credentials,failing.fetcher).downloadFile({url:'https://cdn/x',description:'',author:'',extension:'pdf'}),/下载失败/);
+ await assert.rejects(new ZLibraryClient('https://z-lib.gd',credentials,failing.fetcher).downloadFile({url:'https://cdn/x',description:'',author:'',extension:'pdf'}),/HTTP 403/);
+ const html=fetcherOf(()=>({headers:{'content-type':'text/html; charset=utf-8'},bytes:new Uint8Array([1,2,3])}));
+ await assert.rejects(new ZLibraryClient('https://z-lib.gd',credentials,html.fetcher).downloadFile({url:'https://cdn/x',description:'',author:'',extension:'pdf'}),/网页或错误信息/);
 });
 
 test('mirror lists normalize, dedupe and drop invalid entries in order',()=>{
