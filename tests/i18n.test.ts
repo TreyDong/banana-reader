@@ -86,7 +86,7 @@ test('the composer replaces send with stop while an answer is running and restor
  view.sendButton={hidden:false,disabled:false};view.composerStopButton={hidden:true};view.composer={disabled:false};
  const job=new AbortController();view.aborter=job;view.runningThread='t';view.syncComposerBusy();
  assert.equal(view.sendButton.hidden,true);assert.equal(view.composerStopButton.hidden,false);assert.equal(view.composer.disabled,false);
- view.win={cancelAnimationFrame:()=>{}};view.cancelSuggestions=()=>{};view.stop();assert.equal(job.signal.aborted,true);
+ view.contentEl={ownerDocument:{win:{cancelAnimationFrame:()=>{}}}};view.cancelSuggestions=()=>{};view.stop();assert.equal(job.signal.aborted,true);
  view.aborter=undefined;view.runningThread=undefined;view.syncComposerBusy();
  assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,false);assert.equal(view.composerStopButton.hidden,true);
  view.aborter=new AbortController();view.syncComposerBusy();assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,true);assert.equal(view.composerStopButton.hidden,true);

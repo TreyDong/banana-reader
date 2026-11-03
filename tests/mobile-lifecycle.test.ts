@@ -53,6 +53,38 @@ test("restored community identity loads preserved data and both identities canno
  const f=await fixture("gloss-reader");assert.equal(f.plugin.store.documents["Mobile.pdf"].draft,"PDF draft");
  await assert.rejects(fixture("gloss-reader",true),/Disable banana-reader/);
 });
+test('model services use named secrets without breaking legacy keys or storing their values in plugin data',async()=>{
+ const f=await fixture('gloss-reader'),secrets=new Map([['reader-old','legacy-test-value'],['shared-api','shared-test-value']]);
+ f.app.secretStorage={getSecret:(id:string)=>secrets.get(id)||null,setSecret:(id:string,value:string)=>secrets.set(id,value)};
+ const service={id:'old',name:'API',kind:'api',path:'',protocol:'openai',base:'https://example.test/v1',models:[]};f.plugin.store.settings.services=[service];
+ assert.equal(f.plugin.serviceKey('old'),'legacy-test-value');
+ f.plugin.store.settings.services=[{...service,secretRef:'shared-api'}];assert.equal(f.plugin.serviceKey('old'),'shared-test-value');
+ await f.plugin.persist();const serialized=JSON.stringify(f.persisted());assert.ok(serialized.includes('shared-api'));assert.ok(!serialized.includes('legacy-test-value'));assert.ok(!serialized.includes('shared-test-value'));
+ f.plugin.store.settings.services=[{...service,secretRef:'missing-key'}];assert.throws(()=>f.plugin.serviceKey('old'),/所选密钥不可用/);
+ f.plugin.store.settings.services=[{...service,secretRef:''}];assert.equal(f.plugin.serviceKey('old'),'');assert.equal(secrets.get('reader-old'),'legacy-test-value');
+});
+
+test('highlight is painted while its save is pending and a save failure remains visible to the caller',async()=>{
+ const f=await fixture(),events:string[]=[];let rejectSave!:(error:Error)=>void;
+ f.view.path='Mobile.pdf';f.view.selected={quote:'new text',start:0,prefix:'',suffix:''};f.view.matchedHighlight=()=>undefined;
+ f.view.article={ownerDocument:{getSelection:()=>null},querySelectorAll:()=>[]};f.view.closeLens=()=>{};f.view.paintHighlights=()=>events.push('paint');f.view.toggleComposer=()=>assert.fail('Marking text on mobile should not open the question box');f.view.renderMargin=async()=>{};
+ f.plugin.persist=()=>new Promise<void>((_,reject)=>{events.push('save');rejectSave=reject;});
+ const result=f.view.highlight('yellow','highlight');assert.deepEqual(events,['save','paint']);assert.ok(f.plugin.store.documents['Mobile.pdf'].highlights.some((h:any)=>h.anchor.quote==='new text'));
+ rejectSave(new Error('Save failed'));await assert.rejects(result,/Save failed/);
+});
+test('mobile selection actions keep colors and extra commands collapsed until requested',async()=>{
+ const f=await fixture();f.view.lens=f.root.createDiv();f.view.placeLens=()=>{};let applied='';f.view.highlight=(color:string)=>{applied=color;};f.view.renderMobileLensActions();
+ const divs=Array.from(f.view.lens.getElementsByTagName('div')) as any[],colors=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-colors'),more=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-more');
+ const buttons=Array.from(f.view.lens.getElementsByTagName('button')) as any[],find=(label:string)=>buttons.find(el=>el.textContent===label);
+ assert.equal(colors.hidden,true);assert.equal(more.hidden,true);find('选择标记颜色').dispatch('click');assert.equal(colors.hidden,false);assert.equal(more.hidden,true);
+ find('更多操作').dispatch('click');assert.equal(colors.hidden,true);assert.equal(more.hidden,false);find('选择标记颜色').dispatch('click');
+ const green=Array.from(colors.getElementsByTagName('button')).find((el:any)=>el.dataset.color==='green') as any;green.dispatch('click');assert.equal(applied,'green');
+});
+test('reading map magnifies sampled lines even when the book has thousands of paragraphs',async()=>{
+ const f=await fixture(),line:any={style:{top:'10',height:'4',transform:''},classList:{toggle:(_name:string,value:boolean)=>{line.magnified=value;}}};
+ f.view.blocks=Array.from({length:2800});f.view.railFocus=12;f.view.rail={classList:{contains:()=>false},querySelectorAll:()=>[line]};f.view.magnifyRail();assert.equal(line.style.transform,'scaleX(2.25) scaleY(1)');assert.equal(line.magnified,true);
+ f.view.railFocus=undefined;f.view.magnifyRail();assert.equal(line.style.transform,'scaleX(1) scaleY(1)');assert.equal(line.magnified,false);
+});
 
 test('model services use named secrets without breaking legacy keys or storing their values in plugin data',async()=>{
  const f=await fixture('gloss-reader'),secrets=new Map([['reader-old','legacy-test-value'],['shared-api','shared-test-value']]);

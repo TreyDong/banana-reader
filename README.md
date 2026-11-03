@@ -12,12 +12,13 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 ## Features
 
-- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. PDFs can use text reflow or original pages.
+- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
 - **Highlight and annotate:** mark text in different styles and colors, write notes, and revisit them in the reading notebook.
 - **Ask about a passage:** explain, translate, or ask your own questions; follow citations back to the source.
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.
 - **Find your next read:** browse the vault bookshelf, or search and download books through a configured Z-Library mirror using your own account.
+- **Discover books:** explore and filter Hacker Books recommendations, then search for a title on Z-Library from its details.
 
 ## Installation
 
@@ -43,6 +44,7 @@ For setup details and format limits, see the [Chinese user guide](docs/guide.zh-
 
 - Annotations, conversations, drafts, and progress are stored in the plugin's `data.json`; optional indexes are stored in `indices/`. Export creates a new Markdown file. Syncing the plugin folder may sync these files too.
 - API keys are stored in Obsidian SecretStorage when available; otherwise they remain in memory for the session. Requests send the relevant text and question to your chosen model or embedding provider. Google translation, optional web search, and Z-Library connect to their respective services.
+- Opening book recommendations contacts Hacker Books for its catalog, topics, and covers; search and filtering run locally.
 - PDF text selection requires a text layer; OCR is not included. EPUB requires supported, unencrypted text content. Z-Library is an unofficial integration whose mirrors and availability can change; access only content you are entitled to use.
 - Mobile support is under development. The community release is desktop-only; a local mobile candidate is not a verified mobile release.
 

@@ -2,6 +2,18 @@ import {documentWindow} from './core';
 // Native DOM annotation helpers for Banana Reader.
 // Historical references and the replaced layout routine are recorded in notes/community-release-audit.md.
 import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
+export interface LensRect {left:number;right:number;top:number;bottom:number}
+/** Position a selection toolbar in root coordinates and keep it within the visible reader. */
+export function mobileLensPlacement(rects:LensRect[],root:LensRect,visible:LensRect,width:number,height:number){
+ const edge=8,gap=12,clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(Math.max(min,max),value));
+ const left=Math.max(root.left,visible.left)+edge,right=Math.min(root.right,visible.right)-edge,top=Math.max(root.top,visible.top)+edge,bottom=Math.min(root.bottom,visible.bottom)-edge;
+ const onScreen=rects.filter(r=>r.right>left&&r.left<right&&r.bottom>top&&r.top<bottom),items=onScreen.length?onScreen:rects;
+ if(!items.length)return null;
+ const first=items[0],last=items[items.length-1],center=(Math.max(left,Math.min(right,(first.left+first.right)/2)));
+ const x=clamp(center-width/2,left,right-width),below=last.bottom+gap+height<=bottom,above=first.top-gap-height>=top;
+ const y=below?last.bottom+gap:above?first.top-gap-height:clamp(last.bottom+gap,top,bottom-height);
+ return {left:x-root.left,top:y-root.top,below,arrow:clamp(center-x,18,width-18)};
+}
 export interface MarginItem {id: string; desired: number; height: number; created: number; mini?:boolean; sourceY?:number; note?:boolean}
 /** Solve spacing in cumulative-height coordinates; retain the active source when it fits. */
 export function placeMarginItems(items: MarginItem[], active?: string): Record<string, number> {
@@ -29,6 +41,8 @@ export function placeMarginItems(items: MarginItem[], active?: string): Record<s
   }));
 }
 export interface TextMark {id: string; start: number; end: number; kind: 'highlight' | 'thread' | 'pending'; color?: string; note?: boolean; style?:MarkStyle}
+/** Keep the reading map bounded for long books, while retaining both ends. */
+export function readingMapSample(count:number):number[]{if(count<=600)return Array.from({length:count},(_,i)=>i);return Array.from({length:300},(_,i)=>Math.round(i*(count-1)/299));}
 export interface Segment {start: number; end: number; highlights: TextMark[]; threads: TextMark[]; pending: boolean}
 export function segmentMarks(length: number, marks: TextMark[]): Segment[] {
   const valid = marks.filter(m => m.end > m.start && m.end > 0 && m.start < length);
@@ -48,8 +62,10 @@ export function anchorRange(blocks: HTMLElement[], passages: Passage[], text: st
   try {r.setStart(a.node,a.offset);r.setEnd(b.node,b.offset);return r;} catch {return null;}
 }
 export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages: Passage[], marks: TextMark[], active?: string, fresh?: string): void {
-  for(const el of Array.from(article.querySelectorAll('[data-gloss-mark]'))) el.replaceWith(...Array.from(el.childNodes));
-  article.querySelectorAll('.gloss-note-dot').forEach(el=>el.remove()); article.normalize();
+  const changedParents=new Set<Node>();
+  for(const el of Array.from(article.querySelectorAll('[data-gloss-mark]'))){if(el.parentNode)changedParents.add(el.parentNode);el.replaceWith(...Array.from(el.childNodes));}
+  article.querySelectorAll('.gloss-note-dot').forEach(el=>el.remove());
+  for(const parent of changedParents)parent.normalize();
   for(let i=0;i<blocks.length;i++) {
     const block=blocks[i], p=passages[i], local=marks.map(m=>({...m,start:m.start-p.start,end:m.end-p.start})).filter(m=>m.end>0&&m.start<p.text.length);
     if(!local.length) continue;
