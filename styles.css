@@ -514,3 +514,7 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gr-shelf-settings svg{width:15px;height:15px;}
 .gr-shelf-settings:focus-visible{outline:2px solid var(--interactive-accent);outline-offset:2px;}
 .gr-shelf-scope{margin:6px 0 0;color:var(--text-muted);font:12px/1.6 var(--font-interface);overflow-wrap:anywhere;}
+.gloss-personal-note-editor textarea{display:block;width:100%;min-height:140px;resize:vertical;margin:12px 0;padding:10px;}
+.gloss-root .gloss-notebook-personal .gloss-notebook-entry-remove{right:38px;opacity:1;}
+.gloss-root .gloss-personal-note-delete{position:absolute;top:8px;right:7px;width:24px;height:24px;color:var(--ink-4);}
+.gloss-notebook-personal .gloss-notebook-meta{padding-right:58px;}

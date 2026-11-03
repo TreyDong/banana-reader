@@ -14,6 +14,7 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 - **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
 - **Highlight and annotate:** mark text in different styles and colors, write notes, and revisit them in the reading notebook.
+- **Write your own notes:** use the reader toolbar, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
 - **Ask about a passage:** explain, translate, or ask your own questions; follow citations back to the source.
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.

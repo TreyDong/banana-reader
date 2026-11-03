@@ -1,4 +1,4 @@
-import {type Reading,type Thread,type Highlight,resolveAnchor,settleThreadRequest} from './core';
+import {type Reading,type Thread,type Highlight,type PersonalNote,resolveAnchor,settleThreadRequest} from './core';
 /** Called only when loading persisted data: no request from a previous app session can resume. */
 export function recoverInterruptedReading(reading:Reading):boolean{
  let changed=false;
@@ -11,13 +11,13 @@ export function recoverInterruptedReading(reading:Reading):boolean{
  }
  return changed;
 }
-export type NotebookFilter='all'|'questions'|'highlights';
-export type NotebookEntry={kind:'question';value:Thread}|{kind:'highlight';value:Highlight};
-export function notebookCounts(reading:Reading){const questions=reading.threads.filter(t=>!t.removed).length,highlights=reading.highlights.filter(h=>!h.removed).length;return{all:questions+highlights,questions,highlights};}
+export type NotebookFilter='all'|'questions'|'highlights'|'notes';
+export type NotebookEntry={kind:'question';value:Thread}|{kind:'highlight';value:Highlight}|{kind:'note';value:PersonalNote};
+export function notebookCounts(reading:Reading){const questions=reading.threads.filter(t=>!t.removed).length,highlights=reading.highlights.filter(h=>!h.removed).length,notes=(reading.notes||[]).filter(n=>!n.removed).length;return{all:questions+highlights+notes,questions,highlights,notes};}
 export function notebookEntries(reading:Reading,filter:NotebookFilter='all',text?:string):NotebookEntry[]{
-  const entries:NotebookEntry[]=[...reading.threads.filter(t=>!t.removed).map(value=>({kind:'question' as const,value})),...reading.highlights.filter(h=>!h.removed).map(value=>({kind:'highlight' as const,value}))];
+  const entries:NotebookEntry[]=[...reading.threads.filter(t=>!t.removed).map(value=>({kind:'question' as const,value})),...reading.highlights.filter(h=>!h.removed).map(value=>({kind:'highlight' as const,value})),...(reading.notes||[]).filter(n=>!n.removed).map(value=>({kind:'note' as const,value}))];
   const position=(entry:NotebookEntry)=>{const a=entry.value.anchor;return a?.pdfPage?a.pdfPage*10000000+(a.pdfOffset??0):a?(text===undefined?a.start:resolveAnchor(text,a)??a.start):0;};
-  return entries.filter(entry=>filter==='all'||(filter==='questions'?entry.kind==='question':entry.kind==='highlight')).sort((a,b)=>position(a)-position(b)||a.value.created-b.value.created);
+  return entries.filter(entry=>filter==='all'||(filter==='questions'?entry.kind==='question':filter==='highlights'?entry.kind==='highlight':entry.kind==='note')).sort((a,b)=>position(a)-position(b)||a.value.created-b.value.created);
 }
 export function notebookTime(at:number,now=Date.now()){const seconds=Math.max(0,(now-at)/1000);if(seconds<60)return'刚刚';if(seconds<3600)return Math.floor(seconds/60)+' 分钟前';if(seconds<86400)return Math.floor(seconds/3600)+' 小时前';return new Date(at).toLocaleDateString('zh-CN',{month:'short',day:'numeric'});}
 export function threadType(thread:Thread,commands:{id:string;name:string;prompt:string}[]=[]){

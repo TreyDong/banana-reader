@@ -9,6 +9,16 @@ let language:UiLanguage='zh-CN';
 export function configureLanguage(preference:unknown,hostLanguage:string){language=resolveLanguage(preference,hostLanguage);return language;}
 export function currentLanguage(){return language;}
 export const ENGLISH:Readonly<Record<string,string>> = {
+  "记笔记": "Write a note",
+  "我的笔记": "My notes",
+  "保存笔记": "Save note",
+  "编辑笔记": "Edit note",
+  "删除笔记": "Delete note",
+  "写下你的想法…": "Write down your thoughts…",
+  "还没有笔记": "No notes yet",
+  "{0} 条笔记": "{0} notes",
+  "关联的回答": "Related answer",
+  "记一条笔记": "Write a note",
   "阅读笔记": "Reading notes",
   "Markdown 导出目录": "Markdown export folder",
   "每次导出在此目录新建 Markdown 笔记。默认使用收集箱；留空使用笔记库根目录。": "Each export creates a new Markdown note in this folder. The default is the inbox folder; leave empty for the vault root.",
