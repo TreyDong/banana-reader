@@ -27,7 +27,7 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 The current community release is **desktop-only** and requires **Obsidian 1.11.4 or later**. The interface supports English and Simplified Chinese.
 
 1. In Obsidian, open **Settings → Community plugins**. If prompted, turn on community plugins first.
-2. Select **Browse**, search for **Banana Reader** by **Trey**, and select **Install → Enable**. If it is already installed, enable it in the community plugins list.
+2. Select **Browse**, search for **Banana Reader** by **banana**, and select **Install → Enable**. If it is already installed, enable it in the community plugins list.
 3. Open a Markdown, PDF, or EPUB file, then use the **Open Banana Reader** ribbon button or the **Enter immersive reading** command.
 
 You can also open the [official plugin page](https://community.obsidian.md/plugins/gloss-reader), select **Add to Obsidian**, and install and enable it in Obsidian. Check for updates under **Settings → Community plugins**.
@@ -61,7 +61,7 @@ See the [development guide](docs/development.md) for build, test, and release de
 
 ## Author
 
-Banana Reader is maintained by [Trey (TreyDong)](https://github.com/TreyDong). The project brings reading, thinking, and note-taking together in Obsidian, with links back to the original text.
+Banana Reader is maintained by [banana (TreyDong)](https://github.com/TreyDong). The project brings reading, thinking, and note-taking together in Obsidian, with links back to the original text.
 
 Share feedback, ideas, or problems through [GitHub Issues](https://github.com/TreyDong/banana-reader/issues).
 

@@ -33,7 +33,7 @@ Banana Reader 为 Markdown、PDF 和 EPUB 提供专注阅读界面。选中一�
 ### 从社区插件市场安装（推荐）
 
 1. 打开 Obsidian，进入「设置 → 第三方插件」。如果是首次使用，按提示开启社区插件。
-2. 点击「浏览」，搜索 **Banana Reader**，确认作者为 **Trey**。
+2. 点击「浏览」，搜索 **Banana Reader**，确认作者为 **banana**。
 3. 点击「安装」，安装完成后点击「启用」。如果已经安装，可在第三方插件列表中找到 Banana Reader 并打开开关。
 4. 打开库中的 Markdown、PDF 或 EPUB 文件，点击左侧「打开 Banana Reader」，或在命令面板运行「Banana Reader: 进入沉浸阅读」。
 
@@ -73,7 +73,7 @@ npm run check
 
 ## 作者
 
-Banana Reader 由 [Trey（TreyDong）](https://github.com/TreyDong)维护。这个项目围绕 Obsidian 中的阅读、思考和笔记展开，让摘录与自己的理解能够回到原文。
+Banana Reader 由 [banana（TreyDong）](https://github.com/TreyDong)维护。这个项目围绕 Obsidian 中的阅读、思考和笔记展开，让摘录与自己的理解能够回到原文。
 
 欢迎在 [GitHub Issues](https://github.com/TreyDong/banana-reader/issues) 分享使用体验、提出建议或反馈问题。
 
