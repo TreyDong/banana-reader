@@ -1,7 +1,7 @@
 import {translate as translateUi,t as ui,bindUi,refreshUi,forwardUiLabel,configureLanguage,normalizeLanguage,commandName,relativeTime,receiptText,notebookSummary,type LanguagePreference} from './i18n';
 import {requireApiVersion,type ViewStateResult,type FuzzyMatch,type SettingDefinitionItem, Platform, getLanguage, Setting, SecretComponent, Plugin, ItemView, FileView, WorkspaceLeaf, TFolder, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, ToggleComponent, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, requestUrl, setIcon } from 'obsidian';
 import {documentWindow,objectValue,arrayValue,stringValue, type Anchor, type Thread, type Message, type WebReceipt, regenerationHistory, beginThreadRequest, settleThreadRequest, followupHistory, visibleThreadError, answerReceipt, tokenReceipt, tokenDetails, type Reading, type Passage, type Highlight, type PersonalNote, freshReading, savePersonalNote, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading, MARK_STYLES, markStyle, referenceTokens, uniqueReferences, type MarkStyle } from './core';
-import { type AgentSettings, type ApiProtocol, configureMobileTransport, API_DEFAULTS, apiEndpoint, askAgent, discoverCodexModels, discoverApiModels, discoverPiModels, mergeModels, normalizeModels, type ModelOption,type ModelType, SYSTEM, networkSearch, webContext, parseQuestionSuggestions, QUESTION_SUGGESTION_PROMPT, SEARCH_QUERY_PROMPT, parseSearchQuery, webSystemPrompt } from './agent';
+import { type AgentSettings, type ApiProtocol, type ApiTestReport, configureMobileTransport, API_DEFAULTS, apiEndpoint, normalizeApiBase, askAgent, discoverCodexModels, discoverApiModels, discoverPiModels, mergeModels, normalizeModels, type ModelOption,type ModelType, SYSTEM, networkSearch, webContext, parseQuestionSuggestions, QUESTION_SUGGESTION_PROMPT, SEARCH_QUERY_PROMPT, parseSearchQuery, webSystemPrompt, testApiService } from './agent';
 
 import {type ModelService,type ModelRef,type ModelSetup,type ServiceKind,SERVICE_NAMES,SERVICE_ICONS,newService,deviceAssignments,setupForDevice,serviceChoices,resolveModel,serviceSettings,migrateSetup,pruneAssignments,supportsEmbedding,resolveEmbeddingModel,setModelType,migrateEmbeddingModel} from './services';
 
@@ -77,7 +77,7 @@ export default class GlossPlugin extends Plugin {
   unloading = false;
   indexCache!:BookIndexCache;
   sessionKeys=new Map<string,string>();
-  serviceKey(id:string){const service=this.store?.settings?.services?.find(item=>item.id===id);if(typeof service?.secretRef==='string'){if(!service.secretRef)return'';const key=this.app.secretStorage?.getSecret(service.secretRef);if(!key)throw new Error('所选密钥不可用，请在模型服务中重新选择。');return key;}return this.app.secretStorage?.getSecret('reader-'+id)||this.sessionKeys.get(id)||'';}
+  serviceKey(id:string){const service=this.store?.settings?.services?.find(item=>item.id===id);if(typeof service?.secretRef==='string'){if(!service.secretRef)return'';const key=this.app.secretStorage?.getSecret(service.secretRef)?.trim();if(!key)throw new Error('所选密钥不可用，请在模型服务中重新选择。');return key;}return this.app.secretStorage?.getSecret('reader-'+id)?.trim()||this.sessionKeys.get(id)?.trim()||'';}
   saveServiceKey(id:string,key:string){if(this.app.secretStorage)this.app.secretStorage.setSecret('reader-'+id,key);else this.sessionKeys.set(id,key);}
   zlibCredentials():ZlibCredentials{const raw=String(this.app.secretStorage?.getSecret('zlib-remix')||this.sessionKeys.get('zlib')||'');try{const value=JSON.parse(raw||'{}') as {userId?:unknown;userKey?:unknown};return{userId:typeof value.userId==='number'?String(value.userId):stringValue(value.userId),userKey:stringValue(value.userKey)};}catch{return{userId:'',userKey:''};}}
   saveZlibCredentials(value:ZlibCredentials){const raw=value.userId&&value.userKey?JSON.stringify(value):'';if(this.app.secretStorage)this.app.secretStorage.setSecret('zlib-remix',raw);else this.sessionKeys.set('zlib',raw);}
@@ -1573,6 +1573,23 @@ class GlossSettings extends PluginSettingTab {
     bindUi(section.createDiv({cls:'gr-settings-description',text:ui("自动索引仅处理当前沉浸阅读文档，文字会发送至所选服务。也可点击 PDF 或阅读顶部的索引按钮。")}), {"text":()=>ui("自动索引仅处理当前沉浸阅读文档，文字会发送至所选服务。也可点击 PDF 或阅读顶部的索引按钮。")});
   }
   private settingsIcon(parent:HTMLElement,icon:string,label:string,action:()=>void|Promise<void>){const b=button(parent,'',action,'gr-settings-icon');setIcon(b,icon);const id='reader-label-'+uid();b.createSpan({cls:'gloss-sr-only',text:label,attr:{id}});b.setAttribute('aria-labelledby',id);return b;}
+  private apiTestMessage(report:ApiTestReport):string{
+    const status=report.status||0;
+    switch(report.reason){
+      case 'ok':return report.models.length?ui('连接成功，获取到 {0} 个模型。',report.models.length):ui('连接成功，但服务没有返回模型列表；可以手动添加模型 ID。');
+      case 'chat-only':return ui('密钥与地址可用，但服务没有提供模型列表；可以手动添加模型 ID。');
+      case 'no-list':return ui('连接成功，但服务没有返回模型列表；可以手动添加模型 ID。');
+      case 'unauthorized':return report.sentKey?ui('密钥无效或未授权（HTTP {0}）。',status):ui('服务要求密钥，但没有选择或填写密钥。');
+      case 'forbidden':return ui('密钥没有访问权限（HTTP {0}）。',status);
+      case 'not-found':return ui('模型列表接口不存在（HTTP {0}），请确认地址是否以 /v1 结尾。',status);
+      case 'not-api':return ui('服务返回了网页而不是接口数据，请检查 API 地址是否正确。');
+      case 'server-error':return ui('服务返回错误（HTTP {0}），请稍后重试。',status);
+      case 'network':return ui('无法连接服务，请检查地址、网络或代理。');
+      case 'timeout':return ui('连接超时，请检查网络或代理设置。');
+      case 'invalid-url':return ui('API 地址无效，请填写完整的 https:// 地址。');
+      default:return ui('测试失败（HTTP {0}）。',status);
+    }
+  }
   private editService(existing?:ModelService){
     const draft:ModelService=existing?{...existing,models:[...existing.models]}:newService(Platform?.isMobile?'api':'codex',uid()),modal=new Modal(this.app);modal.setTitle(existing?ui("编辑服务"):ui("添加模型服务"));modal.modalEl.addClass('gr-model-dialog','gr-service-dialog');modal.contentEl.addClass('gr-model-modal','gr-service-editor');
     const kinds=modal.contentEl.createDiv({cls:'gr-service-types'}),form=modal.contentEl.createDiv();let kind=draft.kind;const nativeSecrets=!!this.app.secretStorage&&typeof SecretComponent==='function';const drafts=new Map<ServiceKind,{name:string;path:string;base:string;protocol:ApiProtocol;key:string;secretRef:string}>();let collect:()=>void=()=>{};
@@ -1580,10 +1597,21 @@ class GlossSettings extends PluginSettingTab {
       for(const value of (Platform?.isMobile?['api']:['codex','claude','pi','api'])as ServiceKind[]){const b=button(kinds,'',()=>{collect();kind=value;draw();},'gr-service-type');setIcon(b.createSpan(),SERVICE_ICONS[value]);bindUi(b.createSpan({text:ui(SERVICE_NAMES[value])}), {"text":()=>ui(SERVICE_NAMES[value])});b.classList.toggle('is-active',value===kind);b.setAttribute('aria-pressed',String(value===kind));b.disabled=!!existing||(Platform?.isMobile&&value!=='api');}
       const field=(label:string,value:string,placeholder='',type='text')=>{const row=form.createDiv({cls:'gr-connection-row'});row.createEl('label',{text:label});const input=row.createEl('input',{cls:'gr-settings-input',attr:{'aria-label':label,type,placeholder}});input.value=value;input.autocomplete='off';input.spellcheck=false;return input;};
       const name=field(ui("服务名称"),values.name,ui("例如：我的 ")+SERVICE_NAMES[kind]);name.maxLength=80;let path:HTMLInputElement|undefined,base:HTMLInputElement|undefined,key:HTMLInputElement|undefined,protocol:HTMLSelectElement|undefined,secretRef=values.secretRef;
-      if(kind==='api'){const row=form.createDiv({cls:'gr-connection-row'});bindUi(row.createEl('label',{text:ui("接口协议")}), {"text":()=>ui("接口协议")});protocol=bindUi(row.createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui("接口协议")}}), {"aria-label":()=>ui("接口协议")});for(const [id,label]of Object.entries({openai:ui("OpenAI 兼容"),responses:'OpenAI Responses',anthropic:'Anthropic Messages',gemini:'Google Gemini'}))protocol.createEl('option',{value:id,text:label});protocol.value=values.protocol;base=field(ui("API 地址"),values.base||API_DEFAULTS[values.protocol],'https://…/v1');if(nativeSecrets){const secretRow=form.createDiv({cls:'gr-connection-row'});secretRow.createEl('label',{text:ui('API 密钥')});new SecretComponent(this.app,secretRow).setValue(secretRef).onChange(value=>{secretRef=value||'';});secretRow.createDiv({cls:'gr-settings-description',text:ui('选择或新建 Obsidian 密钥；不需要密钥的本地服务可留空。')});}else key=field('API Key',values.key,ui(this.app.secretStorage?'保存在 Obsidian 密钥存储':'密钥仅在本次会话中保留'),'password');let old=values.protocol;protocol.onchange=()=>{if(base.value===API_DEFAULTS[old])base.value=API_DEFAULTS[protocol.value as ApiProtocol];old=protocol.value as ApiProtocol;};}
+      if(kind==='api'){const row=form.createDiv({cls:'gr-connection-row'});bindUi(row.createEl('label',{text:ui("接口协议")}), {"text":()=>ui("接口协议")});protocol=bindUi(row.createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui("接口协议")}}), {"aria-label":()=>ui("接口协议")});for(const [id,label]of Object.entries({openai:ui("OpenAI 兼容"),responses:'OpenAI Responses',anthropic:'Anthropic Messages',gemini:'Google Gemini'}))protocol.createEl('option',{value:id,text:label});protocol.value=values.protocol;base=field(ui("API 地址"),values.base||API_DEFAULTS[values.protocol],'https://…/v1');if(nativeSecrets){const secretRow=form.createDiv({cls:'gr-connection-row'});secretRow.createEl('label',{text:ui('API 密钥')});new SecretComponent(this.app,secretRow).setValue(secretRef).onChange(value=>{secretRef=value||'';});secretRow.createDiv({cls:'gr-settings-description',text:ui('选择或新建 Obsidian 密钥；不需要密钥的本地服务可留空。')});}else key=field('API Key',values.key,ui(this.app.secretStorage?'保存在 Obsidian 密钥存储':'密钥仅在本次会话中保留'),'password');let old=values.protocol;protocol.onchange=()=>{if(base.value===API_DEFAULTS[old])base.value=API_DEFAULTS[protocol.value as ApiProtocol];old=protocol.value as ApiProtocol;};
+      const testRow=form.createDiv({cls:'gr-connection-row'}),testStatus=testRow.createSpan({cls:'gr-settings-description',attr:{role:'status','aria-live':'polite'}});
+      const testButton=bindUi(button(testRow,ui("测试连接"),async()=>{
+        const baseValue=base?.value.trim()||'',protocolValue=(protocol?.value||'openai')as ApiProtocol,keyValue=nativeSecrets?(secretRef?this.app.secretStorage?.getSecret(secretRef)||'':''):(key?.value||'').trim();
+        testButton.disabled=true;testStatus.textContent=ui("正在测试…");
+        try{const report=await testApiService({provider:'api',codexPath:'',codexModel:'',apiBase:baseValue,apiModel:'',apiKey:keyValue,apiProtocol:protocolValue},new AbortController().signal);
+          testStatus.textContent=this.apiTestMessage(report);
+          if(report.suggestion&&base){base.value=report.suggestion;testStatus.textContent+=' '+ui('已改用可用地址。');}
+        }catch(error){testStatus.textContent=ui(error instanceof Error?error.message:'测试失败');}
+        finally{testButton.disabled=false;}
+      },'gr-settings-button'),{"text":()=>ui("测试连接")});
+      bindUi(testRow.createDiv({cls:'gr-settings-description',text:ui('测试会向该地址发起一次请求，不会保存设置。')}),{'text':()=>ui('测试会向该地址发起一次请求，不会保存设置。')});}
       else path=field(ui("可执行文件路径"),values.path,ui("自动查找，无需填写"));
       if(Platform?.isMobile&&kind==='api')bindUi(form.createDiv({cls:'gr-settings-description',text:ui('API 地址需要手机可以访问；127.0.0.1 指手机自身。密钥需在本设备配置。')}),{text:()=>ui('API 地址需要手机可以访问；127.0.0.1 指手机自身。密钥需在本设备配置。')});
-      collect=()=>{drafts.set(kind,{name:name.value.trim(),path:path?.value.trim()||'',base:base?.value.trim()||API_DEFAULTS.openai,protocol:(protocol?.value||'openai')as ApiProtocol,key:key?.value||'',secretRef});};
+      collect=()=>{drafts.set(kind,{name:name.value.trim(),path:path?.value.trim()||'',base:normalizeApiBase(base?.value.trim()||API_DEFAULTS.openai),protocol:(protocol?.value||'openai')as ApiProtocol,key:(key?.value||'').trim(),secretRef});};
     };draw();const error=modal.contentEl.createDiv({cls:'gr-settings-message',attr:{role:'alert'}}),footer=modal.contentEl.createDiv({cls:'gr-settings-footer'});bindUi(button(footer,ui("取消"),()=>modal.close(),'gr-settings-button'), {"text":()=>ui("取消")});const save=bindUi(button(footer,existing?ui("保存服务"):ui("添加并获取模型"),async()=>{collect();const values=drafts.get(kind);if(!values.name){error.textContent=ui("请输入服务名称");return;}if(kind==='api'){try{new URL(values.base);apiEndpoint(values.base,values.protocol,'test');}catch{error.textContent=ui("请输入有效的 API 基础地址");return;}}
       save.disabled=true;const service:ModelService={...draft,kind,name:values.name,path:values.path,base:values.base,protocol:values.protocol};try{if(kind==='api'){if(nativeSecrets)service.secretRef=values.secretRef;else{delete service.secretRef;this.plugin.saveServiceKey(service.id,values.key);}}const s=this.plugin.store.settings;if(existing)s.services=s.services.map(item=>item.id===existing.id?service:item);else s.services.push(service);pruneAssignments(s);this.activeService=service.id;await this.save();modal.close();this.redraw();if(!existing)this.manageServiceModels(service,true);}catch(e){error.textContent=ui(e instanceof Error?e.message:'保存失败');save.disabled=false;}},'gr-settings-button is-primary'), {"text":()=>existing?ui("保存服务"):ui("添加并获取模型")});modal.open();
   }
