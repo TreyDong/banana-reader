@@ -81,15 +81,34 @@ async function loadPlugin(saved:unknown,host='zh',identity?:{root:string;id:stri
  return{plugin,commands,writes,views,protocols,TFile:stub.TFile,fail:()=>{failSave=true;},modelCalls:()=>modelCalls};
 }
 const fixture=()=>({version:5,settings:{language:'zh-CN',services:[{id:'local',name:'我的服务',kind:'codex',path:'',protocol:'openai',base:'https://api.openai.com/v1',models:[{id:'model-a',name:'自定义模型',type:'chat'}]}],taskModels:{default:{serviceId:'local',modelId:'model-a'},summary:{serviceId:'local',modelId:'model-a'}},translationEngine:'google',translationTarget:'ja',commands:[{id:'explain',name:'自定解释',prompt:'请保留 {{selection}} 原文。',builtin:true}],taskPrompts:{default:'我的问答提示词',summary:'我的总结提示词'},embedding:{topK:8,autoIndex:false}},documents:{'sample.md':{progress:.42,draft:'尚未发送的问题',updated:1,highlights:[{id:'h',anchor:{start:0,quote:'原文'},note:'我的批注',color:'yellow',created:1}],threads:[{id:'t',messages:[{role:'user',content:'问题'},{role:'assistant',content:'回答',model:'model-a'}],created:1}]}}});
-test('the composer replaces send with stop while an answer is running and restores it afterwards',async()=>{
+test('the composer keeps its normal state while an answer runs and stops from the answer card',async()=>{
  const run=await loadPlugin(fixture()),view=run.views.get('gloss-reader')!({});
- view.sendButton={hidden:false,disabled:false};view.composerStopButton={hidden:true};view.composer={disabled:false};
+ view.sendButton={hidden:false,disabled:false};view.composer={disabled:false};
  const job=new AbortController();view.aborter=job;view.runningThread='t';view.syncComposerBusy();
- assert.equal(view.sendButton.hidden,true);assert.equal(view.composerStopButton.hidden,false);assert.equal(view.composer.disabled,false);
+ assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,true);assert.equal(view.composer.disabled,false);
+ view.narrow=true;view.syncComposerBusy();assert.equal(view.sendButton.disabled,true);view.narrow=false;view.syncComposerBusy();
  view.contentEl={ownerDocument:{win:{cancelAnimationFrame:()=>{}}}};view.cancelSuggestions=()=>{};view.stop();assert.equal(job.signal.aborted,true);
  view.aborter=undefined;view.runningThread=undefined;view.syncComposerBusy();
- assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,false);assert.equal(view.composerStopButton.hidden,true);
- view.aborter=new AbortController();view.syncComposerBusy();assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,true);assert.equal(view.composerStopButton.hidden,true);
+ assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,false);
+ view.aborter=new AbortController();view.syncComposerBusy();assert.equal(view.sendButton.hidden,false);assert.equal(view.sendButton.disabled,true);
+});
+test('the composer shows a usable model without a manual pick',async()=>{
+ const run=await loadPlugin(fixture()),view=run.views.get('gloss-reader')!({});
+ assert.equal(view.currentModelChoice()?.serviceId,'local');assert.equal(view.currentModelChoice()?.id,'model-a');
+ run.plugin.store.settings.taskModels={};
+ assert.equal(view.currentModelChoice()?.serviceId,'local');assert.equal(view.currentModelChoice()?.id,'model-a');
+ view.readingModel={serviceId:'local',modelId:'model-a'};
+ assert.equal(view.currentModelChoice()?.id,'model-a');
+});
+test('leaving the reader tab keeps the immersive mode and only hides the reader',async()=>{
+ const run=await loadPlugin(fixture()),view=run.views.get('gloss-reader')!({});
+ const added:string[]=[],removed:string[]=[];
+ view.root={classList:{add:(c:string)=>added.push(c),remove:(c:string)=>removed.push(c)}};
+ view.focus=true;
+ view.leaveReader();
+ assert.equal(view.focus,true);assert.deepEqual(added,['is-away']);
+ view.returnReader();
+ assert.deepEqual(removed,['is-away']);
 });
 test('real plugin language setting persists and changes commands without rewriting models, prompts or documents',async()=>{
  const run=await loadPlugin(fixture());const before=structuredClone(run.plugin.store);

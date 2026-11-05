@@ -4,11 +4,21 @@ import * as http from 'node:http';
 import { once } from 'node:events';
 import { makeAnchor, resolveAnchor, indexPassages, contextFor, freshReading, exportReading, blockedPath } from '../src/core';
 import { apiEndpoint, askAgent, parseCodexLine } from '../src/agent';
-import {placeMarginItems, segmentMarks, readingMapSample} from '../src/reading-ui';
+import {placeMarginItems, segmentMarks, readingMapSample, selectionPreviewVisible} from '../src/reading-ui';
 test('large reading maps retain both ends with bounded samples while short documents keep every paragraph',()=>{assert.deepEqual(readingMapSample(3),[0,1,2]);const samples=readingMapSample(2800);assert.equal(samples.length,300);assert.equal(samples[0],0);assert.equal(samples.at(-1),2799);assert.ok(samples.every((x,i)=>i===0||x>samples[i-1]));});
 
 test('margin notes remain next to their paragraphs when they do not collide',()=>{
   assert.deepEqual(placeMarginItems([{id:'a',desired:100,height:60,created:1},{id:'b',desired:300,height:90,created:2}]),{a:100,b:300});
+});
+
+test('the selection preview stays away from marks that are already committed',()=>{
+  // Only a live selection or an open question may paint the preview; a committed mark never does.
+  assert.equal(selectionPreviewVisible(false,false,false),false);
+  assert.equal(selectionPreviewVisible(false,false,true),false);
+  assert.equal(selectionPreviewVisible(false,true,true),true);
+  assert.equal(selectionPreviewVisible(false,true,false),false);
+  assert.equal(selectionPreviewVisible(true,false,false),true);
+  assert.equal(selectionPreviewVisible(true,true,false),true);
 });
 test('active margin comment keeps its anchor while neighboring notes move above and below',()=>{
   const items=[{id:'a',desired:200,height:60,created:1},{id:'active',desired:220,height:180,created:2},{id:'b',desired:240,height:50,created:3}];
