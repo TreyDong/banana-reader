@@ -1,6 +1,6 @@
 # Banana Reader 使用指南
 
-本指南对应桌面正式版 0.14.9。安装与快速开始见 [README](../README.zh-CN.md)。
+本指南对应桌面正式版 0.15.1。安装与快速开始见 [README](../README.zh-CN.md)。
 
 ## 账号、网络与本地访问
 
