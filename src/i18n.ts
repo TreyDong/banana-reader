@@ -349,6 +349,7 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "标记": " mark",
   "用自己的话记下来": "Put it in your own words",
   "关闭选中文本输入": "Close selection input",
+  "关闭笔记输入": "Close note input",
   "选中文本批注": "Selection annotation",
   "这段话让你想到了什么？": "What does this passage bring to mind?",
   "选中文本 · ": "Selected text · ",

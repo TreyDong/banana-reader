@@ -89,6 +89,10 @@ export function paintMarks(article: HTMLElement, blocks: HTMLElement[], passages
 }
 
 export function railMagnification(distance:number,radius=52):number{return 1+1.25*Math.exp(-Math.pow(distance/Math.max(1,radius),2)*2);}
+/** The selection preview only paints for a live selection or while the lens asks about it. */
+export function selectionPreviewVisible(asking:boolean,composing:boolean,live:boolean):boolean{
+ return asking||(composing&&live);
+}
 
 /** Crowding depends on source positions, never the changing height or placed top of a card. */
 export function compactMarginIds(items:MarginItem[],active?:string):Set<string>{

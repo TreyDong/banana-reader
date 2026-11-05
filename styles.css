@@ -518,3 +518,16 @@ body.gloss-reading-chrome .workspace-tabs.mod-top>.workspace-tab-header-containe
 .gloss-root .gloss-notebook-personal .gloss-notebook-entry-remove{right:38px;opacity:1;}
 .gloss-root .gloss-personal-note-delete{position:absolute;top:8px;right:7px;width:24px;height:24px;color:var(--ink-4);}
 .gloss-notebook-personal .gloss-notebook-meta{padding-right:58px;}
+
+/* 记笔记面板停在右下角，不再用居中弹窗打断阅读 */
+.gloss-personal-note-panel{position:absolute;right:24px;bottom:24px;z-index:30;width:min(340px,calc(100% - 48px));display:flex;flex-direction:column;gap:10px;padding:14px 15px 13px;border:1px solid var(--rule-strong);border-radius:14px;background:var(--bg-raised);box-shadow:var(--shadow-pop);}
+.gloss-personal-note-panel .gloss-note-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 13px/1.4 var(--font-sans);color:var(--ink);}
+.gloss-personal-note-panel .gloss-note-panel-meta{font:11px/1.5 var(--font-sans);color:var(--ink-3);}
+.gloss-personal-note-panel textarea.gloss-note-panel-input{display:block;width:100%;min-height:96px;resize:vertical;font:14px/1.6 var(--font-sans);padding:8px 10px;border:1px solid var(--rule);border-radius:9px;background:var(--bg);color:var(--ink);outline:none;box-shadow:none;}
+.gloss-personal-note-panel textarea.gloss-note-panel-input:focus{border-color:var(--rule-strong);}
+.gloss-personal-note-panel .gloss-note-panel-actions{display:flex;justify-content:flex-end;gap:8px;}
+.gloss-root.gloss-notebook-open .gloss-personal-note-panel{right:434px;}
+@container(max-width:1079px){.gloss-personal-note-panel{right:16px;left:16px;bottom:88px;width:auto;}.gloss-root.gloss-notebook-open .gloss-personal-note-panel{right:16px;}}
+.gloss-mobile .gloss-personal-note-panel{right:12px;left:12px;bottom:calc(88px + env(safe-area-inset-bottom,0px));width:auto;}
+/* 切换标签页时只隐藏阅读器，位置与进度保持原样 */
+.gloss-root.is-away{visibility:hidden;pointer-events:none;}
