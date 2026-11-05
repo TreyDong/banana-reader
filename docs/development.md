@@ -2,12 +2,18 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Current release: **0.13.2**, including native settings headings, supported style assignments and official source-rule checks. The minimum desktop Obsidian version remains **1.11.4**.
+Published GitHub and community release: **0.15.1**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. The complete automated Community review passed, including verified provenance and byte-for-byte build reproduction. This is not a claim of manual staff review or physical iOS/Android acceptance; see [release evidence](../notes/community-review-repair-plan.md).
 
 ```sh
 npm ci
 npm run check
 ```
+
+## Source and release ownership
+
+The maintained source and release repository is [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader), branch `main`. The former `banana-reader-plugin` repository is archived; its mobile/BRAT assets are historical and have not received the 0.14.8 fixes. Do not publish new packages there or change historical tags to make them appear reproducible.
+
+Before resuming an older local checkout, inspect its branch, remotes, manifest and uncommitted changes against the maintained `main`. A successful remote release does not update that working copy. Preserve unrelated work and reconcile it explicitly before building or publishing. New mobile candidates must derive from the maintained source and pass their own exact-source, provenance and physical-device checks; do not relabel 0.14.8 as mobile-ready.
 
 ## Layout
 
@@ -19,7 +25,7 @@ npm run check
 
 The build emits `main.js` in the repository root. Install that file together with root `manifest.json` and `styles.css`. Runtime outputs are independent of the source-directory layout. `main.js` and `node_modules/` are ignored by Git.
 
-The plugin ID remains `gloss-reader`. Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
+The community plugin ID is `gloss-reader`, restored in 0.14.7. The display name remains Banana Reader; never activate the historical `banana-reader` replacement at the same time. Internal view IDs remain stable. See [identity migration](plugin-id-migration.md). Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
 
 ## Licenses
 
@@ -27,9 +33,15 @@ The plugin ID remains `gloss-reader`. Build and tests do not deploy files to a v
 
 ## Official source checks
 
-`npm run lint` runs the pinned `eslint-plugin-obsidianmd` recommended checks against all runtime sources and release metadata. Obsidian rules retain their recommended error/warning levels. General JavaScript and TypeScript findings remain visible warnings to match the observed community scan; they are not silently disabled. `npm run check` runs lint, regression tests and the TypeScript/bundle build in sequence. Any lint error or failed test/build blocks the command.
+`npm run lint` runs the pinned `eslint-plugin-obsidianmd` recommended configuration at its original severities with `--max-warnings 0`. Release metadata is validated separately, including the manifest, package, lockfile, versions map, identity and desktop-only status. No source rule is disabled or downgraded. `npm run check` also runs the regression suite and the TypeScript/bundle build.
 
-The 0.13.1 scan reported 10 static style assignments and seven manually created settings headings. The fix keeps the same style values through `setCssStyles()` and uses `Setting.setName().setHeading()` with existing typography and localization bindings. It does not change model execution, layout calculations or persisted data. The lint regression was checked against the original source: all 17 errors were detected and none remain in the repaired source. Other warnings remain outside this repair's scope.
+The 0.14.7 baseline contained 826 local warnings and no lint errors. The repair types JSON/provider boundaries and native host integration, uses document-owned DOM helpers and scheduling, removes unused declarations, replaces deprecated keyboard/refresh calls and adds declarative settings search with a legacy fallback. Search indexes both Chinese and English labels without network requests or writes; the existing four settings tabs remain the editor.
+
+Document selection and the unscoped bookshelf enumerate file paths only after the user opens those interfaces. A configured bookshelf folder is traversed directly, with protected subtrees excluded before traversal. These capabilities can still produce a Community behavior notice. Copy actions only call `clipboard.writeText` on a user click; the plugin does not read the clipboard. Do not replace these APIs with aliases just to hide capability findings.
+
+The build's version-checked PDF transform removes both dynamic-code probes and the PostScript compiler branch from PDF.js 4.10.38, retaining the upstream interpreter. Both upstream global library/worker registrations are removed, and a dedicated MessageChannel prevents the bundled engine from replacing Obsidian's native PDF worker. Dependency files on disk remain unchanged. Source-structure changes fail the build, and the complete emitted installation bundle is parsed again to reject dynamic constructors/evaluation. A real synthetic PDF is extracted in a VM with string/wasm code generation disabled. PDF text/outline extraction stays local; the original-page view remains the fallback.
+
+The 0.13.2 release previously replaced static style assignments and manual settings headings. Those changes and stored data formats are preserved.
 
 ## UI localization
 
@@ -37,12 +49,34 @@ The 0.13.1 scan reported 10 static style assignments and seven manually created 
 
 `auto` uses Obsidian's `getLanguage()`: Chinese locales resolve to Simplified Chinese, while other locales resolve to English. The setting is per vault. UI language does not change the model's answer language or translate existing default prompts. Preserve canonical PDF source labels and other stored identity strings; translate their display labels without changing selection or citation matching.
 
-The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The suite currently contains 124 passing tests. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
+The regression suite includes locale resolution, catalog coverage, placeholder preservation, custom command names, persistence and save-failure rollback, compiled-plugin integration and same-page PDF selection preservation. Compiled-plugin tests cover language changes in an already open notebook and retain draft inputs, source anchors and active controllers. The 0.14.8 suite passed 197 tests, covering recoverable PDF loading, cancelled/native mounts, host-worker isolation, identity guards, scoped shelves, settings search and composition input. Historical 0.14.0 candidate validation in independent Obsidian mobile emulation verified native PDF retry, rapid document switching, multiline entry, keyboard-sized viewports and the complete selection-to-export flow. Physical iOS/Android acceptance remains pending; see [mobile release validation](mobile-release-validation.md) for the exact scope. Native checks in an isolated synthetic vault use BRAT to restart only the test Reader, then switch English/Chinese/English in the same open reader. Notebook filters and counters, mark styles, reading statistics and index tooltips update while the unsent draft and saved marks remain intact.
 
 `bindUi()` registers explicitly translated text nodes and accessibility attributes; `refreshUi()` updates only those bindings, retaining child icons and skipping nodes changed by another renderer. User-authored content and input values are never registered. `refreshLanguage()` refreshes reader chrome, notebook labels and reading statistics without reloading documents, restarting services or triggering model requests. Index progress retains a label callback so counts can be rendered in the current locale; repainting does not restart indexing. After notebook rendering, remove only generated accessibility captions no longer referenced by `aria-labelledby`.
 
+## Native reading-view takeover
+
+`src/reading-hijack.ts` decides whether a click belongs to Obsidian's own reading-mode button. The plugin listens for `click` in the capture phase on the workspace document and on every window Obsidian opens, so the native switch can be stopped before Obsidian reacts to it.
+
+The toggle is recognised structurally: the click target must sit in a `view-action` button inside a pane tagged `data-type="markdown"`, carrying Obsidian's `lucide-book-open` icon (the reading-view button while editing) or the matching tooltip text. The decision also requires the user setting, a Markdown note outside the protected folders, and a pane that is not already in reading view, so the button still returns to editing. Nothing is taken over when the setting is off, and the native command and hotkey keep working.
+
+The interception is limited to the reading-view button. No file content is read at interception time, and the note itself is opened through the same path as the ribbon button and the reading command.
+
 ## Release checklist
 
-Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Update the current version and behavior in both READMEs and this guide; historical release entries retain their original versions. Run `npm run check` from the exact source revision being released. Push a candidate review branch and obtain a successful official **Review branch** scan before publishing; a successful local build or GitHub release alone does not establish directory approval.
+Keep `package.json`, the root package entries in `package-lock.json`, `manifest.json` and `versions.json` consistent. Run `npm run check` on the exact revision being reviewed. The `reader-release-verify.yml` workflow repeats these checks on GitHub, builds the three installation files, generates SHA-256 values, creates provenance attestations for all three and verifies the attestations against the workflow, source ref and source commit before uploading its candidate artifact.
 
-Publish only `main.js`, `manifest.json` and `styles.css` as installation assets, using the manifest version as the release tag without a `v` prefix. Verify the published tag, source revision and downloaded asset hashes. Keep compiled output, credentials and vault data out of Git and the release. Existing users update those three files and restart Obsidian; preserve `data.json` and `indices/`.
+Before a community release, obtain a successful official **Review branch** scan. Retain documented necessary file-enumeration and clipboard-write behavior notices; do not claim they are code failures or conceal them. Keep official review results separate from local verification.
+
+A release tag is the manifest version without a `v` prefix. Build and attest again on the exact tag. Publish the three installation files from that attested artifact, then download the actual published bytes, compare all hashes and run `gh attestation verify` against the tag commit. Adding a workflow file or passing local checks alone does not establish artifact provenance. Each tag must contain the source and matching manifest for its actual installation assets; the historical 0.14.1/0.14.2 replacement tags did not satisfy this contract.
+
+After publication, synchronize the maintained default branch with the reviewed source and current manifest. The Community **Check for new releases** action reads that manifest; a GitHub release alone is insufficient. Wait for the exact release review to show Completed and record the results separately from the preview. Documentation-only follow-ups do not move the release tag or replace its attested files.
+
+Preserve existing `data.json` and `indices/`; they are not release assets. Physical mobile acceptance remains pending and `isDesktopOnly` stays true. Do not change the personal installation during isolated release validation.
+
+## Mobile runtime
+
+Obsidian mobile has no Node.js or Electron. Runtime built-ins are loaded only inside guarded desktop paths, including the published legacy migration. Mobile uses injected `requestUrl` transport and Vault.adapter storage; EPUB uses `fflate/browser`. Keep the compiled-entry test that forbids every external import except `obsidian`.
+
+Phone model assignments use `mobileTaskModels`; shared service IDs, desktop task routes and historical model receipts remain intact. Mobile receives complete JSON answers, with stop/timeout discarding late results. Native requests cannot actually be aborted by the plugin. On startup, recover pending requests before any settings save. Interrupted regeneration restores the last complete answer and its exact evidence.
+
+Mobile never performs an initial cross-ID data copy because DataAdapter does not offer exclusive creation. It permits fresh and stable-ID installations, and verifies existing desktop migration receipts and legacy file hashes without writing either copy. Desktop keeps the published exclusive-copy, conflict, symlink and rollback checks.

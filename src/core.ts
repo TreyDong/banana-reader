@@ -1,18 +1,39 @@
 import type {ContextInfo} from './rag';
 import type {ReadingBrief} from './brief';
+/** Narrow external JSON before reading fields; arrays never leak `any` into callers. */
+export function objectValue(value:unknown):Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+export function arrayValue(value:unknown):unknown[]{return Array.isArray(value)?value:[];}
+export function stringValue(value:unknown):string{return typeof value==='string'?value:'';}
+/** Obsidian installs its DOM helpers on every window, including popouts. */
+export function documentWindow(doc:Document):typeof window{return doc.win as typeof window;}
 export interface Anchor { pdfPage?:number;pdfOffset?:number;quote: string; start: number; prefix: string; suffix: string }
 export interface Passage { source?:string;text: string; start: number; end: number; number: number }
 export interface TokenUsage {input?:number;output?:number;cacheRead?:number;cacheWrite?:number;total?:number}
 export interface WebSource {title:string;url:string;snippet:string}
 export interface WebReceipt {provider?:string;query:string;sources:WebSource[]}
 export interface Message { web?:WebReceipt; role: 'user' | 'assistant'; content: string; provider?:string; model?:string; serviceId?:string; usage?:TokenUsage }
-export interface Thread { interrupted?:boolean;followupDraft?:string;translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export interface Thread { pending?:boolean;recovery?:ThreadRecovery;mobileModel?:{serviceId:string;modelId:string};interrupted?:boolean;followupDraft?:string;translationTarget?:string; selection?:boolean; contextInfo?:ContextInfo; id: string; removed?:boolean; removedAt?:number; commandId?:string; label?:string; anchor?: Anchor; messages: Message[]; created: number; error?: string; context?: string; citations?: Record<string, Anchor> }
+export type ThreadRecovery=Pick<Thread,'messages'|'context'|'citations'|'contextInfo'|'anchor'|'selection'>;
+/** Save the last complete answer and evidence before a regeneration replaces them. */
+export function beginThreadRequest(thread:Thread,regenerating=false){
+ thread.pending=true;
+ if(regenerating){const {messages,context,citations,contextInfo,anchor,selection}=thread;thread.recovery=JSON.parse(JSON.stringify({messages,context,citations,contextInfo,anchor,selection})) as ThreadRecovery;}
+ else delete thread.recovery;
+}
+export function settleThreadRequest(thread:Thread){delete thread.pending;delete thread.recovery;}
 export type MarkStyle='highlight'|'underline'|'wavy';
 export const MARK_STYLES:Record<MarkStyle,string>={highlight:'荧光笔',underline:'直线',wavy:'波浪线'};
 export function markStyle(value:unknown):MarkStyle{return value==='underline'||value==='wavy'?value:'highlight';}
 export interface Highlight { id: string; anchor: Anchor; color: string; note: string; created: number; removed?: boolean; style?:MarkStyle }
-export interface Reading { pdfPage?:number;brief?:ReadingBrief; highlights: Highlight[]; threads: Thread[]; progress: number; draft: string; updated: number }
+export interface PersonalNote {id:string; text:string; created:number; anchor?:Anchor; threadId?:string; removed?:boolean}
+export interface Reading { pdfPage?:number;brief?:ReadingBrief; highlights: Highlight[]; threads: Thread[]; notes?:PersonalNote[]; progress: number; draft: string; updated: number }
 export const freshReading = (): Reading => ({highlights: [], threads: [], progress: 0, draft: '', updated: Date.now()});
+/** A failed save must not leave a phantom note or discard an existing note. */
+export async function savePersonalNote(reading:Reading,note:PersonalNote,text:string,persist:()=>Promise<void>){
+ const previous=note.text,updated=reading.updated,hadNotes=!!reading.notes,exists=reading.notes?.includes(note)??false;
+ note.text=text;if(!exists)(reading.notes||=[]).push(note);reading.updated=Date.now();
+ try{await persist();}catch(error){note.text=previous;reading.updated=updated;if(!exists){reading.notes=reading.notes?.filter(n=>n!==note);if(!hadNotes)delete reading.notes;}throw error;}
+}
 export function makeAnchor(text: string, start: number, end: number): Anchor {
   while (start < end && /\s/.test(text[start])) start++;
   while (end > start && /\s/.test(text[end - 1])) end--;
@@ -63,15 +84,18 @@ export function blockedPath(path: string): boolean {
 export function exportReading(path: string, data: Reading, vault: string): string {
   const source = `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(path)}`;
   let md = `# 阅读笔记 · ${path.split('/').pop()?.replace(/\.md$/, '')}\n\n[打开原文](${source})\n\n`;
-  const back = (id: string) => `obsidian://gloss-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
+  const back = (id: string) => `obsidian://banana-reader?vault=${encodeURIComponent(vault)}&path=${encodeURIComponent(path)}&anchor=${encodeURIComponent(id)}`;
   for (const h of data.highlights.filter(h => !h.removed)) {
     md += `## 摘录 · ${MARK_STYLES[markStyle(h.style)]}${h.anchor.pdfPage?' · PDF 第 '+h.anchor.pdfPage+' 页':''}\n\n> ${h.anchor.quote.replace(/\n/g, '\n> ')}\n\n[↩ 返回划线](${back(h.id)})\n\n${h.note ? h.note + '\n\n' : ''}`;
+  }
+  for(const note of (data.notes||[]).filter(n=>!n.removed)){
+    md+=`## 我的笔记${note.anchor?.pdfPage?' · PDF 第 '+note.anchor.pdfPage+' 页':''}\n\n${note.text}\n\n[↩ 返回阅读位置](${back(note.id)})\n\n`;
   }
   for (const t of data.threads.filter(t=>!t.removed)) {
     md += `## 阅读对话${t.label?' · '+t.label:''}${t.anchor?.pdfPage?' · PDF 第 '+t.anchor.pdfPage+' 页':''}\n\n${t.anchor ? '> ' + t.anchor.quote.replace(/\n/g, '\n> ') + '\n\n' : ''}[↩ 返回对话](${back(t.id)})\n\n`;
     if(t.contextInfo)md+='上下文：'+t.contextInfo.label+(t.contextInfo.embeddingModel?' · Embedding：'+t.contextInfo.embeddingModel:'')+'\n\n';
     if(t.contextInfo?.embeddingModel){md+='### 检索来源\n\n';for(const [id,anchor]of Object.entries(t.citations||{})){const label=anchor.pdfPage?'PDF 第 '+anchor.pdfPage+' 页':t.contextInfo.sources.find(s=>s.id===id)?.label||'原文片段';md+='- [¶'+id+'] ['+label+']('+back(t.id)+'&citation='+encodeURIComponent(id)+')\n';}md+='\n';}
-    for (const m of t.messages){md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;if(m.web?.sources.length){md+='网络来源（'+(m.web.provider||'网页')+' 搜索摘要）：\n\n';for(const source of m.web.sources)md+='- ['+source.title.replace(/[\[\]\n]/g,' ')+'](<'+source.url+'>)\n';md+='\n';}}
+    for (const m of t.messages){md += `### ${m.role === 'user' ? '我的问题' : 'Agent'+(m.model?' · '+m.model:'')}\n\n${m.content}\n\n`;if(m.web?.sources.length){md+='网络来源（'+(m.web.provider||'网页')+' 搜索摘要）：\n\n';for(const source of m.web.sources)md+='- ['+source.title.replace(/[[\]\n]/g,' ')+'](<'+source.url+'>)\n';md+='\n';}}
   }
   return md;
 }
@@ -80,7 +104,7 @@ export function referenceTokens(text:string):{start:number;end:number;ids:string
   const tokens:{start:number;end:number;ids:string[]}[]=[];
   for(const match of text.matchAll(/\[¶\d+(?:\s*(?:[–—-]\s*¶?\d+|[,，、]\s*¶?\d+))*\]/g)){
     const ids:string[]=[];for(const part of match[0].matchAll(/¶?(\d+)(?:\s*[–—-]\s*¶?(\d+))?/g)){const first=Number(part[1]),last=Number(part[2]||part[1]);if(first<1||last<first||last-first>100)continue;for(let n=first;n<=last;n++)ids.push(String(n));}
-    if(ids.length){const previous=tokens.at(-1);if(previous&&/^\s*$/.test(text.slice(previous.end,match.index!))){previous.end=match.index!+match[0].length;previous.ids=[...new Set([...previous.ids,...ids])];}else tokens.push({start:match.index!,end:match.index!+match[0].length,ids:[...new Set(ids)]});}
+    if(ids.length){const previous=tokens.at(-1);if(previous&&/^\s*$/.test(text.slice(previous.end,match.index))){previous.end=match.index+match[0].length;previous.ids=[...new Set([...previous.ids,...ids])];}else tokens.push({start:match.index,end:match.index+match[0].length,ids:[...new Set(ids)]});}
   }return tokens;
 }
 

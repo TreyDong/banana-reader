@@ -1,3 +1,4 @@
+import {objectValue,arrayValue} from './core';
 export interface ReadingCommand {id:string;name:string;prompt:string;builtin?:boolean}
 export const MAX_COMMANDS=8;
 export const DEFAULT_COMMANDS:ReadingCommand[]=[
@@ -9,7 +10,7 @@ export const DEFAULT_COMMANDS:ReadingCommand[]=[
 ];
 export function normalizeCommands(value:unknown):ReadingCommand[]{
   if(!Array.isArray(value))return DEFAULT_COMMANDS.map(c=>({...c}));
-  const ids=new Set<string>();return value.filter(c=>c&&typeof c.id==='string'&&typeof c.name==='string'&&typeof c.prompt==='string').filter(c=>{if(ids.has(c.id))return false;ids.add(c.id);return true;}).slice(0,MAX_COMMANDS).map(c=>({id:c.id,name:c.name.trim().slice(0,16)||'指令',prompt:c.prompt.slice(0,8000),builtin:DEFAULT_COMMANDS.some(d=>d.id===c.id)}));
+  const ids=new Set<string>();return arrayValue(value).map(objectValue).filter((c):c is {id:string;name:string;prompt:string}=>typeof c.id==='string'&&typeof c.name==='string'&&typeof c.prompt==='string').filter(c=>{if(ids.has(c.id))return false;ids.add(c.id);return true;}).slice(0,MAX_COMMANDS).map(c=>({id:c.id,name:c.name.trim().slice(0,16)||'指令',prompt:c.prompt.slice(0,8000),builtin:DEFAULT_COMMANDS.some(d=>d.id===c.id)}));
 }
 export function saveCommand(commands:ReadingCommand[],command:ReadingCommand):ReadingCommand[]{
   const name=command.name.trim(),prompt=command.prompt.trim();if(!name||name.length>16)throw new Error('指令名称需为1–16个字符。');if(!prompt||prompt.length>8000)throw new Error('Prompt 需为1–8,000个字符。');
