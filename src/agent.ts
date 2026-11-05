@@ -26,6 +26,11 @@ export function configureMobileTransport(transport?:MobileTransport){mobileTrans
 export function hasMobileTransport(){return !!mobileTransport;}
 /** requestUrl cannot cancel its native request; stop waiting and discard all late results. */
 export async function mobileRequest(request:Parameters<MobileTransport>[0],signal:AbortSignal,timeout=60000,maxLength=16000000):Promise<string>{
+  const response=await mobileExchange(request,signal,timeout,maxLength);
+  if(response.status<200||response.status>=300)throw new Error('服务返回 HTTP '+response.status+'，请检查地址、权限与额度。');
+  return response.text;
+}
+async function mobileExchange(request:Parameters<MobileTransport>[0],signal:AbortSignal,timeout:number,maxLength:number):Promise<{status:number;text:string}>{
   if(signal.aborted)throw new Error('已停止');
   if(!mobileTransport)throw new Error('移动网络接口尚未就绪。');
   let timer:number|undefined,abort:()=>void=()=>{};
@@ -35,13 +40,12 @@ export async function mobileRequest(request:Parameters<MobileTransport>[0],signa
       abort=()=>reject(new Error('已停止'));signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
     })]);
     if(signal.aborted)throw new Error('已停止');
-    if(response.status<200||response.status>=300)throw new Error('服务返回 HTTP '+response.status+'，请检查地址、权限与额度。');
     if(response.text.length>maxLength)throw new Error('服务返回数据过大。');
-    return response.text;
+    return response;
   }catch(error){
     if(signal.aborted)throw new Error('已停止');
     const message=error instanceof Error?error.message:'';
-    if(/^(请求超时|服务返回 HTTP|服务返回数据过大)/.test(message))throw error;
+    if(/^(请求超时|服务返回数据过大)/.test(message))throw error;
     throw new Error('无法连接服务，请检查地址与网络。');
   }finally{window.clearTimeout(timer);signal.removeEventListener('abort',abort);}
 }
@@ -117,11 +121,15 @@ async function askCLI(r:AskRequest):Promise<string>{
     child.stdin.end(payload(r).map(m=>`${m.role==='user'?'用户':'助手'}：\n${m.content}`).join('\n\n'));
   });}finally{void fs.rm(cwd,{recursive:true,force:true}).catch(()=>{});}
 }
+export function normalizeApiBase(base:string):string{
+  const trimmed=base.trim();if(!trimmed)return trimmed;
+  try{const url=new URL(trimmed);url.pathname=url.pathname.replace(/\/{2,}/g,'/');return url.toString().replace(/\/+$/,'');}catch{return trimmed;}
+}
 export function apiEndpoint(base:string,protocol:ApiProtocol='openai',model=''):URL{
-  const root=new URL(base);if(root.username||root.password||root.search||root.hash)throw new Error('请填写不含密钥、查询参数或片段的 API 地址。');
+  const root=new URL(normalizeApiBase(base));if(root.username||root.password||root.search||root.hash)throw new Error('请填写不含密钥、查询参数或片段的 API 地址。');
   if(root.protocol!=='https:'&&!(root.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(root.hostname)))throw new Error('API 地址须使用 HTTPS；本机服务可使用 HTTP。');
   const suffix={openai:'/chat/completions',responses:'/responses',anthropic:'/messages',gemini:'/models/'+encodeURIComponent(model.replace(/^models\//,''))+':streamGenerateContent'}[protocol];if(!suffix)throw new Error('不支持的 API 协议。');
-  const url=new URL(base.replace(/\/+$/,'')+suffix);if(protocol==='gemini')url.searchParams.set('alt','sse');return url;
+  const url=new URL(normalizeApiBase(base).replace(/\/+$/,'')+suffix);if(protocol==='gemini')url.searchParams.set('alt','sse');return url;
 }
 export function apiRequest(r:AskRequest):{url:URL;body:Record<string,unknown>;headers:Record<string,string>;protocol:ApiProtocol}{
   if(!r.settings.apiModel.trim())throw new Error('请先填写模型 ID。');const protocol=r.settings.apiProtocol||'openai',url=apiEndpoint(r.settings.apiBase,protocol,r.settings.apiModel),messages=payload(r),key=r.settings.apiKey;
@@ -203,23 +211,120 @@ export async function discoverCodexModels(cache?:string):Promise<ModelOption[]>{
 function apiModels(protocol:ApiProtocol,value:unknown):ModelOption[]{
  const data=objectValue(value);return normalizeModels(protocol==='gemini'?arrayValue(data.models).map(objectValue).filter(model=>!model.supportedGenerationMethods||arrayValue(model.supportedGenerationMethods).includes('generateContent')).map(model=>({id:stringValue(model.name).replace(/^models\//,''),name:model.displayName||model.name})):data.data);
 }
+function apiAuthHeaders(protocol:ApiProtocol,key:string):Record<string,string>{
+  const headers:Record<string,string>={Accept:'application/json'};
+  if(key){if(protocol==='anthropic')headers['x-api-key']=key;else if(protocol==='gemini')headers['x-goog-api-key']=key;else headers.Authorization='Bearer '+key;}
+  if(protocol==='anthropic')headers['anthropic-version']='2023-06-01';
+  return headers;
+}
+export interface HttpResponse{status:number;body:string;url:string}
+/** Desktop requests never follow redirects on their own; follow a few hops so a moved endpoint still answers. */
+async function desktopExchange(method:'GET'|'POST',url:URL,headers:Record<string,string>,body:string|undefined,signal:AbortSignal,timeout:number,redirects=3):Promise<HttpResponse>{
+  const https=desktopModule('node:https'),http=desktopModule('node:http');
+  return new Promise<HttpResponse>((resolve,reject)=>{
+    let done=false,req:import('node:http').ClientRequest|undefined;
+    const settle=()=>{window.clearTimeout(timer);signal.removeEventListener('abort',abort);};
+    const fail=(error:Error)=>{if(done)return;done=true;settle();try{req?.destroy();}catch{/* The request may not exist yet. */}reject(error);};
+    const succeed=(response:HttpResponse)=>{if(done)return;done=true;settle();resolve(response);};
+    const abort=()=>fail(new Error('已停止'));
+    const timer=window.setTimeout(()=>fail(new Error('连接超时，请检查网络或代理设置。')),timeout);
+    const send=(target:URL,left:number)=>{
+      let request:import('node:http').ClientRequest;
+      try{
+        request=(target.protocol==='https:'?https:http).request(target,{method,headers},res=>{
+          const status=res.statusCode||0;
+          if([301,302,303,307,308].includes(status)&&left>0&&res.headers.location){
+            res.resume();let next:URL;try{next=new URL(String(res.headers.location),target);}catch{succeed({status,body:'',url:target.href});return;}
+            if(next.protocol!=='https:'&&!(next.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(next.hostname))){fail(new Error('服务返回了指向不安全地址的重定向。'));return;}
+            send(next,left-1);return;
+          }
+          let text='';res.setEncoding('utf8');
+          res.on('data',chunk=>{text+=chunk;if(text.length>2000000){res.destroy();fail(new Error('服务返回数据过大。'));}});
+          res.on('error',()=>fail(new Error('连接中断。')));
+          res.on('aborted',()=>fail(new Error('连接中断。')));
+          res.on('end',()=>{if(done)return;succeed({status,body:text,url:target.href});});
+        });
+      }catch(error){fail(new Error('请求无法发送：'+(error instanceof Error?error.message:'未知错误')));return;}
+      req=request;
+      request.on('error',()=>fail(new Error('无法连接服务，请检查地址与网络。')));
+      if(body===undefined)request.end();else request.end(body);
+    };
+    signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}
+    send(url,redirects);
+  });
+}
+async function httpGet(url:URL,headers:Record<string,string>,signal:AbortSignal,timeout=15000):Promise<HttpResponse>{
+  if(mobileTransport){const response=await mobileExchange({url:url.href,method:'GET',headers},signal,timeout,2000000);return{status:response.status,body:response.text,url:url.href};}
+  return desktopExchange('GET',url,headers,undefined,signal,timeout);
+}
+async function httpPost(url:URL,headers:Record<string,string>,body:string,signal:AbortSignal,timeout=20000):Promise<HttpResponse>{
+  if(mobileTransport){const response=await mobileExchange({url:url.href,method:'POST',headers,body},signal,timeout,2000000);return{status:response.status,body:response.text,url:url.href};}
+  return desktopExchange('POST',url,headers,body,signal,timeout,0);
+}
 export async function discoverApiModels(settings:AgentSettings,signal:AbortSignal):Promise<ModelOption[]>{
   const protocol=settings.apiProtocol||'openai';apiEndpoint(settings.apiBase,protocol,'test');
-  const url=new URL(settings.apiBase.replace(/\/+$/,'')+'/models');const headers:Record<string,string>={Accept:'application/json'};
-  if(settings.apiKey){if(protocol==='anthropic')headers['x-api-key']=settings.apiKey;else if(protocol==='gemini')headers['x-goog-api-key']=settings.apiKey;else headers.Authorization='Bearer '+settings.apiKey;}
-  if(protocol==='anthropic')headers['anthropic-version']='2023-06-01';
-  if(mobileTransport){
-    const raw=await mobileRequest({url:url.href,method:'GET',headers},signal,15000,2000000);
-    let value:unknown;try{value=JSON.parse(raw);}catch{throw new Error('模型列表格式无法识别，可手动添加模型 ID。');}
-    const items=apiModels(protocol,value);
-    const models=normalizeModels(items);if(!models.length)throw new Error('服务未提供可用模型，可手动添加模型 ID。');return models;
+  const url=new URL(normalizeApiBase(settings.apiBase).replace(/\/+$/,'')+'/models');
+  const response=await httpGet(url,apiAuthHeaders(protocol,settings.apiKey),signal);
+  if(response.status<200||response.status>=300)throw new Error(modelListError(response.status));
+  let value:unknown;try{value=JSON.parse(response.body);}catch{throw new Error(looksLikeHtml(response.body)?'服务返回了网页而不是模型列表，请检查 API 地址是否正确。':'模型列表格式无法识别，可手动添加模型 ID。');}
+  const models=normalizeModels(apiModels(protocol,value));if(!models.length)throw new Error('服务未提供可用模型，可手动添加模型 ID。');return models;
+}
+export function modelListError(status:number):string{
+  if(status===401)return '无法获取模型列表（HTTP 401）：密钥无效或未授权。';
+  if(status===403)return '无法获取模型列表（HTTP 403）：密钥没有访问权限。';
+  if(status===404)return '无法获取模型列表（HTTP 404）：地址可能不正确，请确认是否以 /v1 结尾。';
+  if(status>=500)return '无法获取模型列表（HTTP '+status+'）：服务暂时不可用。';
+  return '无法获取模型列表（HTTP '+status+'），可手动添加模型 ID。';
+}
+export function looksLikeHtml(body:string){return /^\s*<(!doctype|html)/i.test(body);}
+export type ApiTestReason='ok'|'no-list'|'unauthorized'|'forbidden'|'not-found'|'not-api'|'server-error'|'network'|'timeout'|'invalid-url'|'chat-only';
+export interface ApiTestReport{ok:boolean;endpoint:string;status?:number;models:ModelOption[];sentKey:boolean;reason:ApiTestReason;suggestion?:string}
+/** A tiny chat probe separates a working key from a service that simply has no model list. */
+async function probeChat(settings:AgentSettings,signal:AbortSignal):Promise<number>{
+  const protocol=settings.apiProtocol||'openai',url=apiEndpoint(settings.apiBase,protocol,'test');
+  if(protocol==='gemini'){url.pathname=url.pathname.replace(/:streamGenerateContent$/,':generateContent');url.searchParams.delete('alt');}
+  const headers=apiAuthHeaders(protocol,settings.apiKey);headers['Content-Type']='application/json';headers.Accept='application/json';
+  const body=protocol==='anthropic'?{model:'test',max_tokens:1,messages:[{role:'user',content:'ping'}]}
+    :protocol==='gemini'?{contents:[{role:'user',parts:[{text:'ping'}]}],generationConfig:{maxOutputTokens:1}}
+    :protocol==='responses'?{model:'test',input:'ping',max_output_tokens:1,store:false}
+    :{model:'test',messages:[{role:'user',content:'ping'}],max_tokens:1};
+  return (await httpPost(url,headers,JSON.stringify(body),signal)).status;
+}
+export async function testApiService(settings:AgentSettings,signal:AbortSignal):Promise<ApiTestReport>{
+  const protocol=settings.apiProtocol||'openai',sentKey=!!settings.apiKey,base=normalizeApiBase(settings.apiBase);
+  const fail=(reason:ApiTestReason,status?:number):ApiTestReport=>({ok:false,endpoint:base,status,models:[],sentKey,reason});
+  let endpoint:URL;try{apiEndpoint(base,protocol,'test');endpoint=new URL(base.replace(/\/+$/,'')+'/models');}catch{return fail('invalid-url');}
+  let response:HttpResponse;
+  try{response=await httpGet(endpoint,apiAuthHeaders(protocol,settings.apiKey),signal);}
+  catch(error){if(signal.aborted)throw error;const message=error instanceof Error?error.message:'';return fail(/超时/.test(message)?'timeout':'network');}
+  const report=(reason:ApiTestReason,models:ModelOption[]=[],extra:Partial<ApiTestReport>={}):ApiTestReport=>({ok:reason==='ok'||reason==='chat-only',endpoint:response.url,status:response.status,models,sentKey,reason,...extra});
+  if(response.status>=200&&response.status<300){
+    if(looksLikeHtml(response.body))return report('not-api');
+    let value:unknown;try{value=JSON.parse(response.body);}catch{value=undefined;}
+    const models=normalizeModels(apiModels(protocol,value));
+    if(models.length)return report('ok',models);
+    let probe=0;try{probe=await probeChat(settings,signal);}catch{probe=0;}
+    if(probe===401)return report('unauthorized');if(probe===403)return report('forbidden');
+    if(probe>=500)return report('server-error',[],{status:probe});
+    return report('chat-only');
   }
-  const https=desktopModule('node:https'),http=desktopModule('node:http');
-  return new Promise((resolve,reject)=>{
-    let done=false,body='';const finish=(error?:Error,models:ModelOption[]=[])=>{if(done)return;done=true;window.clearTimeout(timer);signal.removeEventListener('abort',abort);if(error){req.destroy();reject(error);}else resolve(models);};const abort=()=>finish(new Error('已停止'));
-    const req=(url.protocol==='https:'?https:http).request(url,{method:'GET',headers},res=>{if(!res.statusCode||res.statusCode>=300){res.resume();finish(new Error('无法获取模型列表（HTTP '+res.statusCode+'），可手动添加模型 ID。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk;if(body.length>2000000)finish(new Error('模型列表过大，请手动添加。'));});res.on('error',()=>finish(new Error('模型列表连接中断。')));res.on('aborted',()=>finish(new Error('模型列表连接中断。')));res.on('end',()=>{if(done)return;try{const value:unknown=JSON.parse(body);const items=apiModels(protocol,value);const models=normalizeModels(items);if(!models.length)finish(new Error('服务未提供可用模型，可手动添加模型 ID。'));else finish(undefined,models);}catch{finish(new Error('模型列表格式无法识别，可手动添加模型 ID。'));}});});
-    const timer=window.setTimeout(()=>finish(new Error('获取模型列表超时。')),15000);req.on('error',()=>finish(new Error('无法连接模型服务。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end();
-  });
+  if(response.status===401)return report('unauthorized');
+  if(response.status===403)return report('forbidden');
+  if(response.status===404&&['openai','responses'].includes(protocol)&&!/\/v1$/i.test(base.replace(/\/+$/,''))){
+    const variant=base.replace(/\/+$/,'')+'/v1';
+    let alternative:HttpResponse|undefined;
+    try{alternative=await httpGet(new URL(variant+'/models'),apiAuthHeaders(protocol,settings.apiKey),signal);}catch{alternative=undefined;}
+    if(alternative&&alternative.status>=200&&alternative.status<300){
+      let value:unknown;try{value=JSON.parse(alternative.body);}catch{value=undefined;}
+      return{ok:true,endpoint:alternative.url,status:alternative.status,models:normalizeModels(apiModels(protocol,value)),sentKey,reason:'ok',suggestion:variant};
+    }
+  }
+  if(response.status>=500)return report('server-error');
+  let probe=0;try{probe=await probeChat(settings,signal);}catch{probe=0;}
+  if(probe===401)return report('unauthorized');if(probe===403)return report('forbidden');
+  if(probe>=500)return report('server-error',[],{status:probe});
+  if(probe>0)return report('chat-only');
+  return report(response.status>=400?'not-found':'no-list');
 }
 
 const PI_FLAGS=['--no-session','--no-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-themes','--no-context-files'];
