@@ -1,4 +1,4 @@
-import {desktopModule,hasMobileTransport,mobileRequest} from './agent';
+import {desktopModule,hasMobileTransport,mobileRequest,normalizeApiBase} from './agent';
 import {objectValue,arrayValue,makeAnchor,blockedPath,referenceTokens,type Anchor,type Thread} from './core';
 
 export interface EmbeddingSettings {base:string;model:string;dimensions:number;topK:number}
@@ -24,7 +24,7 @@ export function hash(value:string):string{
  }
  return h.map(n=>n.toString(16).padStart(8,'0')).join('');
 }
-export function embeddingEndpoint(base:string){let url:URL;try{url=new URL(base.trim().replace(/\/+$/,'')+'/embeddings');}catch{throw new Error('Embedding API 地址无效。');}if(url.username||url.password||url.search||url.hash||!['http:','https:'].includes(url.protocol)||url.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Embedding 地址须使用 HTTPS；本机服务可使用 HTTP。');return url;}
+export function embeddingEndpoint(base:string){let url:URL;try{url=new URL(normalizeApiBase(base)+'/embeddings');}catch{throw new Error('Embedding API 地址无效。');}if(url.username||url.password||url.search||url.hash||!['http:','https:'].includes(url.protocol)||url.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Embedding 地址须使用 HTTPS；本机服务可使用 HTTP。');return url;}
 export function embeddingIdentity(s:EmbeddingSettings){return hash(JSON.stringify([embeddingEndpoint(s.base).href,s.model.trim(),s.dimensions||0]));}
 export function normalizeEmbedding(s:Partial<EmbeddingSettings>|undefined):EmbeddingSettings{return{base:typeof s?.base==='string'?s.base:EMBEDDING_DEFAULTS.base,model:typeof s?.model==='string'?s.model:'',dimensions:Number.isInteger(s?.dimensions)&&s.dimensions>=0&&s.dimensions<=8192?s.dimensions:0,topK:Number.isInteger(s?.topK)&&s.topK>=2&&s.topK<=12?s.topK:6};}
 function check(signal:AbortSignal){if(signal.aborted)throw new Error('已停止');}
@@ -39,6 +39,16 @@ function embeddingResponse(value:unknown,length:number,dimensions:number):{vecto
  if(vectors.some(vector=>!vector))throw new Error();const reported=objectValue(data.usage).prompt_tokens;
  return{vectors:vectors,inputTokens:typeof reported==='number'&&Number.isSafeInteger(reported)&&reported>=0?reported:undefined};
 }
+export function embeddingStatusError(status:number):string{
+  if(status===400)return 'Embedding 服务拒绝请求（HTTP 400）：请检查模型 ID。';
+  if(status===401)return 'Embedding 服务未授权（HTTP 401）：密钥无效或未授权。';
+  if(status===402)return 'Embedding 服务返回 HTTP 402：账户余额或额度不足。';
+  if(status===403)return 'Embedding 服务拒绝访问（HTTP 403）：密钥没有权限。';
+  if(status===404)return 'Embedding 接口不存在（HTTP 404）：请检查地址是否以 /v1 结尾。';
+  if(status===429)return 'Embedding 服务限流（HTTP 429）：请稍后重试。';
+  if(status>=500)return 'Embedding 服务错误（HTTP '+status+'）：请稍后重试。';
+  return 'Embedding 服务返回 HTTP '+status+'，请检查地址、模型和额度。';
+}
 export async function embedTexts(settings:EmbeddingSettings,key:string,input:string[],signal:AbortSignal):Promise<{vectors:number[][];inputTokens?:number}>{
  check(signal);const model=settings.model.trim();if(!model||model.length>200||/[\r\n]/.test(model))throw new Error('请先配置 Embedding 模型。');if(!input.length||input.length>32||input.some(t=>!t.trim()||t.length>4000))throw new Error('Embedding 输入超过单批限制。');
  const url=embeddingEndpoint(settings.base),body={model,input,encoding_format:'float',...(settings.dimensions?{dimensions:settings.dimensions}:{})};
@@ -49,7 +59,7 @@ export async function embedTexts(settings:EmbeddingSettings,key:string,input:str
  }
  const https=desktopModule('node:https'),http=desktopModule('node:http');
  return new Promise((resolve,reject)=>{let done=false,data='';const finish=(err?:Error,result?:{vectors:number[][];inputTokens?:number})=>{if(done)return;done=true;window.clearTimeout(timer);signal.removeEventListener('abort',abort);if(err){req.destroy();reject(err);}else resolve(result);};const abort=()=>finish(new Error('已停止'));const req=(url.protocol==='https:'?https:http).request(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',...(key?{Authorization:'Bearer '+key}:{})}},res=>{
-  if(res.statusCode!==200){res.resume();finish(new Error('Embedding 服务返回 HTTP '+res.statusCode+'，请检查地址、模型和额度。'));return;}res.setEncoding('utf8');res.on('data',chunk=>{data+=chunk;if(data.length>16000000)finish(new Error('Embedding 返回数据过大。'));});res.on('error',()=>finish(new Error('Embedding 连接中断。')));res.on('aborted',()=>finish(new Error('Embedding 连接中断。')));res.on('end',()=>{if(done)return;try{finish(undefined,embeddingResponse(JSON.parse(data),input.length,settings.dimensions));}catch{finish(new Error('Embedding 返回格式或向量维度无效，请检查兼容接口。'));}});
+  if(res.statusCode!==200){res.resume();finish(new Error(embeddingStatusError(res.statusCode)));return;}res.setEncoding('utf8');res.on('data',chunk=>{data+=chunk;if(data.length>16000000)finish(new Error('Embedding 返回数据过大。'));});res.on('error',()=>finish(new Error('Embedding 连接中断。')));res.on('aborted',()=>finish(new Error('Embedding 连接中断。')));res.on('end',()=>{if(done)return;try{finish(undefined,embeddingResponse(JSON.parse(data),input.length,settings.dimensions));}catch{finish(new Error('Embedding 返回格式或向量维度无效，请检查兼容接口。'));}});
  });const timer=window.setTimeout(()=>finish(new Error('Embedding 请求超时。')),60000);req.on('error',()=>finish(new Error('无法连接 Embedding 服务，请检查配置。')));signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}req.end(JSON.stringify(body));});
 }
 /** Chunks never cross page/chapter boundaries; anchors refer to the unchanged source. */
