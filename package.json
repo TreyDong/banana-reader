@@ -1,12 +1,12 @@
 {
   "name": "banana-reader",
-  "version": "0.13.2",
+  "version": "0.15.1",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json && node scripts/build.mjs",
-    "test": "tsx --test tests/*.test.ts",
-    "lint": "eslint src manifest.json package.json",
+    "test": "node --import ./tests/browser-env.mjs --import tsx --test tests/*.test.ts",
+    "lint": "eslint src --max-warnings 0 && node scripts/validate-metadata.mjs",
     "check": "npm run lint && npm test && npm run build"
   },
   "devDependencies": {
@@ -20,7 +20,8 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "pdfjs-dist": "4.10.38"
   },
   "license": "MIT"
 }

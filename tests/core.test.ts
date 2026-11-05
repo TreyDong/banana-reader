@@ -4,10 +4,21 @@ import * as http from 'node:http';
 import { once } from 'node:events';
 import { makeAnchor, resolveAnchor, indexPassages, contextFor, freshReading, exportReading, blockedPath } from '../src/core';
 import { apiEndpoint, askAgent, parseCodexLine } from '../src/agent';
-import {placeMarginItems, segmentMarks} from '../src/reading-ui';
+import {placeMarginItems, segmentMarks, readingMapSample, selectionPreviewVisible} from '../src/reading-ui';
+test('large reading maps retain both ends with bounded samples while short documents keep every paragraph',()=>{assert.deepEqual(readingMapSample(3),[0,1,2]);const samples=readingMapSample(2800);assert.equal(samples.length,300);assert.equal(samples[0],0);assert.equal(samples.at(-1),2799);assert.ok(samples.every((x,i)=>i===0||x>samples[i-1]));});
 
 test('margin notes remain next to their paragraphs when they do not collide',()=>{
   assert.deepEqual(placeMarginItems([{id:'a',desired:100,height:60,created:1},{id:'b',desired:300,height:90,created:2}]),{a:100,b:300});
+});
+
+test('the selection preview stays away from marks that are already committed',()=>{
+  // Only a live selection or an open question may paint the preview; a committed mark never does.
+  assert.equal(selectionPreviewVisible(false,false,false),false);
+  assert.equal(selectionPreviewVisible(false,false,true),false);
+  assert.equal(selectionPreviewVisible(false,true,true),true);
+  assert.equal(selectionPreviewVisible(false,true,false),false);
+  assert.equal(selectionPreviewVisible(true,false,false),true);
+  assert.equal(selectionPreviewVisible(true,true,false),true);
 });
 test('active margin comment keeps its anchor while neighboring notes move above and below',()=>{
   const items=[{id:'a',desired:200,height:60,created:1},{id:'active',desired:220,height:180,created:2},{id:'b',desired:240,height:50,created:3}];
@@ -102,6 +113,7 @@ test('exports retain quote, personal note, full conversation and encoded return 
   r.highlights.push({id:'removed',anchor:a,color:'pink',note:'不应导出',created:1,removed:true});
   r.threads.push({id:'t1',anchor:a,messages:[{role:'user',content:'为什么？'},{role:'assistant',content:'解释 [¶1]'}],created:1});
   const md = exportReading('剪藏/一篇 文档.md', r, '00_个人库');
+  assert.match(md,/obsidian:\/\/banana-reader\?/);assert.doesNotMatch(md,/obsidian:\/\/gloss-reader\?/);
   assert.match(md, /我的批注/); assert.match(md, /解释 \[¶1\]/); assert.match(md, /anchor=h1/); assert.match(md, /anchor=t1/); assert.ok(md.includes(encodeURIComponent('剪藏/一篇 文档.md'))); assert.ok(!md.includes('不应导出'));
 });
 test('protected directories are excluded without matching unrelated similar names', () => {
@@ -130,6 +142,10 @@ test('API roundtrip streams a chunked SSE response and sends only the given cont
   let request: any; const updates: string[] = [];
   const {server,settings} = await mockService((req,res) => {let body=''; req.on('data',b=>body+=b); req.on('end',()=>{request=JSON.parse(body); res.writeHead(200,{'Content-Type':'text/event-stream'}); res.write('data: {"choices":[{"delta":{"content":"解释"}}]}\r\n\r\n'); setTimeout(()=>res.end('data: {"choices":[{"delta":{"content":" [¶1]"}}]}\n\ndata: [DONE]\n\n'),20);});});
   try {const answer=await askAgent({settings,context:'[¶1] 公开测试原文',messages:[{role:'user',content:'请解释'}],signal:new AbortController().signal,onText:t=>updates.push(t)}); assert.equal(answer,'解释 [¶1]'); assert.deepEqual(updates,['解释','解释 [¶1]']); assert.equal(request.model,'test-model'); assert.equal(request.messages.at(-1).content,'请解释'); assert.ok(JSON.stringify(request).includes('公开测试原文'));} finally {server.closeAllConnections(); server.close();}
+});
+test('a local OpenAI-compatible server can list and stream a model without an API key',async()=>{
+ const requests:string[]=[];const {server,settings}=await mockService((req,res)=>{requests.push(req.method+' '+req.url);assert.equal(req.headers.authorization,undefined);if(req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({data:[{id:'local-model'}]}));return;}let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{assert.equal(JSON.parse(body).model,'local-model');res.writeHead(200,{'Content-Type':'text/event-stream'});res.end('data: {"choices":[{"delta":{"content":"Local answer"}}]}\n\ndata: [DONE]\n\n');});});
+ try{const local={...settings,apiKey:'',apiModel:'local-model'};const models=await discoverApiModels(local,new AbortController().signal);assert.equal(models[0].id,'local-model');const answer=await askAgent({settings:local,context:'Test text',messages:[{role:'user',content:'Explain'}],signal:new AbortController().signal,onText:()=>{}});assert.equal(answer,'Local answer');assert.deepEqual(requests,['GET /v1/models','POST /v1/chat/completions']);}finally{server.closeAllConnections();server.close();}
 });
 test('API cancellation closes a pending request', async () => {
   const {server,settings}=await mockService((req,res)=>{res.writeHead(200,{'Content-Type':'text/event-stream'});res.write(': keepalive\n\n');});
