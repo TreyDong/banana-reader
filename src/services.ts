@@ -1,4 +1,4 @@
-import {type AgentSettings, type ApiProtocol, API_DEFAULTS, type ModelOption,type ModelType, normalizeModels, mergeModels} from './agent';
+import {type AgentSettings, type ApiProtocol, API_DEFAULTS, type ModelOption,type ModelType, normalizeApiBase, normalizeModels, mergeModels} from './agent';
 export type ServiceKind='codex'|'claude'|'pi'|'api';
 export interface ModelService {id:string;name:string;kind:ServiceKind;path:string;protocol:ApiProtocol;base:string;models:ModelOption[];secretRef?:string}
 export interface ModelRef {serviceId:string;modelId:string}
@@ -36,7 +36,7 @@ export function pruneAssignments(setup:ModelSetup){
 }
 export function migrateSetup(legacy:AgentSettings&{services?:ModelService[];taskModels?:Record<string,ModelRef|null>;mobileTaskModels?:Record<string,ModelRef|null>;modelLists?:Record<string,ModelOption[]>;apiProfiles?:Record<string,{base:string;model:string}>}):ModelSetup{
   if(Array.isArray(legacy.services)){
-    const seen=new Set<string>();const services=legacy.services.filter(s=>s&&typeof s.id==='string'&&/^[a-z0-9-]+$/.test(s.id)&&!seen.has(s.id)&&!!SERVICE_NAMES[s.kind]&&(seen.add(s.id),true)).map(s=>({...s,name:s.name?.trim().slice(0,80)||SERVICE_NAMES[s.kind],path:s.path||'',protocol:API_DEFAULTS[s.protocol]?s.protocol:'openai',base:s.base||API_DEFAULTS.openai,models:normalizeModels(s.models)}));
+    const seen=new Set<string>();const services=legacy.services.filter(s=>s&&typeof s.id==='string'&&/^[a-z0-9-]+$/.test(s.id)&&!seen.has(s.id)&&!!SERVICE_NAMES[s.kind]&&(seen.add(s.id),true)).map(s=>({...s,name:s.name?.trim().slice(0,80)||SERVICE_NAMES[s.kind],path:s.path||'',protocol:API_DEFAULTS[s.protocol]?s.protocol:'openai',base:normalizeApiBase(s.base||API_DEFAULTS.openai),models:normalizeModels(s.models)}));
     return{services,taskModels:{...(legacy.taskModels||{})},...(legacy.mobileTaskModels&&typeof legacy.mobileTaskModels==='object'&&!Array.isArray(legacy.mobileTaskModels)?{mobileTaskModels:{...legacy.mobileTaskModels}}:{})};
   }
   const services:ModelService[]=[];
