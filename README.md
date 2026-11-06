@@ -19,6 +19,7 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.
 - **Find your next read:** browse the vault bookshelf, or search and download books through a configured Z-Library mirror using your own account.
+- **Browse your WeRead shelf:** configure your WeRead API key under Book sources, then switch the bookshelf to your WeChat Reading shelf (covers, progress badges, categories); open a local copy you already have, hand a title to Z-Library search, or jump back to WeRead. Each book also opens its own highlights and thoughts, grouped by chapter, inside the bookshelf card. Shelf metadata and your notes only; book content stays in WeRead or local files.
 - **Discover books:** explore and filter Hacker Books recommendations, then search for a title on Z-Library from its details.
 - **Take over the reading view:** turn on **Settings → Banana Reader → Appearance → Default reading → Take over the reading view**, and clicking Obsidian's own reading-view button opens that note in Banana Reader instead. Notes in protected folders are never taken over, and the button still returns to editing as usual.
 
@@ -46,6 +47,7 @@ For setup details and format limits, see the [Chinese user guide](docs/guide.zh-
 
 - Annotations, conversations, drafts, and progress are stored in the plugin's `data.json`; optional indexes are stored in `indices/`. Export creates a new Markdown file. Syncing the plugin folder may sync these files too.
 - API keys are stored in Obsidian SecretStorage when available; otherwise they remain in memory for the session. Requests send the relevant text and question to your chosen model or embedding provider. Google translation, optional web search, and Z-Library connect to their respective services.
+- The WeRead bookshelf sends its API key and shelf requests to WeChat Reading's official agent gateway and fetches covers from its CDN; only your own shelf metadata and your own highlights and thoughts are read. This integration may change or become unavailable as WeRead evolves, and a restricted network may see risk-control errors.
 - Opening book recommendations contacts Hacker Books for its catalog, topics, and covers; search and filtering run locally.
 - PDF text selection requires a text layer; OCR is not included. EPUB requires supported, unencrypted text content. Z-Library is an unofficial integration whose mirrors and availability can change; access only content you are entitled to use.
 - Mobile support is under development. The community release is desktop-only; a local mobile candidate is not a verified mobile release.
