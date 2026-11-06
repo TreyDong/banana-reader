@@ -24,6 +24,7 @@ import {NativePdf} from './pdf-ui';
 import {googleTranslate,TRANSLATION_LANGUAGES} from './translation';
 import {BookIndexCache,normalizeEmbedding,embeddingIdentity,embedTexts,createBookIndex,usableIndex,retrieve,wholeDocumentContext,retrievalContext,type EmbeddingSettings,type BookIndex,type SourceSection,type ContextInfo} from './rag';
 import {ZLIB_DEFAULT_DOMAIN,ZLIB_EXTENSIONS,ZLIB_LANGUAGES,ZLIB_LANGUAGE_LABELS,ZLIB_MIRRORS,ZLIB_ORDERS,normalizeZlibDomain,parseMirrorList,probeMirror,withMirrorFailover,ZLibraryClient,ZlibSessionError,ZlibDownloadHttpError,type ZlibFetcher,type ZlibBook,type ZlibCredentials,type ZlibSearchPage} from './zlibrary';
+import {WEREAD_KEY_URL,WereadAuthError,WereadBlockedError,WereadClient,matchLocalBook,normalizeBookKey,type WereadBookNotes,type WereadFetcher,type WereadShelf,type WereadShelfBook} from './weread';
 import {shelfBooks,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,normalizeShelfTypes,normalizeShelfFolder,SHELF_FILE_TYPES,type ShelfFileType,type ShelfBook,type SpineStyle} from './bookshelf';
 import {LEGACY_PLUGIN_ID,TARGET_PLUGIN_ID,preparePluginIdentity} from './plugin-migration';
 
@@ -33,9 +34,9 @@ const VIEW = 'gloss-reader';
 const EPUB_VIEW='gloss-epub-file';
 const SHELF_VIEW='gloss-bookshelf';
 interface RetrievalPreferences {topK:number;autoIndex:boolean}
-interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
+interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; rail: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
+const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, rail: true, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
 const uid = () => crypto.randomUUID();
 const modelKey=(s:AgentSettings,provider=s.provider)=>provider==='api'?'api:'+(s.apiProtocol||'openai'):provider;
 const modelId=(s:AgentSettings,provider=s.provider)=>provider==='codex'?s.codexModel:provider==='claude'?s.claudeModel||'':provider==='pi'?s.piModel||'':s.apiModel;
@@ -46,6 +47,14 @@ const zlibRequest:ZlibFetcher=async(url,init)=>{
  try{
   const res=await Promise.race([requestUrl({url,...init,throw:false}),new Promise<never>((_,reject)=>{timer=window.setTimeout(()=>reject(new Error('Z-Library 请求超时，请稍后重试。')),binary?120000:20000);})]);
   let json:unknown;if(!binary){try{json=res.json;}catch{/* HTML challenges are classified as mirror failures by the client. */}}
+  return{status:res.status,headers:Object.fromEntries(Object.entries(res.headers||{}).map(([key,value])=>[key.toLowerCase(),String(value)])),json,text:binary?'':res.text,arrayBuffer:Promise.resolve(res.arrayBuffer)};
+ }finally{window.clearTimeout(timer);}
+};
+const wereadRequest:WereadFetcher=async(url,init)=>{
+ const binary=init.headers.Accept==='image/*';let timer:number|undefined;
+ try{
+  const res=await Promise.race([requestUrl({url,...init,throw:false}),new Promise<never>((_,reject)=>{timer=window.setTimeout(()=>reject(new Error('微信读书请求超时，请稍后重试。')),binary?60000:20000);})]);
+  let json:unknown;if(!binary){try{json=res.json;}catch{/* Non-JSON bodies are classified by the client's error paths. */}}
   return{status:res.status,headers:Object.fromEntries(Object.entries(res.headers||{}).map(([key,value])=>[key.toLowerCase(),String(value)])),json,text:binary?'':res.text,arrayBuffer:Promise.resolve(res.arrayBuffer)};
  }finally{window.clearTimeout(timer);}
 };
@@ -82,6 +91,25 @@ export default class GlossPlugin extends Plugin {
   zlibCredentials():ZlibCredentials{const raw=String(this.app.secretStorage?.getSecret('zlib-remix')||this.sessionKeys.get('zlib')||'');try{const value=JSON.parse(raw||'{}') as {userId?:unknown;userKey?:unknown};return{userId:typeof value.userId==='number'?String(value.userId):stringValue(value.userId),userKey:stringValue(value.userKey)};}catch{return{userId:'',userKey:''};}}
   saveZlibCredentials(value:ZlibCredentials){const raw=value.userId&&value.userKey?JSON.stringify(value):'';if(this.app.secretStorage)this.app.secretStorage.setSecret('zlib-remix',raw);else this.sessionKeys.set('zlib',raw);}
   zlibClient(credentials:ZlibCredentials=this.zlibCredentials(),domain=this.store.settings.zlibDomain){return new ZLibraryClient(domain,credentials,zlibRequest,Platform?.isMobile?BOOK_LIMITS.file:200*1024*1024);}
+  wereadApiKey():string{return String(this.app.secretStorage?.getSecret('weread-apikey')||this.sessionKeys.get('weread')||'');}
+  saveWereadApiKey(key:string){const value=key.trim();this.wereadShelfCache=undefined;this.wereadShelfJob=undefined;this.wereadNotesCache.clear();if(this.app.secretStorage)this.app.secretStorage.setSecret('weread-apikey',value);else this.sessionKeys.set('weread',value);}
+  wereadClient(key:string=this.wereadApiKey()){return new WereadClient(key,wereadRequest);}
+  private wereadShelfCache?:{value:WereadShelf;at:number};private wereadShelfJob?:Promise<WereadShelf>;
+  private wereadNotesCache=new Map<string,{value:WereadBookNotes;at:number}>();
+  /** Highlights and thoughts for one book, cached briefly so reopening a card is instant. */
+  loadWereadNotes(bookId:string,force=false):Promise<WereadBookNotes>{
+   const cached=this.wereadNotesCache.get(bookId);
+   if(!force&&cached&&Date.now()-cached.at<300000)return Promise.resolve(cached.value);
+   return this.wereadClient().notes(bookId).then(value=>{this.wereadNotesCache.set(bookId,{value,at:Date.now()});return value;});
+  }
+  /** Shared shelf snapshot with a short TTL so repeated opens reuse one network sync; never persisted. */
+  loadWereadShelf(force=false):Promise<WereadShelf>{
+   const cached=this.wereadShelfCache;
+   if(!force&&cached&&Date.now()-cached.at<300000)return Promise.resolve(cached.value);
+   if(this.wereadShelfJob!==undefined)return this.wereadShelfJob;
+   this.wereadShelfJob=this.wereadClient().shelf().then(value=>{this.wereadShelfCache={value,at:Date.now()};return value;}).finally(()=>{this.wereadShelfJob=undefined;});
+   return this.wereadShelfJob;
+  }
   private saveQueue: Promise<void> = Promise.resolve();
   async onload() {
     // Both identities share view types and note-link handlers; never load together.
@@ -166,11 +194,14 @@ export default class GlossPlugin extends Plugin {
   modelSetup(){return setupForDevice(this.store.settings,!!Platform?.isMobile);}
   embeddingConnection(){const {service,model}=resolveEmbeddingModel(this.modelSetup());return{service,settings:{...this.store.settings.embedding,base:service.base,model:model.id,dimensions:0} as EmbeddingSettings,key:this.serviceKey(service.id)};}
   read(path: string): Reading {return this.store.documents[path] ||= freshReading();}
-  persist(): Promise<void> {
+  private settingsWatchers=new Set<()=>void>();
+  onSettingsChanged(watcher:()=>void){this.settingsWatchers.add(watcher);return()=>{this.settingsWatchers.delete(watcher);};}
+  private notifySettingsChanged(){for(const watcher of Array.from(this.settingsWatchers))watcher();}
+  async persist(): Promise<void> {
     const snapshot = JSON.parse(JSON.stringify(this.store)) as Store;
     delete snapshot.settings.apiKey;
     const next = this.saveQueue.catch(() => {}).then(() => this.saveData(snapshot));
-    this.saveQueue = next; return next;
+    this.saveQueue = next; await next; this.notifySettingsChanged();
   }
   private shelfPreferencesQueue:Promise<void>=Promise.resolve();
   updateShelfPreferences(change:{folder?:string;types?:readonly ShelfFileType[]}):Promise<void>{
@@ -440,6 +471,12 @@ class BookshelfView extends ItemView {
 
  private grid?:HTMLElement;private count?:HTMLElement;private scopeLabel?:HTMLElement;private tip?:HTMLElement;
  private resizeObserver?:ResizeObserver;private renderTimer?:number;private signature='';
+ private source:'local'|'weread'='local';
+ private localTab?:HTMLButtonElement;private cloudTab?:HTMLButtonElement;
+ private cloud?:HTMLElement;private cloudQuery?:HTMLInputElement;private cloudStatus?:HTMLElement;private cloudGrid?:HTMLElement;
+ private cloudShelf?:WereadShelf;private cloudBusy=false;
+ private cloudCovers=new Map<string,string>();private cloudObserver?:IntersectionObserver;
+ private cloudFiles:{path:string;basename:string;extension:string}[]=[];
  constructor(leaf:WorkspaceLeaf,readonly plugin:GlossPlugin){super(leaf);}
  getViewType(){return SHELF_VIEW;}getIcon(){return 'library';}
  getDisplayText(){return ui("书架");}
@@ -453,7 +490,18 @@ class BookshelfView extends ItemView {
   const find=bindUi(button(actions,'',()=>new ZLibraryModal(this.app,this.plugin).open(),'gr-shelf-settings'),{'aria-label':()=>ui("从 Z-Library 找书")});setIcon(find.createSpan(),'search');bindUi(find.createSpan({text:ui("找书")}),{'text':()=>ui("找书")});
   const settings=bindUi(button(actions,'',()=>this.plugin.openSettings('reading'),'gr-shelf-settings'),{'aria-label':()=>ui("书架设置")});setIcon(settings.createSpan(),'settings-2');bindUi(settings.createSpan({text:ui("书架设置")}),{'text':()=>ui("书架设置")});
   this.count=head.createEl('p',{cls:'gr-shelf-meta'});this.scopeLabel=head.createEl('p',{cls:'gr-shelf-scope'});
+  const sources=head.createDiv({cls:'gr-shelf-sources'});
+  this.localTab=bindUi(button(sources,ui("本地书架"),()=>this.setSource('local'),'gr-shelf-source'),{"text":()=>ui("本地书架")});
+  this.cloudTab=bindUi(button(sources,ui("微信读书"),()=>this.setSource('weread'),'gr-shelf-source'),{"text":()=>ui("微信读书")});
+  this.paintSources();
   this.grid=this.contentEl.createDiv({cls:'gr-shelf'});
+  this.cloud=this.contentEl.createDiv({cls:'gr-cloud'});this.cloud.hidden=true;
+  const cloudHead=this.cloud.createDiv({cls:'gr-cloud-head'});
+  this.cloudQuery=cloudHead.createEl('input',{cls:'gr-settings-input gr-cloud-query',attr:{type:'search','aria-label':ui("搜索词"),placeholder:ui("按书名或作者筛选…")}});
+  this.cloudQuery.addEventListener('input',()=>this.paintCloud());
+  bindUi(button(cloudHead,ui("刷新"),()=>{void this.loadCloud(true).catch(showError);},'gr-settings-button'),{"text":()=>ui("刷新")});
+  this.cloudStatus=this.cloud.createDiv({cls:'gr-cloud-status',attr:{role:'status'}});
+  this.cloudGrid=this.cloud.createDiv({cls:'gr-cloud-grid'});
   this.resizeObserver=new ResizeObserver(()=>{this.win.clearTimeout(this.renderTimer);this.renderTimer=this.win.setTimeout(()=>this.renderShelf(),120);});
   this.resizeObserver.observe(this.contentEl);
   this.renderShelf();
@@ -463,8 +511,23 @@ class BookshelfView extends ItemView {
   this.registerEvent(this.app.vault.on('rename',refresh));
   this.registerEvent(this.app.vault.on('modify',file=>{if(file.path.endsWith(this.plugin.manifest.id+'/data.json'))refresh();}));
  }
- async onClose(){this.resizeObserver?.disconnect();this.win.clearTimeout(this.renderTimer);this.card?.remove();this.card=undefined;this.contentEl.empty();}
+ async onClose(){
+  this.resizeObserver?.disconnect();this.win.clearTimeout(this.renderTimer);this.card?.remove();this.card=undefined;
+  this.cloudObserver?.disconnect();this.cloudObserver=undefined;
+  for(const url of this.cloudCovers.values())URL.revokeObjectURL(url);this.cloudCovers.clear();
+  this.contentEl.empty();
+ }
  refreshPreferences(){this.signature='';this.card?.remove();this.card=undefined;this.renderShelf();}
+ /** Settings key changes reach the open view here: the WeRead tab appears or disappears at once. */
+ refreshSources(){this.paintSources();if(this.source==='weread'&&!this.plugin.wereadApiKey()){this.setSource('local');}}
+ private paintSources(){
+  if(this.cloudTab)this.cloudTab.hidden=!this.plugin.wereadApiKey();
+  if(this.localTab)this.localTab.classList.toggle('is-active',this.source==='local');
+  if(this.cloudTab)this.cloudTab.classList.toggle('is-active',this.source==='weread');
+ }
+ private setSource(source:'local'|'weread'){
+  if(this.source===source)return;this.source=source;this.paintSources();this.renderShelf();
+ }
  private shelf(){
   const folder=normalizeShelfFolder(this.plugin.store.settings.shelfFolder||'');if(folder===undefined)return[];let files:TFile[];
   if(folder&&folder!=='.'&&folder!=='/'){
@@ -477,6 +540,10 @@ class BookshelfView extends ItemView {
  }
  private renderShelf(){
   if(!this.grid||!this.grid.isConnected)return;
+  if(this.count)this.count.hidden=this.source==='weread';
+  if(this.scopeLabel)this.scopeLabel.hidden=this.source==='weread';
+  if(this.source==='weread'){this.grid.hidden=true;if(this.cloud)this.cloud.hidden=false;if(!this.cloudShelf&&!this.cloudBusy)void this.loadCloud().catch(showError);return;}
+  this.grid.hidden=false;if(this.cloud)this.cloud.hidden=true;
   const preferences=this.plugin.store.settings,types=normalizeShelfTypes(preferences.shelfTypes),folder=normalizeShelfFolder(preferences.shelfFolder||'');
   const books=this.shelf(),signature=JSON.stringify([folder,types,books.map(b=>b.path+':'+b.progress)]);
   if(this.scopeLabel)this.scopeLabel.textContent=ui("范围：{0} · 类型：{1}",folder||ui("整个笔记库"),types.map(type=>type==='md'?'Markdown':type.toUpperCase()).join(' / ')||ui("未选择"));
@@ -549,6 +616,147 @@ class BookshelfView extends ItemView {
  private closeCard(){
   const card=this.card;if(!card)return;this.card=undefined;
   card.addClass('is-closing');this.win.setTimeout(()=>card.remove(),200);
+ }
+ /** One shared sync per open; the plugin caches the snapshot so re-entry is instant. */
+ private loadCloud(force=false):Promise<void>{
+  if(!this.cloud||!this.cloud.isConnected||this.cloudBusy)return Promise.resolve();
+  if(!this.plugin.wereadApiKey()){
+   this.cloudShelf=undefined;
+   if(this.cloudStatus)this.cloudStatus.textContent='';
+   if(this.cloudGrid){this.cloudGrid.empty();const empty=this.cloudGrid.createDiv({cls:'gr-shelf-empty'});setIcon(empty.createSpan(),'book-marked');bindUi(empty.createEl('p',{text:ui("尚未配置微信读书 API Key。")}),{"text":()=>ui("尚未配置微信读书 API Key。")});bindUi(button(empty,ui("去设置"),()=>this.plugin.openSettings('sources'),'gr-shelf-settings'),{"text":()=>ui("去设置")});}
+   return Promise.resolve();
+  }
+  this.cloudBusy=true;
+  if(this.cloudStatus)this.cloudStatus.textContent=ui("正在同步微信读书书架…");
+  return this.plugin.loadWereadShelf(force).then(shelf=>{
+   this.cloudBusy=false;this.cloudShelf=shelf;
+   if(this.cloudStatus)this.cloudStatus.textContent=shelf.books.length?shelf.albums?ui("共 {0} 本电子书，另有 {1} 部有声书未显示。",shelf.books.length,shelf.albums):ui("共 {0} 本电子书。",shelf.books.length):ui("微信读书书架为空。");
+   this.paintCloud();
+  }).catch(error=>{
+   this.cloudBusy=false;
+   if(this.cloudStatus)this.cloudStatus.textContent=ui(error instanceof Error?error.message:String(error));
+  });
+ }
+ private paintCloud(){
+  const grid=this.cloudGrid,shelf=this.cloudShelf;if(!grid)return;
+  this.cloudObserver?.disconnect();this.cloudObserver=undefined;grid.empty();
+  if(!shelf)return;
+  const needle=normalizeBookKey((this.cloudQuery?.value||'').trim());
+  const books=!needle?shelf.books:shelf.books.filter(book=>normalizeBookKey(book.title).includes(needle)||normalizeBookKey(book.author).includes(needle));
+  if(!books.length){grid.createDiv({cls:'gr-shelf-empty',text:ui("没有匹配的书籍。")});return;}
+  const files=this.app.vault.getFiles().filter(file=>!blockedPath(file.path)).map(file=>({path:file.path,basename:file.basename,extension:file.extension}));
+  for(const book of books){
+   // The card is a plain element: a <button> grid item does not grow with its
+   // content in Chromium, which collapsed the cover and the title. Keyboard and
+   // screen-reader behaviour is wired up by hand instead.
+   const card=grid.createDiv({cls:'gr-cloud-card',attr:{role:'button','tabindex':'0','aria-label':[book.title,book.author].filter(Boolean).join(' · ')}});
+   const open=()=>this.showCloudCard(book,files);
+   card.addEventListener('click',open);
+   card.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+   const cover=card.createSpan({cls:'gr-cloud-cover',attr:{'aria-hidden':'true'}});
+   const cached=book.cover?this.cloudCovers.get(book.cover):undefined;
+   if(cached)cover.createEl('img',{attr:{src:cached,alt:''}});
+   else cover.createSpan({cls:'gr-cloud-cover-initial',text:book.title.slice(0,1)});
+   if(book.cover&&!cached)this.watchCloudCover(book.cover,cover);
+   card.createSpan({cls:'gr-cloud-title',text:book.title});
+   card.createSpan({cls:'gr-cloud-meta',text:[book.author,book.category].filter(Boolean).join(' · ')});
+   if(book.finished)card.createSpan({cls:'gr-cloud-badge',text:ui("读完")});
+  }
+ }
+ private watchCloudCover(coverUrl:string,placeholder:HTMLElement){
+  if(!this.cloudObserver)this.cloudObserver=new IntersectionObserver(entries=>{
+   for(const entry of entries)if(entry.isIntersecting){
+    const target=entry.target as HTMLElement,cover=target.dataset.cover||'';
+    this.cloudObserver?.unobserve(target);if(!cover)continue;
+    void this.plugin.wereadClient().coverImage(cover).then(image=>{
+     if(!image)return;
+     const url=URL.createObjectURL(new Blob([image.bytes],{type:image.mime}));
+     this.cloudCovers.set(cover,url);
+     if(!target.isConnected)return;
+     target.empty();target.createEl('img',{attr:{src:url,alt:''}});
+    }).catch(()=>{});
+   }
+  },{root:this.cloudGrid??undefined,rootMargin:'120px'});
+  placeholder.dataset.cover=coverUrl;
+  this.cloudObserver.observe(placeholder);
+ }
+ /** In-view overlay (not a modal): cover, metadata and the three hand-off actions. */
+ private showCloudCard(book:WereadShelfBook,files:{path:string;basename:string;extension:string}[]){
+  this.hideTip();this.closeCard();
+  this.cloudFiles=files;
+  const backdrop=this.card=this.contentEl.createDiv({cls:'gr-bookcard-backdrop'});
+  const box=backdrop.createDiv({cls:'gr-bookcard is-cloud',attr:{role:'dialog','aria-label':book.title}});
+  const cover=box.createDiv({cls:'gr-bookcard-page is-cover'});
+  const frame=cover.createSpan({cls:'gr-cloud-cover is-detail',attr:{'aria-hidden':'true'}});
+  const cached=book.cover?this.cloudCovers.get(book.cover):undefined;
+  if(cached)frame.createEl('img',{attr:{src:cached,alt:''}});
+  else{frame.createSpan({cls:'gr-cloud-cover-initial',text:book.title.slice(0,1)});if(book.cover)this.watchCloudCover(book.cover,frame);}
+  const right=box.createDiv({cls:'gr-bookcard-page is-details'});
+  this.renderCloudDetails(right,book,files);
+  backdrop.addEventListener('click',event=>{if(event.target===backdrop)this.closeCard();});
+  this.registerDomEvent(this.contentEl.ownerDocument,'keydown',event=>{if(this.card&&event.key==='Escape'&&!event.isComposing){event.preventDefault();this.closeCard();}});
+ }
+ /** Details page of the opened card; the notes page replaces it in place. */
+ private renderCloudDetails(right:HTMLElement,book:WereadShelfBook,files:{path:string;basename:string;extension:string}[]){
+  right.empty();right.removeClass('is-notes');
+  const chips=right.createDiv({cls:'gr-bookcard-chips'});
+  if(book.finished)chips.createSpan({cls:'gr-bookcard-chip',text:ui("读完")});
+  if(book.secret)chips.createSpan({cls:'gr-bookcard-chip',text:ui("私密")});
+  right.createEl('h3',{cls:'gr-bookcard-title',text:book.title});
+  right.createDiv({cls:'gr-bookcard-meta',text:[book.author,book.category,book.readUpdateTime?relativeTime(book.readUpdateTime):''].filter(Boolean).join(' · ')});
+  const actions=right.createDiv({cls:'gr-bookcard-actions'});
+  const localPath=matchLocalBook(book.title,files),local=localPath?this.app.vault.getAbstractFileByPath(localPath):null;
+  if(local instanceof TFile)bindUi(button(actions,ui("打开本地"),()=>{this.closeCard();void this.plugin.openFile(local).catch(showError);},'gr-bookcard-open'),{"text":()=>ui("打开本地")});
+  else bindUi(button(actions,ui("从 Z-Library 找书"),()=>{this.closeCard();new ZLibraryModal(this.app,this.plugin,book.title).open();},'gr-bookcard-open'),{"text":()=>ui("从 Z-Library 找书")});
+  if(local instanceof TFile)bindUi(button(actions,ui("从 Z-Library 找书"),()=>{this.closeCard();new ZLibraryModal(this.app,this.plugin,book.title).open();},'gr-settings-button'),{"text":()=>ui("从 Z-Library 找书")});
+  const extra=right.createDiv({cls:'gr-bookcard-actions'});
+  bindUi(button(extra,ui("查看笔记"),()=>this.renderCloudNotes(right,book),'gr-settings-button'),{"text":()=>ui("查看笔记")});
+  const link=book.readerLink||book.deepLink;
+  if(link)extra.createEl('a',{cls:'gr-settings-button gr-weread-link',text:ui("在微信读书打开"),href:link,attr:{target:'_blank',rel:'noopener'}});
+  bindUi(right.createDiv({cls:'gr-bookcard-hint',text:ui("放回去 · Esc")}), {"text":()=>ui("放回去 · Esc")});
+ }
+ /** Same card, notes view: highlights and thoughts grouped by chapter, loaded on demand. */
+ private renderCloudNotes(right:HTMLElement,book:WereadShelfBook){
+  right.empty();right.addClass('is-notes');
+  const head=right.createDiv({cls:'gr-notes-head'});
+  bindUi(head.createEl('h3',{cls:'gr-notes-title',text:ui("笔记")}),{"text":()=>ui("笔记")});
+  bindUi(button(head,ui("返回详情"),()=>this.renderCloudDetails(right,book,this.cloudFiles),'gr-settings-button'),{"text":()=>ui("返回详情")});
+  const status=right.createDiv({cls:'gr-notes-status',attr:{role:'status'}});
+  status.setText(ui("正在加载笔记…"));
+  const list=right.createDiv({cls:'gr-notes-list'});
+  this.plugin.loadWereadNotes(book.bookId).then(notes=>{
+   if(!right.isConnected)return;
+   status.setText(notes.highlights.length||notes.notes.length?ui("共 {0} 条划线 · {1} 条想法",notes.highlights.length,notes.notes.length):ui("这本书还没有笔记。"));
+   this.paintCloudNotes(list,notes);
+  }).catch(error=>{
+   if(!right.isConnected)return;
+   status.setText(error instanceof Error?error.message:String(error));
+   bindUi(button(list,ui("重试"),()=>this.renderCloudNotes(right,book),'gr-settings-button'),{"text":()=>ui("重试")});
+  });
+ }
+ private paintCloudNotes(list:HTMLElement,notes:WereadBookNotes){
+  list.empty();
+  type Entry={chapter:string;idx:number;time:number;kind:'mark'|'note';text:string;abstract:string};
+  // Chapter-less entries (whole-book reviews) sort last instead of first.
+  const chapterOrder=(idx:number)=>idx||Number.MAX_SAFE_INTEGER;
+  const entries:Entry[]=[
+   ...notes.highlights.map(mark=>({chapter:mark.chapter,idx:mark.chapterIdx,time:mark.createTime,kind:'mark' as const,text:mark.text,abstract:''})),
+   ...notes.notes.map(note=>({chapter:note.chapter,idx:note.chapterIdx,time:note.createTime,kind:'note' as const,text:note.content,abstract:note.abstract}))
+  ].sort((a,b)=>chapterOrder(a.idx)-chapterOrder(b.idx)||a.time-b.time);
+  let section:HTMLElement|undefined,current:string|undefined;
+  for(const entry of entries){
+   const chapter=entry.chapter||ui("其他");
+   if(!section||chapter!==current){
+    current=chapter;section=list.createDiv({cls:'gr-notes-chapter'});
+    section.createEl('h4',{cls:'gr-notes-chapter-title',text:chapter});
+   }
+   if(entry.kind==='mark')section.createEl('blockquote',{cls:'gr-notes-mark',text:entry.text});
+   else{
+    if(entry.abstract)section.createEl('blockquote',{cls:'gr-notes-mark is-abstract',text:entry.abstract});
+    if(entry.text)section.createEl('p',{cls:'gr-notes-thought',text:entry.text});
+   }
+  }
+  if(notes.truncated)list.createDiv({cls:'gr-notes-more',text:ui("笔记较多，仅显示部分内容。")});
  }
  private shelfDeco(shelf:HTMLElement){
   const deco=shelf.createDiv({cls:'gr-shelf-deco'});deco.setAttribute('aria-hidden','true');
@@ -902,7 +1110,7 @@ class GlossView extends ItemView {
     }catch(error){if(this.revision===revision&&this.path===path)this.briefError=(error instanceof Error?error.message:ui("文章解读失败。"))+(data.brief?ui("（已保留原解读）"):'');}
     finally{if(this.aborter===controller){this.aborter=undefined;this.briefJob=undefined;if(this.path===path&&this.revision===revision&&this.root.isConnected){this.syncComposerBusy();this.root.querySelectorAll<HTMLButtonElement>('.gloss-model-picker').forEach(b=>b.disabled=false);this.renderBrief();await this.renderMargin();}}}
   }
-  applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.syncChrome();this.scheduleLayout();}
+  applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.root.toggleClass('gloss-no-rail',!s.rail);this.syncChrome();this.scheduleLayout();}
   private updateMobileViewport(){
     if(!Platform?.isMobile||!this.root)return;
     const viewport=this.root.ownerDocument.defaultView?.visualViewport;
@@ -989,7 +1197,7 @@ class GlossView extends ItemView {
     const leading=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [[ui("紧凑"),1.5],[ui("标准"),1.64],[ui("宽松"),1.82]]as const)button(leading,label,()=>{s.lineHeight=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
     const widths=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [[ui("窄"),28],[ui("适中"),32],[ui("宽"),37]]as const)button(widths,label,()=>{s.measure=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
     }const pens=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(pens.createSpan({text:ui("批注笔色")}), {"text":()=>ui("批注笔色")});for(const [pen,label]of [['vermilion',ui("朱红")],['cobalt',ui("钴蓝")],['moss',ui("苔绿")],['graphite',ui("石墨")]]){const b=button(pens,'',()=>{s.pen=pen;this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-pen-swatch');b.dataset.pen=pen;b.title=label;bindUi(b, {"aria-label":()=>label+ui("批注笔")});}
-    if(!this.pdf)bindUi(button(this.appearance,s.numbers?ui("隐藏段落编号"):ui("显示段落编号"),()=>{s.numbers=!s.numbers;this.applyAppearance();void this.plugin.persist().catch(showError);this.appearance.hidden=true;},'gloss-pop-number'), {"text":()=>s.numbers?ui("隐藏段落编号"):ui("显示段落编号")});this.appearance.hidden=false;}
+    if(!this.pdf){const toggle=(label:string,get:()=>boolean,set:(value:boolean)=>void)=>{const row=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(row.createSpan({text:label}), {"text":()=>label});const sw=button(row,'',()=>{set(!get());sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-switch');sw.createSpan({cls:'gloss-switch-knob'});sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());bindUi(sw, {"aria-label":()=>label});};toggle(ui("段落编号"),()=>s.numbers,value=>s.numbers=value);toggle(ui("左侧预览"),()=>s.rail,value=>s.rail=value);}this.appearance.hidden=false;}
   private buildRail(){
     this.rail.empty();this.rail.setAttribute('role','slider');bindUi(this.rail, {"aria-label":()=>ui("阅读位置")});this.rail.setAttribute('aria-valuemin','0');this.rail.setAttribute('aria-valuemax','100');
     const lines=this.rail.createDiv({cls:'gloss-rail-lines'});
@@ -1427,17 +1635,20 @@ class GlossSettings extends PluginSettingTab {
   tab='reading';
   private test?:AbortController;
   constructor(app:App,private plugin:GlossPlugin){super(app,plugin);}
-  hide(){this.test?.abort();this.test=undefined;}
-  private async save(){await this.plugin.persist();for(const l of this.app.workspace.getLeavesOfType(VIEW))if(l.view instanceof GlossView)l.view.refreshSettings();}
+  hide(){this.test?.abort();this.test=undefined;this.watcher?.();this.watcher=undefined;}
+  private watcher?:()=>void;
+  private suppressRefresh=false;
+  private async save(){this.suppressRefresh=true;try{await this.plugin.persist();}finally{this.suppressRefresh=false;}for(const l of this.app.workspace.getLeavesOfType(VIEW))if(l.view instanceof GlossView)l.view.refreshSettings();}
   private settingsRoot?:HTMLElement;
   getSettingDefinitions():SettingDefinitionItem[]{
     // Index all labels without I/O. The custom row keeps the existing tabbed editor.
-    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架","书架目录","文件类型","Markdown 导出目录","默认阅读","接管默认阅读模式"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
+    return[{name:'Banana Reader',aliases:["界面语言","语言","默认背景","默认字体","字号","行距","正文宽度","段落编号","标记样式","标记颜色","问答批注笔色","问题建议","新问题默认范围","上下文上限","模型服务","手机问答模型","嵌入","自动建立索引","阅读提示词","选中文本指令","翻译","书籍来源","镜像列表","当前镜像","下载目录","书架","书架目录","文件类型","Markdown 导出目录","默认阅读","接管默认阅读模式","左侧预览"].flatMap(label=>[label,translateUi('en',label)]),render:setting=>{setting.settingEl.empty();setting.settingEl.addClass('gr-settings-host');this.settingsRoot=setting.settingEl;this.renderSettings();}}];
   }
   display(){this.settingsRoot=undefined;this.renderSettings();}
   redraw(){this.renderSettings();if(requireApiVersion('1.13.0'))this.update();}
   private renderSettings(){
     this.test?.abort();this.test=undefined;
+    this.watcher?.();this.watcher=this.plugin.onSettingsChanged(()=>{if(this.suppressRefresh)return;this.renderSettings();});
     const el=this.settingsRoot||this.containerEl;el.empty();el.addClass('gr-settings');const s=this.plugin.store.settings;
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
     identity.createSpan({cls:'gr-settings-name',text:'Banana Reader'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
@@ -1453,7 +1664,7 @@ class GlossSettings extends PluginSettingTab {
     if(this.tab==='models'){
       this.renderModelsPage(body);this.renderIndexSettings(body);
     }else if(this.tab==='commands'){this.renderCommands(body);
-    }else if(this.tab==='sources'){this.renderZlibSource(body);
+    }else if(this.tab==='sources'){this.renderZlibSource(body);this.renderWereadSource(body);
     }else if(this.tab==='reading'){
       this.renderShelfSettings(body);this.renderExportSettings(body);
       section(ui('界面语言'));
@@ -1472,7 +1683,8 @@ class GlossSettings extends PluginSettingTab {
       select(ui("字号"),'',String(s.fontSize),Object.fromEntries(Array.from({length:14},(_,i)=>[String(i+15),(i+15)+' px'])),v=>s.fontSize=Number(v));
       select(ui("行距"),'',String(s.lineHeight),{'1.5':ui("紧凑 · 1.5"),'1.64':ui("标准 · 1.64"),'1.82':ui("宽松 · 1.82"),[String(s.lineHeight)]:String(s.lineHeight)},v=>s.lineHeight=Number(v));
       select(ui("正文宽度"),'',String(s.measure),{'28':ui("窄"),'32':ui("适中"),'37':ui("宽")},v=>s.measure=Number(v));
-      select(ui("段落编号"),'',String(s.numbers),{false:ui("隐藏"),true:ui("显示")},v=>s.numbers=v==='true');
+      const numbers=row(ui("段落编号"),ui("在正文左侧显示段落编号，方便和引用、批注对应。"));numbers.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(numbers).setTooltip(ui("段落编号")).setValue(s.numbers).onChange(async value=>{s.numbers=value;await this.save();});
+      const rail=row(ui("左侧预览"),ui("在正文左侧显示文档缩略轨道，可以点按跳转。"));rail.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(rail).setTooltip(ui("左侧预览")).setValue(s.rail).onChange(async value=>{s.rail=value;await this.save();});
       section(ui("默认标记"));select(ui("标记样式"),'',s.markStyle,{highlight:ui("荧光笔"),underline:ui("直线"),wavy:ui("波浪线")},v=>s.markStyle=v as MarkStyle);
       select(ui("标记颜色"),'',s.marker,{yellow:ui("黄色"),green:ui("绿色"),blue:ui("蓝色"),pink:ui("粉色")},v=>s.marker=v);
       select(ui("问答批注笔色"),'',s.pen,{vermilion:ui("朱红"),cobalt:ui("钴蓝"),moss:ui("苔绿"),graphite:ui("石墨")},v=>s.pen=v);
@@ -1514,6 +1726,44 @@ class GlossSettings extends PluginSettingTab {
     bindUi(button(controls,ui("清除登录"),()=>{this.plugin.saveZlibCredentials({userId:'',userKey:''});statusSpan.textContent=ui("未登录");},'gr-settings-button'), {"text":()=>ui("清除登录")});
     bindUi(section.createDiv({cls:'gr-settings-description',text:ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")}), {"text":()=>ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")});
   }
+  private renderWereadSource(body:HTMLElement){
+    const section=body.createEl('section',{cls:'gr-settings-group'});bindUi(this.heading(section,ui("书籍来源 · 微信读书"),'gr-settings-section'), {"text":()=>ui("书籍来源 · 微信读书")});
+    const group=section.createDiv({cls:'gr-settings-group-body'});
+    const row=group.createDiv({cls:'gr-settings-row'}),info=row.createDiv({cls:'gr-settings-info'});
+    bindUi(info.createDiv({cls:'gr-settings-label',text:ui("微信读书 API Key")}), {"text":()=>ui("微信读书 API Key")});
+    const desc=info.createDiv({cls:'gr-settings-description'});
+    bindUi(desc.createSpan({text:ui("复制 wrk- 开头的 Key；保存在 Obsidian 密钥存储，不写入插件数据文件。获取地址：")}), {"text":()=>ui("复制 wrk- 开头的 Key；保存在 Obsidian 密钥存储，不写入插件数据文件。获取地址：")});
+    desc.createEl('a',{text:WEREAD_KEY_URL,href:WEREAD_KEY_URL,attr:{target:'_blank',rel:'noopener'}});
+    const controls=row.createDiv({cls:'gr-settings-controls gr-weread-key-controls'});
+    const input=controls.createEl('input',{cls:'gr-settings-input gr-weread-key',attr:{type:'password','aria-label':ui("微信读书 API Key")}});input.autocomplete='off';input.spellcheck=false;
+    const status=controls.createSpan({cls:'gr-weread-key-status',text:this.plugin.wereadApiKey()?ui("已配置"):ui("未配置")});
+    bindUi(status, {"text":()=>this.wereadKeyStatusText(input)});
+    const save=bindUi(button(controls,ui("保存并校验"),async()=>{
+      const stored=this.plugin.wereadApiKey(),key=input.value.trim()||stored;
+      if(!key){status.textContent=ui("未配置");return;}
+      save.disabled=true;status.textContent=ui("正在校验…");
+      try{
+        await this.plugin.wereadClient(key).validate();
+        this.plugin.saveWereadApiKey(key);input.value='';
+        status.textContent=ui("有效");new Notice(ui("微信读书 API Key 有效。"));
+        this.refreshShelfSources();
+      }catch(error){
+        if(error instanceof WereadBlockedError)status.textContent=ui("出口被风控（403），请更换网络后重试。");
+        else if(error instanceof WereadAuthError)status.textContent=ui("无效，请检查后重新获取。");
+        else status.textContent=ui(error instanceof Error?error.message:String(error));
+      }finally{save.disabled=false;}
+    },'gr-settings-button'), {"text":()=>ui("保存并校验")});
+    bindUi(button(controls,ui("清除"),()=>{this.plugin.saveWereadApiKey('');input.value='';status.textContent=ui("未配置");this.refreshShelfSources();},'gr-settings-button'), {"text":()=>ui("清除")});
+    bindUi(section.createDiv({cls:'gr-settings-description',text:ui("配置后在书架视图顶部切换到「微信读书」，浏览你自己的书架，并把书交给本地阅读或 Z-Library。")}), {"text":()=>ui("配置后在书架视图顶部切换到「微信读书」，浏览你自己的书架，并把书交给本地阅读或 Z-Library。")});
+    bindUi(section.createDiv({cls:'gr-settings-description',text:ui("API Key 与书架请求会发送到微信读书官方接口，封面从其 CDN 加载；只读取你自己的书架信息，不获取书籍正文。")}), {"text":()=>ui("API Key 与书架请求会发送到微信读书官方接口，封面从其 CDN 加载；只读取你自己的书架信息，不获取书籍正文。")});
+  }
+  private wereadKeyStatusText(input:HTMLInputElement):string{
+    const stored=this.plugin.wereadApiKey();
+    if(input.value.trim())return ui("待保存");
+    return stored?ui("已配置"):ui("未配置");
+  }
+  /** Key changes in settings must appear or disappear in open bookshelf views at once. */
+  private refreshShelfSources(){for(const leaf of this.app.workspace.getLeavesOfType(SHELF_VIEW))if(leaf.view instanceof BookshelfView)leaf.view.refreshSources();}
   private renderShelfSettings(body:HTMLElement){
     const s=this.plugin.store.settings,section=body.createEl('section',{cls:'gr-settings-group'});
     bindUi(this.heading(section,ui("书架"),'gr-settings-section'),{'text':()=>ui("书架")});
