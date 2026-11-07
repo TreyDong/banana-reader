@@ -2,7 +2,7 @@
 
 ## 基线
 
-- 本地 `main` 由 `92224a9` 快进到 `origin/main`（`obsidian-gloss-reader`）`3e4c3b6`，补齐此前未拉取的 6 个提交：连接测试按钮与地址规范化 `adf1b5e`、选区预览与笔记面板状态修复 `cc0fe4b`、微信读书书架浏览与本地交接 `9dd52e3`。无本地独有改动被覆盖。
+- 本地 `main` 由 `92224a9` 快进到当时的开发镜像 `origin/main`（`obsidian-gloss-reader`）`3e4c3b6`，补齐此前未拉取的 6 个提交：连接测试按钮与地址规范化 `adf1b5e`、选区预览与笔记面板状态修复 `cc0fe4b`、微信读书书架浏览与本地交接 `9dd52e3`。无本地独有改动被覆盖。该镜像已于同日归档，仓库收敛为 `TreyDong/banana-reader`，详见 `notes/repository-consolidation-2026-11-07.md`。
 - 正式版根 manifest 保持 `gloss-reader`、`0.15.1`、`isDesktopOnly: true`；`validate-metadata` 仍强制桌面元数据。
 - `scripts/build-mobile-candidate.mjs` 更新：断言基线 `0.15.1`（原断言停在 `0.14.9`），候选版本改为 `0.15.2-mobile.1`（原常量 `0.15.0-mobile.9`）。
 
