@@ -1,11 +1,11 @@
 # 手机适配状态与验收
 
-截至 2026-10-28，正式社区版为 **0.15.1，仅桌面**。`banana-reader-plugin` 旧仓库和 0.14.0～0.14.2 的 BRAT 测试通道已归档；这些旧安装包未获得 0.15.1 的修复，不再推荐新装。
+截至 2026-11-10，正式社区版为 **0.15.2，仅桌面**。`banana-reader-plugin` 旧仓库和 0.14.0～0.14.2 的 BRAT 测试通道已归档；这些旧安装包未获得 0.15.2 的修复，不再推荐新装。
 
 ## 当前安装边界
 
-- 桌面安装与更新统一到 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)，当前[正式安装文件为 0.15.1](https://github.com/TreyDong/banana-reader/releases/tag/0.15.1)，社区 ID 为 `gloss-reader`。
-- 移动适配代码保留在主线；2026-11-10 已基于合并后的主线（0.15.1 + 连接测试、选区修复、微信读书书架）构建本地候选 `0.15.2-mobile.15`，包含手机真机反馈的界面修复与微信读书式底部工具栏，仅部署在个人库等待真机验收，不是社区可下载版本。不能通过修改 `isDesktopOnly` 把现有桌面包当作手机正式版。
+- 桌面安装与更新统一到 [TreyDong/banana-reader](https://github.com/TreyDong/banana-reader)，当前[正式安装文件为 0.15.2](https://github.com/TreyDong/banana-reader/releases/tag/0.15.2)，社区 ID 为 `gloss-reader`。
+- 移动适配代码保留在主线；手机端用单独构建的"手机版"：版本号与同一次社区发布相同（例如 `0.15.2`），但 `isDesktopOnly` 为 `false`，只安装到自己的库里做真机验收，不作为社区可下载版本发布。两个版本号相同的好处是插件列表和更新检查不会显示或比较出奇怪的候选版本号。
 - 已有 `banana-reader` 测试安装请保留当前记录；归档不会自动迁移数据。需要切换时按[身份与数据衔接](plugin-id-migration.md)处理，不要同时启用两个 ID 或删除旧数据强行导入。
 - 后续测试候选应基于正式仓库主线准备，标签、manifest、安装包与来源证明必须对应同一源码，再决定测试分发方式。历史模拟结果见[验收记录](mobile-release-validation.md)。
 
