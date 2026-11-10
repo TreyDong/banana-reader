@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Node.js and npm are required.
 
-Published GitHub and community release: **0.15.1**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. The complete automated Community review passed, including verified provenance and byte-for-byte build reproduction. This is not a claim of manual staff review or physical iOS/Android acceptance; see [release evidence](../notes/community-review-repair-plan.md).
+Published GitHub and community release: **0.15.2**, retaining the desktop-only `gloss-reader` community identity. Minimum Obsidian: **1.11.4**. The complete automated Community review passed, including verified provenance and byte-for-byte build reproduction. This is not a claim of manual staff review or physical iOS/Android acceptance; see [release evidence](../notes/community-review-repair-plan.md).
 
 ```sh
 npm ci
