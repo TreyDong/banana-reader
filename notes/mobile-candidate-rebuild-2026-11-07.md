@@ -283,3 +283,27 @@
 - `styles.css` `81b3cf3c7e52fa1e9b4ec08e0354b03fcd0d58b4fcfc0b3f2a7d64c88ae3f708`
 
 已替换个人库同名三件套并核对哈希；`data.json`、`indices/` 未动。mobile.14 三件套备份在 `~/Desktop/90_系统/临时/gloss-reader-20261110-backup-mobile.14/`。重载插件或重启 Obsidian 后生效。
+
+## 2026-11-10：0.15.2（合并主干并发布正式版）
+
+本轮手机端改动全部并入主干：分支 `t3/fix-mobile-reader-ui` 提交 `a18ae75`（手机端界面重做）与 `532f59e`（0.15.2 发布、构建脚本改为同版本号），经 PR #9 合并，`origin/main` 为 `4b70064`。合并走 PR 而非本地直推，主检出目录 `/Users/Treydong/Desktop/40_项目库/banana-reader` 当时有另一会话未提交的工作区功能，未被触碰。
+
+正式社区版 0.15.2 已发布（仅桌面，`isDesktopOnly: true`）：
+
+- `main.js` `4b2ea8b92461ec0676694c8bb962d7ad311cedb77cee292fc14e21641bd614fc`
+- `manifest.json` `d1ceca38f68675cfdca1791dc61d95476f26183d36db4a6a70f4e818e303c62c`
+- `styles.css` `81b3cf3c7e52fa1e9b4ec08e0354b03fcd0d58b4fcfc0b3f2a7d64c88ae3f708`
+
+手机版构建方式改了：`scripts/build-mobile-candidate.mjs` 现在直接取 `manifest.json` 的版本号，输出 `dist/gloss-reader-<版本>-mobile/`，只把 `isDesktopOnly` 改成 `false`，`main.js` 与正式版逐字节一致。因此手机版版本号与同一次社区发布相同（例如 0.15.2），不再有 `-mobile.N` 这类预发布号。
+
+手机版三件套 SHA-256：
+
+- `main.js` `4b2ea8b92461ec0676694c8bb962d7ad311cedb77cee292fc14e21641bd614fc`
+- `manifest.json` `f20cf1c5fa7dc7f76289d62fb5fca91d87a45b6f5f017694797277e11fe198b6`（版本 `0.15.2`，`isDesktopOnly: false`）
+- `styles.css` `81b3cf3c7e52fa1e9b4ec08e0354b03fcd0d58b4fcfc0b3f2a7d64c88ae3f708`
+
+已替换个人库同名三件套并核对哈希；`data.json`、`indices/` 未动。mobile.15 三件套备份在 `~/Desktop/90_系统/临时/gloss-reader-20261110-backup-mobile.15/`。重载插件或重启 Obsidian 后生效。
+
+### 插件列表里出现 `-mobile.N` 的原因
+
+插件已收录在官方社区清单（`obsidianmd/obsidian-releases` 的 `community-plugins.json`，ID `gloss-reader`，仓库 `treydong/banana-reader`），所以能在市场里看到。Obsidian 在插件列表显示的是**本机已安装插件 manifest 里的版本号**，不是市场上的版本号；当时本机装的是手机版 `0.15.2-mobile.15`，列表就显示这个号。而且 `-mobile.15` 属于 semver 预发布，比较时低于正式版 `0.15.2`，Obsidian 会认为本机版本落后并提示更新。改成同版本号后，列表显示 0.15.2，不会再出现候选版本号或误报更新。
