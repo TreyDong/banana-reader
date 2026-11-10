@@ -5,7 +5,7 @@ import { type AgentSettings, type ApiProtocol, type ApiTestReport, configureMobi
 
 import {type ModelService,type ModelRef,type ModelSetup,type ServiceKind,SERVICE_NAMES,SERVICE_ICONS,newService,deviceAssignments,setupForDevice,serviceChoices,resolveModel,serviceSettings,migrateSetup,pruneAssignments,supportsEmbedding,resolveEmbeddingModel,setModelType,migrateEmbeddingModel} from './services';
 
-import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, readingMapSample, mobileLensPlacement, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines, selectionPreviewVisible} from './reading-ui';
+import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, readingMapSample, mobileLensPlacement, mobileAskLensWidth, selectionSettled, MOBILE_SELECTION_SETTLE_MS, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines, selectionPreviewVisible} from './reading-ui';
 
 import {isNativeReadingToggle, readingTogglePane, shouldTakeOverReading} from './reading-hijack';
 
@@ -823,6 +823,8 @@ class GlossView extends ItemView {
   private lensInput?: HTMLTextAreaElement;
   private lensAsk?: HTMLInputElement;
   private appearance!: HTMLElement;
+  /** Floating bottom tool dock; phones only, undefined on desktop. */
+  private dock?: HTMLElement;
   private selected?: Anchor;
   /** A live text selection is what the preview may paint; a committed mark is not. */
   private selectionLive = false;
@@ -833,6 +835,16 @@ class GlossView extends ItemView {
   private notebookOpen = false;
   private narrow = false;
   private selectionTimer?:number;
+  /** The last time the system text selection changed; the mobile toolbar waits for it to settle. */
+  private selectionChangedAt = 0;
+  /** A finger is still down, so a long-press selection is not finished yet. */
+  private mobilePointerActive = false;
+  /** When the finger went down; a lost pointerup must not block the toolbar forever. */
+  private pointerDownAt = 0;
+  /** Scroll position at which the mobile chrome was last shown or hidden. */
+  private scrollAnchor = 0;
+  /** Programmatic restore scrolling must not count as the reader scrolling down. */
+  private chromeSettleUntil = 0;
   private revision = 0;
   private restoring = false;
   private pendingProgress?: number;
@@ -887,8 +899,13 @@ class GlossView extends ItemView {
         const collapsed=!live||live.isCollapsed||!live.rangeCount||!this.article?.contains(live.getRangeAt(0).commonAncestorContainer);
         if(collapsed&&this.lensMode!=='ask'){this.selectionLive=false;this.clearSelectionPreview();}
         if(!this.root?.isConnected||this.app.workspace.getActiveViewOfType(GlossView)!==this||this.lensMode==='note'&&!this.lens?.hidden)return;
-        this.selectionTimer=this.win.setTimeout(()=>{if(this.article?.isConnected)this.captureSelection();},280);
+        this.selectionChangedAt=Date.now();
+        this.selectionTimer=this.win.setTimeout(()=>this.captureMobileSelection(),120);
       });
+      const pointerDown=()=>{this.mobilePointerActive=true;this.pointerDownAt=Date.now();this.win.clearTimeout(this.selectionTimer);};
+      const pointerUp=()=>{if(!this.mobilePointerActive)return;this.mobilePointerActive=false;const live=this.article?.ownerDocument.getSelection();if(!live?.isCollapsed&&live?.toString()){this.selectionChangedAt=Date.now();this.selectionTimer=this.win.setTimeout(()=>this.captureMobileSelection(),120);}else this.setMobileChrome(false);};
+      for(const type of ['pointerdown','touchstart'] as const)this.registerDomEvent(this.containerEl.ownerDocument,type,pointerDown,{capture:true});
+      for(const type of ['pointerup','pointercancel','touchend','touchcancel'] as const)this.registerDomEvent(this.containerEl.ownerDocument,type,pointerUp,{capture:true});
       const viewport=this.containerEl.ownerDocument.defaultView?.visualViewport;
       const resize=()=>this.updateMobileViewport();
       if(viewport){viewport.addEventListener('resize',resize);viewport.addEventListener('scroll',resize);this.register(()=>{viewport.removeEventListener('resize',resize);viewport.removeEventListener('scroll',resize);});}
@@ -958,14 +975,25 @@ class GlossView extends ItemView {
     bindUi(this.iconButton(top,'folder-open',ui("选择阅读文档"),()=>this.plugin.choose(),'gloss-document-picker'), {"label":()=>ui("选择阅读文档")});
     button(top,file.basename,()=>this.scroller.scrollTo({top:0,behavior:'smooth'}),'gloss-top-title');
     const tools=bindUi(top.createEl('nav',{cls:'gloss-tools',attr:{'aria-label':ui("阅读工具")}}), {"aria-label":()=>ui("阅读工具")});
-    bindUi(this.iconButton(tools,'list',ui("文档目录"),()=>this.showContents()), {"label":()=>ui("文档目录")});
+    // Phones read with a full-width bottom bar and two floating action circles; desktop keeps one toolbar.
+    const dock=Platform?.isMobile?bindUi(this.root.createDiv({cls:'gloss-dock',attr:{role:'toolbar','aria-label':ui("阅读工具")}}), {"aria-label":()=>ui("阅读工具")}):tools;
+    const float=Platform?.isMobile?bindUi(this.root.createDiv({cls:'gloss-dock-float',attr:{role:'toolbar','aria-label':ui("快捷操作")}}), {"aria-label":()=>ui("快捷操作")}):tools;
+    this.dock=Platform?.isMobile?dock:undefined;
+    const contentsButton=bindUi(this.iconButton(dock,'list',ui("文档目录"),()=>this.showContents()), {"label":()=>ui("文档目录")});
     if(extension==='pdf')bindUi(this.iconButton(tools,'file-text',ui(this.pdfModeOverride==='native'?'文字重排':'原版页面'),()=>{this.pdfModeOverride=this.pdfModeOverride==='native'?undefined:'native';void this.loadDocument(this.path,true).catch(showError);}), {"label":()=>ui(this.pdfModeOverride==='native'?'文字重排':'原版页面')});
-    bindUi(button(tools,'Aa',()=>this.toggleAppearance(),'gloss-aa'), {"aria-label":()=>ui("外观配置")});
-    this.questionButton=bindUi(this.iconButton(tools,'message-circle',ui("提问 · /"),()=>this.toggleComposer()), {"label":()=>ui("提问 · /")});this.questionButton.setAttribute('aria-expanded','false');
-    bindUi(this.iconButton(tools,'square-pen',ui("记笔记"),()=>this.openPersonalNote()), {"label":()=>ui("记笔记")});
+    const aaButton=bindUi(button(dock,'Aa',()=>this.toggleAppearance(),'gloss-aa'), {"aria-label":()=>ui("外观配置")});
+    this.questionButton=bindUi(this.iconButton(float,'message-circle',ui(Platform?.isMobile?"提问":"提问 · /"),()=>this.toggleComposer()), {"label":()=>ui(Platform?.isMobile?"提问":"提问 · /")});this.questionButton.setAttribute('aria-expanded','false');
+    const noteButton=bindUi(this.iconButton(float,'square-pen',ui("记笔记"),()=>this.openPersonalNote()), {"label":()=>ui("记笔记")});
     bindUi(this.iconButton(tools,'keyboard',ui("快捷键"),()=>this.showKeys(),'gloss-desktop-tool'), {"label":()=>ui("快捷键")});
     const notebook=button(tools,'',()=>this.toggleNotebook(),'gloss-notebook-button');setIcon(notebook,'notebook-pen');bindUi(notebook.createSpan({text:ui("笔记本")}), {"text":()=>ui("笔记本")});this.notebookBadge=notebook.createSpan({cls:'gloss-notebook-count'});bindUi(notebook, {"aria-label":()=>ui("阅读笔记本")});
-    this.indexButton=button(tools,'',()=>this.showBookIndex(),'gloss-notebook-button');setIcon(this.indexButton.createSpan({cls:'gloss-index-icon'}),'database');bindUi(this.indexButton.createSpan({cls:'gloss-index-label',text:ui("索引")}), {"text":()=>ui("索引")});bindUi(this.indexButton, {"aria-label":()=>ui("本书检索索引")});this.indexButton.hidden=!this.focus;
+    if(dock!==tools){
+      // The phone bar names each icon underneath, the way reading apps do.
+      const dockItem=(btn:HTMLElement,key:string)=>{const item=dock.createDiv({cls:'gloss-dock-item'});btn.remove();item.appendChild(btn);item.appendChild(bindUi(item.createSpan({cls:'gloss-dock-label',text:ui(key)}),{'text':()=>ui(key)}));};
+      dockItem(contentsButton,'目录');
+      dockItem(aaButton,'字号');
+      for(const el of [noteButton,this.questionButton])float.appendChild(el);
+    }
+    this.indexButton=button(tools,'',()=>this.showBookIndex(),'gloss-notebook-button');setIcon(this.indexButton.createSpan({cls:'gloss-index-icon'}),'database');bindUi(this.indexButton.createSpan({cls:'gloss-index-label',text:ui("索引")}), {"text":()=>ui("索引")});bindUi(this.indexButton, {"aria-label":()=>ui("本书检索索引")});this.indexButton.hidden=!this.focus||!!Platform?.isMobile;
     bindUi(this.iconButton(tools,'settings-2',ui("Agent 服务设置"),()=>{this.plugin.openSettings();},'gloss-desktop-tool'), {"label":()=>ui("Agent 服务设置")});
     this.scroller=this.root.createDiv({cls:'gloss-scroll'});
     this.grid=this.scroller.createDiv({cls:'gloss-reader-grid'});
@@ -1010,7 +1038,9 @@ class GlossView extends ItemView {
     const inputRow=compose.createDiv({cls:'gloss-compose-input'});
     this.composer=bindUi(inputRow.createEl('textarea',{cls:'gloss-question',attr:{'aria-label':ui("向 Agent 提问"),placeholder:ui("询问这篇文章…"),rows:'1',wrap:Platform?.isMobile?'soft':'off'}}), {"aria-label":()=>ui("向 Agent 提问"),"placeholder":()=>ui("询问这篇文章…")});this.composer.value=this.data.draft||'';
     this.composer.addEventListener('input',()=>{this.rememberDraft();this.resizeQuestion();this.syncSuggestionVisibility();if(this.composer.value.trim())this.cancelSuggestions();else void this.generateSuggestions();});this.protectInput(this.composer);this.composer.addEventListener('focus',()=>{this.closeModelMenu();this.closeLens();});this.composer.addEventListener('keydown',e=>{if(!e.isComposing&&e.key!=='Process'&&e.key==='Enter'&&!e.shiftKey&&!Platform?.isMobile){e.preventDefault();void this.send().catch(showError);}});
-    const row=inputRow;row.addClass('gloss-compose-row');button(row,'/',()=>this.showKeys(),'gloss-key-hint');const modelRow=row.createDiv({cls:'gloss-compose-model-row'});this.modelPicker(modelRow,()=>ui("模型"));
+    const row=inputRow;row.addClass('gloss-compose-row');button(row,'/',()=>this.showKeys(),'gloss-key-hint');
+    // Phones answer with the default model, so the picker is dropped and the input keeps the room.
+    if(!Platform?.isMobile){const modelRow=row.createDiv({cls:'gloss-compose-model-row'});this.modelPicker(modelRow,()=>ui("模型"));}
     const web=this.webButton=button(row,'',async()=>{if(this.aborter||this.retrievalJob)return;this.plugin.store.settings.webSearch=!this.plugin.store.settings.webSearch;this.webError='';this.paintWebButton();this.updateContext();await this.plugin.persist();},'gloss-web-toggle');setIcon(web.createSpan(),'globe');bindUi(web.createSpan({text:ui("联网")}), {"text":()=>ui("联网")});this.paintWebButton();
     this.sendButton=bindUi(this.iconButton(row,'arrow-up',ui("发送问题"),()=>this.send(),'gloss-send'), {"label":()=>ui("发送问题")});
     this.drawer=bindUi(this.root.createEl('aside',{cls:'gloss-notebook',attr:{'aria-label':ui("阅读笔记本")}}), {"aria-label":()=>ui("阅读笔记本")});this.drawer.hidden=!this.notebookOpen;this.root.toggleClass('gloss-notebook-open',this.notebookOpen);
@@ -1034,10 +1064,10 @@ class GlossView extends ItemView {
     });
     this.article.addEventListener('mouseover',e=>{const g=(e.target as HTMLElement).closest<HTMLElement>('[data-g]')?.dataset.g;this.setHover(g?.split(' ')[0]);});
     this.article.addEventListener('mouseleave',()=>this.setHover());
-    this.root.addEventListener('pointerdown',e=>{const target=e.target as HTMLElement;if(this.modelMenu&&!this.modelMenu.contains(target)&&!target.closest('.gloss-model-picker'))this.closeModelMenu();if(!this.lens.contains(target)&&!target.closest('[data-h]'))this.closeLens();if(!this.appearance.contains(target)&&!target.closest('.gloss-aa'))this.appearance.hidden=true;if(this.notePanel&&!target.closest('.gloss-personal-note-panel'))this.closeNotePanel();if(!target.closest('.gloss-article')&&!this.lens.contains(target)&&!target.closest('.gloss-composer')&&!target.closest('.gloss-personal-note-panel')){this.selectionLive=false;this.clearSelectionPreview();}});
+    this.root.addEventListener('pointerdown',e=>{const target=e.target as HTMLElement;if(this.modelMenu&&!this.modelMenu.contains(target)&&!target.closest('.gloss-model-picker'))this.closeModelMenu();if(!this.lens.contains(target)&&!target.closest('[data-h]'))this.closeLens();if(!this.appearance.contains(target)&&!target.closest('.gloss-aa'))this.appearance.hidden=true;if(this.notePanel&&!target.closest('.gloss-personal-note-panel'))this.closeNotePanel();if(Platform?.isMobile&&this.composerWrap&&!this.composerWrap.hidden&&!target.closest('.gloss-composer')&&!target.closest('.gloss-dock')&&!target.closest('.gloss-dock-float')&&!target.closest('.gloss-lens')&&!target.closest('.gloss-model-menu'))this.toggleComposer(false);if(!target.closest('.gloss-article')&&!this.lens.contains(target)&&!target.closest('.gloss-composer')&&!target.closest('.gloss-personal-note-panel')){this.selectionLive=false;this.clearSelectionPreview();}});
     this.root.addEventListener('click',e=>{const a=(e.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link');if(a){e.preventDefault();void this.app.workspace.openLinkText(a.dataset.href||a.getAttribute('href')||'',path,true);}});
-    this.scroller.addEventListener('scroll',()=>{if(this.restoring)return;this.closeModelMenu();this.captureProgress();this.pulseRail();if(!this.railFrame)this.railFrame=this.win.requestAnimationFrame(()=>{this.railFrame=0;this.updateRail();if(!this.lens.hidden)this.placeLens();});top.toggleClass('is-scrolled',this.scroller.scrollTop>180);this.win.clearTimeout(this.progressTimer);this.progressTimer=this.win.setTimeout(()=>void this.plugin.persist().catch(showError),700);},{passive:true});
-    if(this.pdf){void this.pdf.ready(opening.signal).then(()=>{if(token!==this.revision||opening.signal.aborted)return;this.loadError='';this.syncPdfPage();this.restorePosition();this.scheduleLayout();void this.maybeAutoIndex();}).catch(e=>{if(token===this.revision&&!opening.signal.aborted){this.loadError=e instanceof Error?e.message:ui("PDF 打开失败。");new Notice(this.loadError,7000);}});}if(token!==this.revision||opening.signal.aborted)return;this.renderBrief();this.paintHighlights();this.refreshSettings();await this.renderMargin();this.toggleFocus(this.focus);
+    this.scroller.addEventListener('scroll',()=>{if(this.restoring)return;this.closeModelMenu();this.captureProgress();this.syncMobileChrome();this.pulseRail();if(!this.railFrame)this.railFrame=this.win.requestAnimationFrame(()=>{this.railFrame=0;this.updateRail();if(!this.lens.hidden)this.placeLens();});top.toggleClass('is-scrolled',this.scroller.scrollTop>180);this.win.clearTimeout(this.progressTimer);this.progressTimer=this.win.setTimeout(()=>void this.plugin.persist().catch(showError),700);},{passive:true});
+    if(this.pdf){void this.pdf.ready(opening.signal).then(()=>{if(token!==this.revision||opening.signal.aborted)return;this.loadError='';this.syncPdfPage();this.restorePosition();this.scheduleLayout();void this.maybeAutoIndex();}).catch(e=>{if(token===this.revision&&!opening.signal.aborted){this.loadError=e instanceof Error?e.message:ui("PDF 打开失败。");new Notice(this.loadError,7000);}});}if(token!==this.revision||opening.signal.aborted)return;this.renderBrief();this.paintHighlights();this.refreshSettings();await this.renderMargin();this.toggleFocus(this.focus);this.scrollAnchor=this.scroller.scrollTop;this.chromeSettleUntil=Date.now()+600;this.setMobileChrome(false);
     this.resizeObserver=new ResizeObserver(()=>{this.narrow=Platform?.isMobile||this.root.clientWidth<1080;this.root.toggleClass('gloss-narrow',this.narrow);this.restorePosition();this.scheduleLayout();if(!this.lens.hidden)this.placeLens();});
     this.resizeObserver.observe(this.root);this.resizeObserver.observe(this.scroller);this.resizeObserver.observe(this.page);
     this.win.requestAnimationFrame(()=>{if(token===this.revision){this.restorePosition();this.scheduleLayout();if(this.book?.kind==='epub')void this.prepareEpubPagination().catch(()=>{});}});
@@ -1119,14 +1149,39 @@ class GlossView extends ItemView {
   applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.root.toggleClass('gloss-no-rail',!s.rail);this.syncChrome();this.scheduleLayout();}
   private updateMobileViewport(){
     if(!Platform?.isMobile||!this.root)return;
-    const viewport=this.root.ownerDocument.defaultView?.visualViewport;
-    this.root.style.setProperty('--mobile-viewport-height',(viewport?.height||this.root.ownerDocument.defaultView?.innerHeight||this.root.clientHeight)+'px');
+    const doc=this.root.ownerDocument,win=doc.defaultView,viewport=win?.visualViewport;
+    this.root.style.setProperty('--mobile-viewport-height',(viewport?.height||win?.innerHeight||this.root.clientHeight)+'px');
     this.root.style.setProperty('--mobile-viewport-top',(viewport?.offsetTop||0)+'px');
+    // Focus mode is a body-level overlay. env(safe-area-inset-top) only covers
+    // the iOS status bar, so also use the host's own header position: that is
+    // the real top chrome on Android, tablets and Obsidian's mobile emulation.
+    const headers=Array.from(doc.body.querySelectorAll<HTMLElement>('.workspace .view-header'));
+    const tops=headers.map(header=>header.offsetParent?header.getBoundingClientRect().top:0).filter(top=>top>0&&top<=96);
+    const hostTop=this.focus&&tops.length?Math.max(...tops):0;
+    const declared=Number.parseFloat(win?.getComputedStyle?.(doc.body)?.getPropertyValue('--safe-area-inset-top')||'')||0;
+    // A docked view already sits below the host's safe area; only the focus overlay needs it.
+    const safeTop=this.focus?Math.min(96,Math.max(hostTop,declared)):0;
+    this.root.style.setProperty('--mobile-safe-top',Math.round(safeTop)+'px');
     if(this.lens&&!this.lens.hidden)this.win.requestAnimationFrame(()=>this.placeLens());
     if(this.composer?.isConnected)this.resizeQuestion();
     for(const input of Array.from(this.root.querySelectorAll<HTMLTextAreaElement>('textarea.gloss-followup-input')))this.resizeMobileInput(input);
     const active=this.root.ownerDocument.activeElement,form=active?.closest('.gloss-followup');
     if(form&&this.root.contains(form))this.win.requestAnimationFrame(()=>{if(form.isConnected&&form.contains(form.ownerDocument.activeElement))form.scrollIntoView({block:'nearest',inline:'nearest'});});
+  }
+  /** Hide the mobile bars while scrolling down; scrolling up or tapping brings them back. */
+  private syncMobileChrome(){
+    if(!Platform?.isMobile||!this.root||!this.scroller)return;
+    const y=this.scroller.scrollTop;
+    if(Date.now()<this.chromeSettleUntil){this.scrollAnchor=y;return;}
+    if(y<=0){this.setMobileChrome(false);this.scrollAnchor=0;return;}
+    const delta=y-this.scrollAnchor;
+    if(delta>32){this.scrollAnchor=y;this.setMobileChrome(true);}
+    else if(delta<-24){this.scrollAnchor=y;this.setMobileChrome(false);}
+  }
+  private setMobileChrome(hidden:boolean){
+    if(!Platform?.isMobile||!this.root)return;
+    if(hidden&&((this.composerWrap&&!this.composerWrap.hidden)||this.notebookOpen||this.notePanel||(this.appearance&&!this.appearance.hidden)))return;
+    this.root.toggleClass('gloss-chrome-hidden',hidden);
   }
   private syncChrome(){
     if(Platform?.isMobile)return;
@@ -1161,8 +1216,8 @@ class GlossView extends ItemView {
   /** Leaving the tab hides the reader without dismantling it, so the reading spot and progress survive. */
   private leaveReader(){if(!this.root)return;this.captureProgress();void this.flushDraft().catch(showError);this.root.classList.add('is-away');}
   private returnReader(){if(!this.root)return;this.root.classList.remove('is-away');}
-  toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.indexButton)this.indexButton.hidden=!next;if(!next)this.cancelSuggestions();if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);this.updateMobileViewport();if(!next){this.closeModelMenu();this.clearSelectionPreview();this.clearReferencePreview();}}this.syncChrome();if(changing)this.win.requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.restorePosition();this.scheduleLayout();if(next)void this.maybeAutoIndex();});}
-  private toggleNotebook(next=!this.notebookOpen){this.notebookOpen=next;this.drawer.hidden=!next;this.root.toggleClass('gloss-notebook-open',next);this.root.querySelector('.gloss-notebook-button')?.setAttribute('aria-expanded',String(next));if(next){this.composer?.blur();void this.renderNotebook().catch(showError);}this.scheduleLayout();}
+  toggleFocus(next=!this.focus){const changing=next!==this.focus,max=this.scroller?this.scroller.scrollHeight-this.scroller.clientHeight:0,ratio=max>0?this.scroller.scrollTop/max:0;this.focus=next;if(this.indexButton)this.indexButton.hidden=!next||!!Platform?.isMobile;if(!next)this.cancelSuggestions();if(this.root){if(next&&this.root.parentElement!==this.root.ownerDocument.body)this.root.ownerDocument.body.appendChild(this.root);else if(!next&&this.root.parentElement!==this.contentEl)this.contentEl.appendChild(this.root);this.root.toggleClass('gloss-focus',next);this.updateMobileViewport();this.scrollAnchor=this.scroller?.scrollTop||0;this.chromeSettleUntil=Date.now()+600;this.setMobileChrome(false);if(!next){this.closeModelMenu();this.clearSelectionPreview();this.clearReferencePreview();}}this.syncChrome();if(changing)this.win.requestAnimationFrame(()=>{this.scroller?.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*ratio,behavior:'instant'});this.restorePosition();this.scheduleLayout();if(next)void this.maybeAutoIndex();});}
+  private toggleNotebook(next=!this.notebookOpen){if(next)this.setMobileChrome(false);this.notebookOpen=next;this.drawer.hidden=!next;this.root.toggleClass('gloss-notebook-open',next);this.root.querySelector('.gloss-notebook-button')?.setAttribute('aria-expanded',String(next));if(next){this.composer?.blur();void this.renderNotebook().catch(showError);}this.scheduleLayout();}
   private prepareEpubPagination():Promise<EpubPagination>{
     const style=this.win.getComputedStyle(this.article),height=this.scroller.clientHeight,width=this.article.clientWidth,key=[this.revision,width,height,style.font,style.lineHeight,style.letterSpacing].join('|');
     if(this.epubPagination?.key===key)return this.epubPagination.promise;this.epubPagination?.controller.abort();const controller=new AbortController();
@@ -1247,8 +1302,20 @@ class GlossView extends ItemView {
   private restorePosition(){if(this.path.toLowerCase().endsWith('.pdf')&&!this.pdfReflowActive){if(this.pdf&&this.focus&&this.restoring&&this.pendingProgress!==undefined&&this.pdf.loaded&&this.pdf.total){const n=Math.max(1,Math.min(this.pdf.total,this.data.pdfPage||Math.round(this.pendingProgress*Math.max(1,this.pdf.total-1))+1));this.pendingProgress=undefined;const pdf=this.pdf;void pdf.go(n).then(()=>{if(this.pdf===pdf){this.restoring=false;this.captureProgress();}}).catch(e=>{if(this.pdf===pdf)this.restoring=false;showError(e);});}return;}if(!this.restoring||this.pendingProgress===undefined||!this.scroller?.isConnected||!this.scroller.clientHeight||!this.scroller.clientWidth)return;if(this.root.clientHeight>(this.root.ownerDocument.defaultView?.innerHeight||window.innerHeight)+1)return;this.scroller.scrollTo({top:Math.max(0,this.scroller.scrollHeight-this.scroller.clientHeight)*this.pendingProgress,behavior:'instant'});this.pendingProgress=undefined;this.restoring=false;this.captureProgress();this.updateRail();}
   private captureProgress(){if(this.path.toLowerCase().endsWith('.pdf')&&!this.pdfReflowActive){if(this.pdf&&!this.plugin.unloading&&!this.restoring&&this.path){this.data.progress=(this.pdf.page-1)/Math.max(1,this.pdf.total-1);this.data.pdfPage=this.pdf.page;}return;}if(this.plugin.unloading||this.restoring||!this.scroller?.isConnected||!this.scroller.clientHeight||!this.path||this.root.clientHeight>(this.root.ownerDocument.defaultView?.innerHeight||window.innerHeight)+1)return;const max=this.scroller.scrollHeight-this.scroller.clientHeight;this.data.progress=max>0?Math.max(0,Math.min(1,this.scroller.scrollTop/max)):0;}
   private globalPoint(node:Node,offset:number){const block=this.blocks.find(el=>el.contains(node));if(!block)return null;const r=this.article.ownerDocument.createRange();r.selectNodeContents(block);r.setEnd(node,offset);return this.passages[this.blocks.indexOf(block)].start+r.toString().length;}
+  /** Wait for the native selection handles to stop moving before showing the toolbar. */
+  private captureMobileSelection(){
+    if(!this.root?.isConnected||this.app.workspace.getActiveViewOfType(GlossView)!==this||this.lensMode==='note'&&!this.lens?.hidden)return;
+    const now=Date.now();
+    // A pointerup can be lost when the finger leaves the window; stop trusting it after a moment.
+    const pointerActive=this.mobilePointerActive&&now-this.pointerDownAt<2000;
+    if(!selectionSettled(now,this.selectionChangedAt,pointerActive)){
+      const wait=Math.max(80,MOBILE_SELECTION_SETTLE_MS-(now-this.selectionChangedAt));
+      this.selectionTimer=this.win.setTimeout(()=>this.captureMobileSelection(),wait);return;
+    }
+    if(this.article?.isConnected)this.captureSelection();
+  }
   captureSelection(){const s=this.article.ownerDocument.getSelection();if(!s||s.isCollapsed||!s.rangeCount)return;const r=s.getRangeAt(0);if(!this.article.contains(r.commonAncestorContainer))return;if(this.pdf&&!this.pdf.activateRange(r)){new Notice(ui("请在 PDF 同一页内选择文字。"));return;}let start=this.globalPoint(r.startContainer,r.startOffset),end=this.globalPoint(r.endContainer,r.endOffset);if(start===null||end===null){const touched=this.blocks.filter(b=>r.intersectsNode(b));if(!touched.length)return;if(start===null)start=this.passages[this.blocks.indexOf(touched[0])].start;if(end===null)end=this.passages[this.blocks.indexOf(touched.at(-1))].end;}if(end<=start)return;const a=this.makeReadingAnchor(start,end);if(!a.quote.trim())return;if(Platform?.isMobile&&this.selected?.start===a.start&&this.selected?.quote===a.quote&&!this.lens.hidden)return;this.selected=a;this.selectionLive=true;this.activeThread=undefined;this.activeHighlight=undefined;this.updateContext();this.showLens('actions');}
-  private modelSettings(task='default'):Settings{const s=this.plugin.store.settings,{service,model}=resolveModel(this.plugin.modelSetup(),task,task==='translate'?undefined:task==='default'||!this.plugin.taskModels()[task]?this.readingModel:undefined);if(Platform?.isMobile&&service.kind!=='api')throw new Error('手机端不支持本机 CLI，请选择自定义 API 服务。');return{...s,...serviceSettings(service,model.id,this.plugin.serviceKey(service.id)),systemPrompt:s.taskPrompts.default||SYSTEM};}
+  private modelSettings(task='default'):Settings{const s=this.plugin.store.settings,{service,model}=resolveModel(this.plugin.modelSetup(),task,task==='translate'?undefined:(task==='default'||!this.plugin.taskModels()[task])&&!Platform?.isMobile?this.readingModel:undefined);if(Platform?.isMobile&&service.kind!=='api')throw new Error('手机端不支持本机 CLI，请选择自定义 API 服务。');return{...s,...serviceSettings(service,model.id,this.plugin.serviceKey(service.id)),systemPrompt:s.taskPrompts.default||SYSTEM};}
   private modelChoices(){return availableChoices(this.plugin.store.settings);}
   private modelPicker(parent:HTMLElement,label:()=>string){
     const trigger:HTMLButtonElement=bindUi(button(parent,'',()=>this.openModelMenu(trigger),'gloss-model-picker'),{'aria-label':label});trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-expanded','false');
@@ -1295,7 +1362,7 @@ class GlossView extends ItemView {
     this.win.requestAnimationFrame(()=>{if(input.isConnected&&!input.closest('[hidden]'))input.focus({preventScroll:true});});
   }
   toggleComposer(next=this.composerWrap.hidden,focus=true){
-    this.composerWrap.hidden=!next;this.questionButton.setAttribute('aria-expanded',String(next));this.questionButton.toggleClass('is-active',next);
+    this.composerWrap.hidden=!next;this.questionButton.setAttribute('aria-expanded',String(next));this.questionButton.toggleClass('is-active',next);if(next)this.setMobileChrome(false);
     if(next){if(focus)this.closeLens();this.updateContext();this.layoutMargin();this.resizeQuestion();if(focus)this.focusInput(this.composer);void this.generateSuggestions();}else this.cancelSuggestions();
     if(!next&&this.composer===this.composer.ownerDocument.activeElement)this.composer.blur();
     this.updateSelectionPreview();
@@ -1305,7 +1372,7 @@ class GlossView extends ItemView {
     if(!this.selected)return;
     if(mode!=='actions')this.toggleComposer(false);this.lensMode=mode;this.lensInput=undefined;this.lens.empty();this.lens.hidden=false;this.lens.classList.toggle('is-editor',mode==='note');this.lens.classList.toggle('is-asking',mode==='ask');this.lens.classList.toggle('is-mobile-actions',mode==='actions'&&!!Platform?.isMobile);
     if(mode==='ask'){
-      this.lens.addClass('is-asking');this.lens.setCssProps({width:Math.min(this.page?.clientWidth||720,this.root?.clientWidth?this.root.clientWidth-48:720)+'px'});
+      this.lens.addClass('is-asking');this.lens.setCssProps({width:(Platform?.isMobile?mobileAskLensWidth(this.root?.clientWidth||390):Math.min(this.page?.clientWidth||720,this.root?.clientWidth?this.root.clientWidth-48:720))+'px'});
       const row=this.lens.createDiv({cls:'gloss-lens-ask-row'});
       const attrs:{[key:string]:string}={'aria-label':ui("向选中文本提问"),type:'text',enterkeyhint:'send',spellcheck:'false'};
       if(!initial)attrs.placeholder=ui("询问选中文本…");
@@ -1354,23 +1421,46 @@ class GlossView extends ItemView {
   }
   private renderMobileLensActions(){
     const bar=this.lens.createDiv({cls:'gloss-mobile-lens-bar'}),panels=this.lens.createDiv({cls:'gloss-mobile-lens-panels'});
-    const mark=bindUi(this.iconButton(bar,'highlighter',ui('使用当前标记'),()=>this.highlight(this.plugin.store.settings.marker||'yellow',this.plugin.store.settings.markStyle),'gloss-lens-action'),{'label':()=>ui('使用当前标记')});mark.dataset.color=this.plugin.store.settings.marker||'yellow';
-    const color=bindUi(this.iconButton(bar,'palette',ui('选择标记颜色'),()=>open('colors'),'gloss-lens-action gloss-mobile-color-toggle'),{'label':()=>ui('选择标记颜色')});color.setAttribute('aria-expanded','false');color.dataset.color=this.plugin.store.settings.marker||'yellow';
-    bindUi(this.iconButton(bar,'pen-line',ui('写批注'),()=>this.showLens('note'),'gloss-lens-action'),{'label':()=>ui('写批注')});
-    bindUi(this.iconButton(bar,'message-circle',ui('提问'),()=>this.showLens('ask'),'gloss-lens-action'),{'label':()=>ui('提问')});
-    const more=bindUi(this.iconButton(bar,'ellipsis',ui('更多操作'),()=>open('more'),'gloss-lens-action'),{'label':()=>ui('更多操作')});more.setAttribute('aria-expanded','false');
-    const colors=panels.createDiv({cls:'gloss-mobile-lens-colors',attr:{role:'group','aria-label':ui('标记颜色')}});colors.hidden=true;
-    for(const [value,label] of [['yellow',ui('黄色')],['green',ui('绿色')],['blue',ui('蓝色')],['pink',ui('粉色')]]){const item=button(colors,'',()=>this.highlight(value,this.plugin.store.settings.markStyle),'gloss-marker-dot');item.dataset.color=value;item.classList.toggle('is-on',value===this.plugin.store.settings.marker);bindUi(item,{'aria-label':()=>label+ui('标记')});}
-    const menu=panels.createDiv({cls:'gloss-mobile-lens-more'});menu.hidden=true;
-    const styles=menu.createDiv({cls:'gloss-mobile-lens-styles'});for(const [style,icon] of [['underline','underline'],['wavy','spline'],['highlight','highlighter']] as const){const item=bindUi(this.iconButton(styles,icon,ui(MARK_STYLES[style]),()=>this.highlight(this.plugin.store.settings.marker||'yellow',style),'gloss-lens-action'),{'label':()=>ui(MARK_STYLES[style])});item.dataset.markStyle=style;}
-    for(const command of this.plugin.store.settings.commands)button(menu,commandName(command),()=>this.runCommand(command),'gloss-lens-action gloss-command-action');
-    bindUi(this.iconButton(menu,'copy',ui('复制选中文本'),async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();},'gloss-lens-action'),{'label':()=>ui('复制选中文本')});
-    bindUi(this.iconButton(menu,'settings-2',ui('管理选中文本指令'),()=>this.plugin.openSettings('commands'),'gloss-lens-action'),{'label':()=>ui('管理选中文本指令')});
-    if(this.activeHighlight)bindUi(this.iconButton(menu,'eraser',ui('移除这条标记'),()=>this.removeHighlight(this.activeHighlight),'gloss-lens-action'),{'label':()=>ui('移除这条标记')});
-    const open=(which:'colors'|'more')=>{const show=which==='colors'?colors.hidden:menu.hidden;colors.hidden=which!=='colors'||!show;menu.hidden=which!=='more'||!show;color.setAttribute('aria-expanded',String(!colors.hidden));more.setAttribute('aria-expanded',String(!menu.hidden));this.placeLens();};
+    // WeChat Reading style: every action shows its icon with a short label underneath.
+    const toolButton=(parent:HTMLElement,icon:(host:HTMLElement)=>HTMLElement,key:string,action:()=>void|Promise<void>,cls='')=>{
+      const b=button(parent,'',action,`gloss-lens-action gloss-mobile-lens-button ${cls}`);
+      b.appendChild(icon(b));
+      const caption=bindUi(b.createSpan({cls:'gloss-mobile-lens-label',text:ui(key)}),{'text':()=>ui(key)});
+      const id='gloss-lens-caption-'+uid();caption.setAttribute('id',id);b.setAttribute('aria-labelledby',id);
+      return b;
+    };
+    const lucide=(name:string)=>(host:HTMLElement)=>{const holder=host.createSpan({cls:'gloss-mobile-lens-icon'});setIcon(holder,name);return holder;};
+    // An icon-only button whose accessible name comes from a screen-reader-only label.
+    const glyphButton=(parent:HTMLElement,icon:(host:HTMLElement)=>HTMLElement,key:string,action:()=>void|Promise<void>,cls='')=>{
+      const b=button(parent,'',action,`gloss-lens-action ${cls}`);
+      b.appendChild(icon(b));
+      b.createSpan({cls:'gloss-sr-only',text:ui(key)});
+      return bindUi(b,{'label':()=>ui(key)});
+    };
+    const underlineGlyph=(host:HTMLElement)=>{const holder=host.createSpan({cls:'gloss-underline-glyph'});holder.createSpan({cls:'gloss-style-letter is-underline',text:'A'});return holder;};
+    // The three mark styles look like the reference app: a letter A carrying the line treatment itself.
+    const styleGlyph=(style:MarkStyle)=>(host:HTMLElement)=>{const disc=host.createSpan({cls:'gloss-style-disc'});disc.style.setProperty('--gloss-marker',`var(--mk-${this.plugin.store.settings.marker||'yellow'})`);disc.createSpan({cls:`gloss-style-letter is-${style}`,text:'A'});return disc;};
+    const marks=toolButton(bar,underlineGlyph,'划线',()=>open('marks'),'gloss-mobile-color-toggle');marks.setAttribute('aria-expanded','false');marks.dataset.color=this.plugin.store.settings.marker||'yellow';
+    toolButton(bar,lucide('pen-line'),'批注',()=>this.showLens('note'));
+    toolButton(bar,lucide('message-circle'),'提问',()=>this.showLens('ask'));
+    const quick=toolButton(bar,lucide('zap'),'快捷',()=>open('quick'));quick.setAttribute('aria-expanded','false');
+    toolButton(bar,lucide('copy'),'复制',async()=>{if(this.selected)await navigator.clipboard.writeText(this.selected.quote);this.closeLens();});
+    // Colors and line styles share one menu: the first row picks the color, the second row the line style.
+    const markPanel=panels.createDiv({cls:'gloss-mobile-lens-marks'});markPanel.hidden=true;
+    // One row like the reference: line types on the left, colors in their own pill on the right.
+    const styles=markPanel.createDiv({cls:'gloss-mobile-lens-styles'});
+    for(const style of ['underline','wavy','highlight'] as const){const item=glyphButton(styles,styleGlyph(style),MARK_STYLES[style],()=>this.highlight(this.plugin.store.settings.marker||'yellow',style));item.dataset.markStyle=style;}
+    const colors=markPanel.createDiv({cls:'gloss-mobile-lens-colors',attr:{role:'group','aria-label':ui('标记颜色')}});
+    for(const [value,label] of [['yellow',ui('黄色')],['green',ui('绿色')],['blue',ui('蓝色')],['pink',ui('粉色')]]){const item=button(colors,'',()=>this.highlight(value,this.plugin.store.settings.markStyle),'gloss-marker-dot');item.dataset.color=value;item.classList.toggle('is-on',value===this.plugin.store.settings.marker);bindUi(item,{'aria-label':()=>label+ui('标记')});const check=item.createSpan({cls:'gloss-marker-check'});setIcon(check,'check');}
+    // Quick actions carry the reading commands, plus the settings and cleanup entries.
+    const quickPanel=panels.createDiv({cls:'gloss-mobile-lens-quick'});quickPanel.hidden=true;
+    for(const command of this.plugin.store.settings.commands)button(quickPanel,commandName(command),()=>this.runCommand(command),'gloss-lens-action gloss-command-action');
+    toolButton(quickPanel,lucide('settings-2'),'管理指令',()=>{this.plugin.openSettings('commands');});
+    if(this.activeHighlight)toolButton(quickPanel,lucide('eraser'),'移除标记',()=>this.removeHighlight(this.activeHighlight));
+    const open=(which:'marks'|'quick')=>{const show=which==='marks'?markPanel.hidden:quickPanel.hidden;markPanel.hidden=which!=='marks'||!show;quickPanel.hidden=which!=='quick'||!show;marks.setAttribute('aria-expanded',String(!markPanel.hidden));quick.setAttribute('aria-expanded',String(!quickPanel.hidden));this.placeLens();};
   }
   private async runCommand(command:ReadingCommand){if(!this.selected)return;if(command.id==='translate'){if(this.plugin.store.settings.translationEngine==='google'){await this.translateSelection();return;}await this.send(renderCommand(command.prompt,this.selected.quote,this.path.split('/').pop()||'')+'\n目标语言：'+TRANSLATION_LANGUAGES[this.plugin.store.settings.translationTarget]+'；如原文已是目标语言，中文改译英语，其他语言改译中文。',false,'translate');return;}await this.send(renderCommand(command.prompt,this.selected.quote,this.path.split('/').pop()?.replace(/\.md$/,'')||''),false,command.id);}
-  private placeLens(){if(!this.selected||this.lens.hidden)return;const r=anchorRange(this.blocks,this.passages,this.text,this.selected);if(!r)return;const rects=Array.from(r.getClientRects()).filter(r=>r.width>0&&r.height>0);if(!rects.length)return;const box=this.root.getBoundingClientRect(),w=this.lens.offsetWidth,h=this.lens.offsetHeight;if(Platform?.isMobile){const visible=this.scroller.getBoundingClientRect(),placement=mobileLensPlacement(rects,box,visible,w,h);if(!placement)return;this.lens.style.left=placement.left+'px';this.lens.style.top=placement.top+'px';this.lens.style.setProperty('--gloss-arrow',placement.arrow+'px');this.lens.classList.toggle('is-below',placement.below);return;}const first=rects[0],last=rects.at(-1),center=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;const x=Math.max(12,Math.min(this.root.clientWidth-w-12,center-box.left-w/2));const above=first.top-box.top-h-12>=66;const y=above?first.top-box.top-h-12:last.bottom-box.top+12;this.lens.style.left=x+'px';this.lens.style.top=Math.max(66,Math.min(this.root.clientHeight-h-12,y))+'px';this.lens.style.setProperty('--gloss-arrow',Math.max(18,Math.min(w-18,(above?first.left+Math.min(40,first.width/2):(last.left+last.right)/2)-box.left-x))+'px');this.lens.classList.toggle('is-below',!above);}
+  private placeLens(){if(!this.selected||this.lens.hidden)return;const r=anchorRange(this.blocks,this.passages,this.text,this.selected);if(!r)return;const rects=Array.from(r.getClientRects()).filter(r=>r.width>0&&r.height>0);if(!rects.length)return;const box=this.root.getBoundingClientRect(),w=this.lens.offsetWidth,h=this.lens.offsetHeight;if(Platform?.isMobile){const dockBox=this.dock&&!this.dock.hidden?this.dock.getBoundingClientRect():null,box0=this.scroller.getBoundingClientRect(),visible=dockBox?{left:box0.left,right:box0.right,top:box0.top,bottom:Math.min(box0.bottom,dockBox.top-8)}:box0,placement=mobileLensPlacement(rects,box,visible,w,h);if(!placement){this.lens.hidden=true;return;}this.lens.style.left=placement.left+'px';this.lens.style.top=placement.top+'px';this.lens.style.setProperty('--gloss-arrow',placement.arrow+'px');this.lens.classList.toggle('is-below',placement.below);return;}const first=rects[0],last=rects.at(-1),center=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;const x=Math.max(12,Math.min(this.root.clientWidth-w-12,center-box.left-w/2));const above=first.top-box.top-h-12>=66;const y=above?first.top-box.top-h-12:last.bottom-box.top+12;this.lens.style.left=x+'px';this.lens.style.top=Math.max(66,Math.min(this.root.clientHeight-h-12,y))+'px';this.lens.style.setProperty('--gloss-arrow',Math.max(18,Math.min(w-18,(above?first.left+Math.min(40,first.width/2):(last.left+last.right)/2)-box.left-x))+'px');this.lens.classList.toggle('is-below',!above);}
   private updateContext(){if(!this.composer)return;this.updateSelectionPreview();if(!this.plugin.store.settings.questionSuggestions)this.cancelSuggestions();else if(!this.composerWrap.hidden&&!this.aborter&&!this.retrievalJob)void this.generateSuggestions();
     this.syncComposerBusy();this.composeLabel.textContent=this.webError;this.composeLabel.hidden=!this.webError;this.composer.placeholder=this.selected?ui("询问选中文本…"):ui("询问整篇文档…");}
   private paintHighlights(){if(!this.article)return;if(this.pdf){this.pdf.paint([...this.data.highlights.filter(h=>!h.removed).map(h=>({id:h.id,anchor:h.anchor,kind:'highlight' as const,color:h.color,style:markStyle(h.style),active:h.id===this.activeHighlight})),...this.data.threads.filter(t=>!t.removed&&t.anchor&&t.selection!==false).map(t=>({id:t.id,anchor:t.anchor,kind:'thread' as const,active:t.id===this.activeThread}))]);this.updateSelectionPreview();return;}const marks:TextMark[]=[];for(const h of this.data.highlights.filter(h=>!h.removed)){const start=resolveAnchor(this.text,h.anchor);if(start!==null)marks.push({id:h.id,start,end:start+h.anchor.quote.length,kind:'highlight',color:h.color,note:!!h.note,style:markStyle(h.style)});}for(const t of this.threads){if(!t.anchor)continue;const start=resolveAnchor(this.text,t.anchor);if(start!==null)marks.push({id:t.id,start,end:start+t.anchor.quote.length,kind:'thread'});}paintMarks(this.article,this.blocks,this.passages,marks,this.activeThread||this.activeHighlight,this.fresh);this.updateSelectionPreview();this.rail?.querySelectorAll<HTMLElement>('.gloss-rail-line').forEach(el=>{const p=this.passages[Number(el.dataset.paragraph)-1],h=marks.find(m=>m.kind==='highlight'&&m.end>p.start&&m.start<p.end),t=marks.some(m=>m.kind==='thread'&&m.end>p.start&&m.start<p.end);el.dataset.color=h?.color||'';el.classList.toggle('has-gloss',t);});}
