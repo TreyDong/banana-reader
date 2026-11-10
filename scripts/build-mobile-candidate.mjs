@@ -7,7 +7,7 @@ import {assertNoDynamicCode, pdfNoEval} from './build.mjs';
 
 // Separate local candidate: never change the desktop release metadata or user data.
 const root = fileURLToPath(new URL('../', import.meta.url));
-const version = '0.15.2-mobile.1';
+const version = '0.15.2-mobile.15';
 const output = new URL(`../dist/gloss-reader-${version}/`, import.meta.url);
 const read = name => readFile(new URL(`../${name}`, import.meta.url));
 const manifest = JSON.parse(await read('manifest.json'));

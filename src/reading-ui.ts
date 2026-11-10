@@ -3,11 +3,22 @@ import {documentWindow} from './core';
 // Historical references and the replaced layout routine are recorded in notes/community-release-audit.md.
 import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
 export interface LensRect {left:number;right:number;top:number;bottom:number}
+/** Long-press selections keep moving under the finger; wait this long after the last change. */
+export const MOBILE_SELECTION_SETTLE_MS=550;
+/** The selection toolbar must not appear while a handle is still being dragged. */
+export function selectionSettled(now:number,lastChange:number,pointerActive:boolean,settle=MOBILE_SELECTION_SETTLE_MS){
+ return !pointerActive&&Number.isFinite(lastChange)&&now-lastChange>=settle;
+}
+/** Keep the selection question box compact instead of stretching it across the phone. */
+export function mobileAskLensWidth(rootWidth:number){
+ const available=Math.max(0,Math.round(rootWidth)-40);
+ return Math.max(220,Math.min(300,available));
+}
 /** Position a selection toolbar in root coordinates and keep it within the visible reader. */
 export function mobileLensPlacement(rects:LensRect[],root:LensRect,visible:LensRect,width:number,height:number){
  const edge=8,gap=12,clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(Math.max(min,max),value));
  const left=Math.max(root.left,visible.left)+edge,right=Math.min(root.right,visible.right)-edge,top=Math.max(root.top,visible.top)+edge,bottom=Math.min(root.bottom,visible.bottom)-edge;
- const onScreen=rects.filter(r=>r.right>left&&r.left<right&&r.bottom>top&&r.top<bottom),items=onScreen.length?onScreen:rects;
+ const items=rects.filter(r=>r.right>left&&r.left<right&&r.bottom>top&&r.top<bottom);
  if(!items.length)return null;
  const first=items[0],last=items[items.length-1],center=(Math.max(left,Math.min(right,(first.left+first.right)/2)));
  const x=clamp(center-width/2,left,right-width),below=last.bottom+gap+height<=bottom,above=first.top-gap-height>=top;
