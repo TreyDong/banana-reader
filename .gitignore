@@ -5,3 +5,9 @@ main.js
 data.json
 .DS_Store
 dist/
+
+# 私人记录，不上传
+notes/
+DESIGN.md
+docs/mobile-candidate.md
+docs/mobile-release-validation.md

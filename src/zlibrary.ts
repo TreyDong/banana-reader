@@ -1,7 +1,7 @@
 /**
  * Unofficial Z-Library mobile EAPI client. The upstream has no stable contract;
  * endpoints were cross-checked against heartleo/zlib and bipinkrish/Zlibrary-API
- * (see notes/zlibrary-integration-research.md) and may change at any time.
+ * (see the private project notes) and may change at any time.
  * All network access goes through an injected fetcher so the logic stays testable.
  */
 export type ZlibFetcher=(url:string,init:{method:'GET'|'POST';headers:Record<string,string>;body?:string})=>Promise<{status:number;headers:Record<string,string>;json:unknown;text:string;arrayBuffer:Promise<ArrayBuffer>}>;

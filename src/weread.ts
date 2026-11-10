@@ -2,7 +2,7 @@
  * WeRead (微信读书) shelf client over Tencent's official Agent Gateway
  * (`POST https://i.weread.qq.com/api/agent/gateway` with a Bearer API key).
  * The endpoint contract comes from Tencent's WeChatReading skills documents
- * (see notes/weread-shelf-integration-research.md); fields and the skill
+ * (see the private project notes); fields and the skill
  * version may change without notice. Read-only: shelf metadata only, no book
  * content. All network access goes through an injected fetcher so the logic
  * stays testable.

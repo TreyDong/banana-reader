@@ -1,6 +1,6 @@
 import {documentWindow} from './core';
 // Native DOM annotation helpers for Banana Reader.
-// Historical references and the replaced layout routine are recorded in notes/community-release-audit.md.
+// Historical references and the replaced layout routine are recorded in the private project notes.
 import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
 export interface LensRect {left:number;right:number;top:number;bottom:number}
 /** Position a selection toolbar in root coordinates and keep it within the visible reader. */
