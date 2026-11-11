@@ -72,13 +72,23 @@ test('highlight is painted while its save is pending and a save failure remains 
  const result=f.view.highlight('yellow','highlight');assert.deepEqual(events,['save','paint']);assert.ok(f.plugin.store.documents['Mobile.pdf'].highlights.some((h:any)=>h.anchor.quote==='new text'));
  rejectSave(new Error('Save failed'));await assert.rejects(result,/Save failed/);
 });
-test('mobile selection actions keep colors and extra commands collapsed until requested',async()=>{
- const f=await fixture();f.view.lens=f.root.createDiv();f.view.placeLens=()=>{};let applied='';f.view.highlight=(color:string)=>{applied=color;};f.view.renderMobileLensActions();
- const divs=Array.from(f.view.lens.getElementsByTagName('div')) as any[],colors=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-colors'),more=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-more');
- const buttons=Array.from(f.view.lens.getElementsByTagName('button')) as any[],find=(label:string)=>buttons.find(el=>el.textContent===label);
- assert.equal(colors.hidden,true);assert.equal(more.hidden,true);find('选择标记颜色').dispatch('click');assert.equal(colors.hidden,false);assert.equal(more.hidden,true);
- find('更多操作').dispatch('click');assert.equal(colors.hidden,true);assert.equal(more.hidden,false);find('选择标记颜色').dispatch('click');
- const green=Array.from(colors.getElementsByTagName('button')).find((el:any)=>el.dataset.color==='green') as any;green.dispatch('click');assert.equal(applied,'green');
+test('mobile selection actions merge colors with line styles and keep quick commands in their own menu',async()=>{
+ const f=await fixture();f.view.lens=f.root.createDiv();f.view.placeLens=()=>{};let applied='';f.view.highlight=(color:string)=>{applied=color;};f.plugin.store.settings.commands=[{id:'explain',name:'解释',prompt:'p',builtin:true}];f.view.renderMobileLensActions();
+ const divs=Array.from(f.view.lens.getElementsByTagName('div')) as any[],marks=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-marks'),quick=divs.find(el=>el.getAttribute('class')==='gloss-mobile-lens-quick');
+ const buttons=Array.from(f.view.lens.getElementsByTagName('button')) as any[],find=(label:string)=>buttons.find(el=>(el.textContent||'').endsWith(label));
+ assert.equal(marks.hidden,true);assert.equal(quick.hidden,true);
+ find('划线').dispatch('click');assert.equal(marks.hidden,false);assert.equal(quick.hidden,true);
+ find('快捷').dispatch('click');assert.equal(marks.hidden,true);assert.equal(quick.hidden,false);
+ assert.ok(Array.from(quick.getElementsByTagName('button')).some((el:any)=>el.textContent==='解释'),'quick actions carry the reading commands');
+ find('划线').dispatch('click');
+ // The line styles sit in the same menu as the colors, on the second row.
+ const styles=Array.from(marks.getElementsByTagName('div')).find((el:any)=>el.getAttribute('class')==='gloss-mobile-lens-styles') as any;
+ assert.ok(styles,'the merged menu holds the line styles');
+ const green=Array.from(marks.getElementsByTagName('button')).find((el:any)=>el.dataset.color==='green') as any;green.dispatch('click');assert.equal(applied,'green');
+ assert.ok(buttons.some(el=>el.textContent==='复制'),'copy is a top level action instead of the more menu');
+ // Every action names itself under the icon.
+ const labels=Array.from(f.view.lens.getElementsByTagName('span')).filter((el:any)=>el.getAttribute('class')==='gloss-mobile-lens-label').map((el:any)=>el.textContent);
+ assert.deepEqual(labels.slice(0,5),['划线','批注','提问','快捷','复制']);
 });
 test('reading map magnifies sampled lines even when the book has thousands of paragraphs',async()=>{
  const f=await fixture(),line:any={style:{top:'10',height:'4',transform:''},classList:{toggle:(_name:string,value:boolean)=>{line.magnified=value;}}};
