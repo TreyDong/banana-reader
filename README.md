@@ -33,7 +33,7 @@ The current community release is **desktop-only** and requires **Obsidian 1.11.4
 
 You can also open the [official plugin page](https://community.obsidian.md/plugins/gloss-reader), select **Add to Obsidian**, and install and enable it in Obsidian. Check for updates under **Settings → Community plugins**.
 
-For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, reload Obsidian, and enable the plugin under **Community plugins**. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, see the [data migration guide](docs/plugin-id-migration.md) before switching.
+For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/TreyDong/banana-reader/releases/latest) into `<vault>/.obsidian/plugins/gloss-reader/`, reload Obsidian, and enable the plugin under **Community plugins**. Keep your existing `data.json` and `indices/` when updating. If you previously installed the separate `banana-reader` plugin ID, disable it before enabling this one: never run both IDs at the same time.
 
 ## Get started
 

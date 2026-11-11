@@ -25,7 +25,7 @@ Before resuming an older local checkout, inspect its branch, remotes, manifest a
 
 The build emits `main.js` in the repository root. Install that file together with root `manifest.json` and `styles.css`. Runtime outputs are independent of the source-directory layout. `main.js` and `node_modules/` are ignored by Git.
 
-The community plugin ID is `gloss-reader`, restored in 0.14.7. The display name remains Banana Reader; never activate the historical `banana-reader` replacement at the same time. Internal view IDs remain stable. See [identity migration](plugin-id-migration.md). Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
+The community plugin ID is `gloss-reader`, restored in 0.14.7. The display name remains Banana Reader; never activate the historical `banana-reader` replacement at the same time. Internal view IDs remain stable. Build and tests do not deploy files to a vault. Preserve any existing `data.json` and `indices/`; they are user data and are never source files or release assets. Do not copy this repository into an Obsidian vault.
 
 ## Licenses
 

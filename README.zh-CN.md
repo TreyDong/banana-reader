@@ -42,7 +42,7 @@ Banana Reader 为 Markdown、PDF 和 EPUB 提供专注阅读界面。选中一�
 
 ### 手动安装
 
-从 [最新 Release](https://github.com/TreyDong/banana-reader/releases/latest) 下载 `main.js`、`manifest.json`、`styles.css`，放入 `<笔记库>/.obsidian/plugins/gloss-reader/`，重新加载 Obsidian 后在「第三方插件」中启用 Banana Reader。更新时保留原有 `data.json` 和 `indices/`。如果曾安装单独的 `banana-reader` 插件 ID，请先阅读[数据衔接说明](docs/plugin-id-migration.md)。
+从 [最新 Release](https://github.com/TreyDong/banana-reader/releases/latest) 下载 `main.js`、`manifest.json`、`styles.css`，放入 `<笔记库>/.obsidian/plugins/gloss-reader/`，重新加载 Obsidian 后在「第三方插件」中启用 Banana Reader。更新时保留原有 `data.json` 和 `indices/`。如果曾安装单独的 `banana-reader` 插件 ID，请先停用旧插件再启用新的，不要同时启用两个 ID。
 
 ## 开始阅读
 
