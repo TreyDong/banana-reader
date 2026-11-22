@@ -150,7 +150,7 @@ test('invalid shelf folders never save and failed saves roll back both preferenc
  const f=await fixture(),folder=new f.TFolder('Books'),protectedFolder=new f.TFolder('日记');f.app.vault.getAbstractFileByPath=(path:string)=>path==='Books'?folder:path==='日记'?protectedFolder:null;
  const writes=f.writes();for(const path of ['Missing','../Books','日记'])await assert.rejects(f.plugin.updateShelfPreferences({folder:path}));assert.equal(f.writes(),writes);
  const save=f.plugin.saveData;f.plugin.saveData=async()=>{throw new Error('Synthetic preference failure');};
- await assert.rejects(f.plugin.updateShelfPreferences({folder:'Books',types:['md']}),/Synthetic preference failure/);assert.equal(f.plugin.store.settings.shelfFolder,'资料');assert.deepEqual(Array.from(f.plugin.store.settings.shelfTypes),['pdf','epub']);
+ await assert.rejects(f.plugin.updateShelfPreferences({folder:'Books',types:['md']}),/Synthetic preference failure/);assert.equal(f.plugin.store.settings.shelfFolder,'');assert.deepEqual(Array.from(f.plugin.store.settings.shelfTypes),['pdf','epub']);
  f.plugin.saveData=save;await f.plugin.updateShelfPreferences({folder:'Books',types:['pdf']});assert.equal(f.plugin.store.settings.shelfFolder,'Books');assert.deepEqual(Array.from(f.plugin.store.settings.shelfTypes),['pdf']);
 });
 
@@ -175,7 +175,7 @@ test('the first settings page contains bookshelf preferences without a separate 
 
 
 test('Markdown export uses its saved folder, creates nested paths and retains snapshot content and unique files',async()=>{
- const f=await fixture(),nodes=new Map<string,any>(),created:{path:string;text:string}[]=[],folders:string[]=[];assert.equal(f.plugin.store.settings.exportFolder,'笔记');
+ const f=await fixture(),nodes=new Map<string,any>(),created:{path:string;text:string}[]=[],folders:string[]=[];assert.equal(f.plugin.store.settings.exportFolder,'收集箱');
  f.app.vault.getAbstractFileByPath=(path:string)=>nodes.get(path)||null;f.app.vault.getName=()=>'Synthetic QA';f.app.vault.createFolder=async(path:string)=>{folders.push(path);nodes.set(path,new f.TFolder(path));};f.app.vault.create=async(path:string,text:string)=>{assert.equal(nodes.has(path),false);nodes.set(path,Object.assign(new f.TFile(),{path}));created.push({path,text});};
  const before=JSON.stringify(f.plugin.store.documents);await f.plugin.updateExportFolder('Exports/Nested');const restored=await fixture('banana-reader',false,f.persisted().settings);assert.equal(restored.plugin.store.settings.exportFolder,'Exports/Nested');f.view.path='Mobile.pdf';await f.view.exportNotes();await f.view.exportNotes();
  assert.deepEqual(folders,['Exports','Exports/Nested']);assert.equal(created.length,2);assert.notEqual(created[0].path,created[1].path);assert.ok(created.every(file=>file.path.startsWith('Exports/Nested/')));assert.ok(created[0].text.includes('PDF source'));assert.ok(created[0].text.includes('Keep my annotation'));assert.equal(JSON.stringify(f.plugin.store.documents),before);
@@ -184,8 +184,8 @@ test('Markdown export uses its saved folder, creates nested paths and retains sn
 
 test('Markdown export folder rejects unsafe paths and file collisions, and failed saves restore the previous directory',async()=>{
  const f=await fixture();f.app.vault.getAbstractFileByPath=(path:string)=>path==='Existing.md'?new f.TFile():null;const before=f.writes();
- for(const path of ['../Outside','日记/Exports','.obsidian/plugins','Existing.md/Nested'])await assert.rejects(f.plugin.updateExportFolder(path));assert.equal(f.writes(),before);assert.equal(f.plugin.store.settings.exportFolder,'笔记');
- const save=f.plugin.saveData;f.plugin.saveData=async()=>{throw new Error('Synthetic export preference failure');};await assert.rejects(f.plugin.updateExportFolder('Exports'),/Synthetic export preference failure/);assert.equal(f.plugin.store.settings.exportFolder,'笔记');f.plugin.saveData=save;
+ for(const path of ['../Outside','日记/Exports','.obsidian/plugins','Existing.md/Nested'])await assert.rejects(f.plugin.updateExportFolder(path));assert.equal(f.writes(),before);assert.equal(f.plugin.store.settings.exportFolder,'收集箱');
+ const save=f.plugin.saveData;f.plugin.saveData=async()=>{throw new Error('Synthetic export preference failure');};await assert.rejects(f.plugin.updateExportFolder('Exports'),/Synthetic export preference failure/);assert.equal(f.plugin.store.settings.exportFolder,'收集箱');f.plugin.saveData=save;
  const body=f.root.createDiv();f.settingsTab.renderExportSettings(body);const input=Array.from(body.getElementsByTagName('input'))[0] as any;input.value='Exports';input.dispatch('change');await new Promise(resolve=>setTimeout(resolve,0));assert.equal(f.plugin.store.settings.exportFolder,'Exports');
  const choose=Array.from(body.getElementsByTagName('button'))[0] as any;f.app.vault.getRoot=()=>new f.TFolder('/',[new f.TFolder('Chosen')]);choose.dispatch('click');f.openedPicker().onChooseItem(new f.TFolder('Chosen'));await new Promise(resolve=>setTimeout(resolve,0));assert.equal(f.plugin.store.settings.exportFolder,'Chosen');assert.equal(input.value,'Chosen');
 });

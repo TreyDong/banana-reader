@@ -44,12 +44,6 @@ Reading, highlighting, and export do not require an AI account. For AI features,
 
 For setup details and format limits, see the [Chinese user guide](docs/guide.zh-CN.md).
 
-## Workspace paths
-
-On desktop, the plugin reads `~/.config/banana/workspace.json` (version 1) for the matching vault. New downloads use `materialFolders.books`, the bookshelf scans `materialsDir`, and exported reading notes use `notesDir`. Mobile uses the current portable defaults. Existing custom folder settings take precedence; recognized legacy defaults are updated. The bookshelf keeps its saved file-type filters. Diary, company, and investment folders are excluded from reading, indexing, and AI requests, including restored views and old diary locations.
-
-`scripts/workspace-migration.mjs` provides pure helpers for moving Reader document keys, Home history paths, Studio sessions and image references, publication records, exported reading links, and index filenames using an explicit old-to-new path map. It never reads or writes user data. Key collisions throw before returning a result, and unknown settings and annotation IDs are preserved. Apply results only while the plugins are stopped; verify source files before reusing an index.
-
 ## Privacy and limitations
 
 - Annotations, conversations, drafts, and progress are stored in the plugin's `data.json`; optional indexes are stored in `indices/`. Export creates a new Markdown file. Syncing the plugin folder may sync these files too.

@@ -29,8 +29,6 @@ import {ZLIB_DEFAULT_DOMAIN,ZLIB_EXTENSIONS,ZLIB_LANGUAGES,ZLIB_LANGUAGE_LABELS,
 import {WEREAD_KEY_URL,WereadAuthError,WereadBlockedError,WereadClient,matchLocalBook,normalizeBookKey,type WereadBookNotes,type WereadFetcher,type WereadShelf,type WereadShelfBook} from './weread';
 import {shelfBooks,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,normalizeShelfTypes,normalizeShelfFolder,SHELF_FILE_TYPES,type ShelfFileType,type ShelfBook,type SpineStyle} from './bookshelf';
 import {LEGACY_PLUGIN_ID,TARGET_PLUGIN_ID,preparePluginIdentity} from './plugin-migration';
-import {readerPathSettings,workspacePaths} from './workspace';
-import {loadWorkspace} from './workspace-desktop';
 
 const PDF_FALLBACK_NOTICES:Record<string,string|undefined>={[PDF_SCAN_CODE]:'这本 PDF 没有可提取的文字层（可能为扫描版），已按原版页面打开。',[PDF_TOO_LARGE_CODE]:'这本 PDF 文字量超出重排上限，已按原版页面打开。',['pdf-engine-unavailable']:undefined};
 const pdfFallbackNotice=(error:unknown):string|undefined=>{const code=error instanceof Error?error.message:'';return code in PDF_FALLBACK_NOTICES?PDF_FALLBACK_NOTICES[code]:'PDF 文字重排失败，已按原版页面打开。';};
@@ -40,7 +38,7 @@ const SHELF_VIEW='gloss-bookshelf';
 interface RetrievalPreferences {topK:number;autoIndex:boolean}
 interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; rail: boolean; wide: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, rail: true, wide: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '资料/书籍', shelfFolder: '资料',shelfTypes:['pdf','epub'],exportFolder:'笔记'};
+const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, rail: true, wide: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
 const uid = () => crypto.randomUUID();
 const modelKey=(s:AgentSettings,provider=s.provider)=>provider==='api'?'api:'+(s.apiProtocol||'openai'):provider;
 const modelId=(s:AgentSettings,provider=s.provider)=>provider==='codex'?s.codexModel:provider==='claude'?s.claudeModel||'':provider==='pi'?s.piModel||'':s.apiModel;
@@ -129,10 +127,7 @@ export default class GlossPlugin extends Plugin {
     configureMobileTransport(Platform?.isMobile?async request=>{const response=await requestUrl({...request,throw:false});return{status:response.status,text:response.text};}:undefined);
     try{await preparePluginIdentity({pluginId:this.manifest.id,mobile:!!Platform?.isMobile,configDir:this.app.vault.configDir,adapter:this.app.vault.adapter,legacyActive:(this.app as App&{plugins?:{enabledPlugins?:Set<string>}}).plugins?.enabledPlugins?.has(LEGACY_PLUGIN_ID)});}catch(error){showError(error);throw error;}
     const saved = await this.loadData() as Partial<Omit<Store,'settings'>>&{settings?:Partial<Settings>&{embedding?:Partial<EmbeddingSettings>&RetrievalPreferences}};
-    await loadWorkspace(!Platform?.isMobile,(this.app.vault.adapter as {getBasePath?:()=>string}).getBasePath?.());
-    const pathSettings=readerPathSettings(saved?.settings||{});
-    const migratedPaths=['zlibFolder','shelfFolder','exportFolder','workspacePathsVersion'].some(key=>pathSettings[key]!==saved?.settings?.[key]);
-    this.store = {...saved, version: 5, settings: {...DEFAULTS, ...pathSettings, apiKey: ''}, documents: saved?.documents || {}};
+    this.store = {...saved, version: 5, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
     let recoveredRequests=false;for(const reading of Object.values(this.store.documents))if(recoverInterruptedReading(reading))recoveredRequests=true;
     this.store.settings.language=normalizeLanguage(saved?.settings?.language);configureLanguage(this.store.settings.language,getLanguage());
     this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.shelfTypes=normalizeShelfTypes(saved?.settings?.shelfTypes);
@@ -150,7 +145,7 @@ export default class GlossPlugin extends Plugin {
     const migratedEmbedding=migrateEmbeddingModel(settings,legacyEmbedding,service=>{try{return this.serviceKey(service.id)===this.serviceKey('embedding');}catch{return false;}});if(migratedEmbedding?.created)this.saveServiceKey(migratedEmbedding.service.id,this.serviceKey('embedding'));
     if((saved?.version||0)<5)delete settings.taskModels.translate;
     const initializeMobile=!!Platform?.isMobile&&!saved?.settings?.mobileTaskModels;if(Platform?.isMobile)this.taskModels();
-    if(!Array.isArray(saved?.settings?.services)||(saved?.version||0)<5||migratedEmbedding||initializeMobile||recoveredRequests||migratedPaths)await this.persist();
+    if(!Array.isArray(saved?.settings?.services)||(saved?.version||0)<5||migratedEmbedding||initializeMobile||recoveredRequests)await this.persist();
 
     if (saved && (saved.version || 1) < 2) {
       if (saved.settings?.fontSize === 19) this.store.settings.fontSize = 20;
@@ -481,7 +476,7 @@ class ZLibraryModal extends Modal {
   finally{this.busy=false;this.paintBusy();buttonEl.textContent=label||ui("下载");}
  }
  private async saveBook(bytes:ArrayBuffer,filename:string):Promise<TFile>{
-  const raw=(this.plugin.store.settings.zlibFolder||workspacePaths().booksDir).replace(/^\/+|\/+$/g,''),folder=raw?normalizePath(raw):'',stem=filename.replace(/\.[A-Za-z0-9]{1,8}$/,''),extension=filename.slice(stem.length);
+  const raw=(this.plugin.store.settings.zlibFolder||'收集箱').replace(/^\/+|\/+$/g,''),folder=raw?normalizePath(raw):'',stem=filename.replace(/\.[A-Za-z0-9]{1,8}$/,''),extension=filename.slice(stem.length);
   let path=(folder?folder+'/':'')+filename,n=2;
   while(this.app.vault.getAbstractFileByPath(path))path=(folder?folder+'/':'')+stem+' ('+n+++')'+extension;
   if(blockedPath(path))throw new Error('下载目录位于隐私边界内，请在设置中更改。');
@@ -1986,7 +1981,7 @@ class GlossSettings extends PluginSettingTab {
      }catch(error){probeStatus.textContent=ui(error instanceof Error?error.message:'测试失败');}
      finally{probeButton.disabled=false;}
     },'gr-settings-button'), {"text":()=>ui("探测镜像")});
-    field(ui("下载目录"),ui("下载的书籍保存到库内此文件夹；隐私目录仍不进入阅读器。"),s.zlibFolder,workspacePaths().booksDir,v=>{s.zlibFolder=v||workspacePaths().booksDir;});
+    field(ui("下载目录"),ui("下载的书籍保存到库内此文件夹；隐私目录仍不进入阅读器。"),s.zlibFolder,ui("收集箱"),v=>{s.zlibFolder=v||'收集箱';});
     const credentialRow=group.createDiv({cls:'gr-settings-row'}),credentialInfo=credentialRow.createDiv({cls:'gr-settings-info'});
     bindUi(credentialInfo.createDiv({cls:'gr-settings-label',text:ui("Z-Library 登录")}), {"text":()=>ui("Z-Library 登录")});
     bindUi(credentialInfo.createDiv({cls:'gr-settings-description',text:ui("登录凭据保存在 Obsidian 密钥存储，不会写入插件数据文件。")}), {"text":()=>ui("登录凭据保存在 Obsidian 密钥存储，不会写入插件数据文件。")});
