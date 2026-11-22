@@ -79,7 +79,7 @@ function terms(text:string){const clean=text.toLowerCase(),words:string[]=clean.
 /** Reciprocal rank fusion of lexical and vector ranks; suppress overlapping copies. */
 export function retrieve(index:BookIndex,query:string,vector:number[],topK:number){
  const q=unitVector(vector,index.dimensions),tokens=terms(query).slice(0,128),n=index.chunks.length,docs=index.chunks.map(c=>new Set(terms(c.text))),df=new Map(tokens.map(t=>[t,docs.filter(d=>d.has(t)).length]));
- const semantic=index.chunks.map((c,i)=>({i,score:c.vector.reduce((sum,v,j)=>sum+v*q[j],0)})).sort((a,b)=>b.score-a.score),lexical=index.chunks.map((c,i)=>({i,score:tokens.reduce((s,t)=>s+(docs[i].has(t)?Math.log(1+(n-(df.get(t)||0)+.5)/((df.get(t)||0)+.5)):0),0)})).filter(r=>r.score>0).sort((a,b)=>b.score-a.score),scores=new Map<number,number>();
+ const semantic=index.chunks.map((c,i)=>({i,score:c.vector.reduce((sum,v,j)=>sum+v*q[j],0)})).sort((a,b)=>b.score-a.score),lexical=index.chunks.map((_,i)=>({i,score:tokens.reduce((s,t)=>s+(docs[i].has(t)?Math.log(1+(n-(df.get(t)||0)+.5)/((df.get(t)||0)+.5)):0),0)})).filter(r=>r.score>0).sort((a,b)=>b.score-a.score),scores=new Map<number,number>();
  for(const ranked of [semantic,lexical])ranked.forEach((r,rank)=>scores.set(r.i,(scores.get(r.i)||0)+1/(60+rank+1)));
  const hits:BookChunk[]=[];for(const [i]of [...scores].sort((a,b)=>b[1]-a[1])){const c=index.chunks[i];if(hits.some(h=>h.label===c.label&&Math.abs(h.anchor.start-c.anchor.start)<Math.min(h.text.length,c.text.length)*.65))continue;hits.push(c);if(hits.length>=topK)break;}return hits;
 }

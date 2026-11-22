@@ -1,11 +1,13 @@
-import {translate as translateUi,t as ui,bindUi,refreshUi,forwardUiLabel,configureLanguage,normalizeLanguage,commandName,relativeTime,receiptText,notebookSummary,type LanguagePreference} from './i18n';
+import {translate as translateUi,t as ui,bindUi,refreshUi,forwardUiLabel,configureLanguage,currentLanguage,normalizeLanguage,commandName,relativeTime,receiptText,notebookSummary,type LanguagePreference} from './i18n';
 import {requireApiVersion,type ViewStateResult,type FuzzyMatch,type SettingDefinitionItem, Platform, getLanguage, Setting, SecretComponent, Plugin, ItemView, FileView, WorkspaceLeaf, TFolder, TFile, Notice, MarkdownRenderer, Component, PluginSettingTab, ToggleComponent, App, FuzzySuggestModal, Modal, getFrontMatterInfo, normalizePath, requestUrl, setIcon } from 'obsidian';
 import {documentWindow,objectValue,arrayValue,stringValue, type Anchor, type Thread, type Message, type WebReceipt, regenerationHistory, beginThreadRequest, settleThreadRequest, followupHistory, visibleThreadError, answerReceipt, tokenReceipt, tokenDetails, type Reading, type Passage, type Highlight, type PersonalNote, freshReading, savePersonalNote, makeAnchor, resolveAnchor, indexPassages, contextFor, blockedPath, exportReading, MARK_STYLES, markStyle, referenceTokens, uniqueReferences, type MarkStyle } from './core';
 import { type AgentSettings, type ApiProtocol, type ApiTestReport, configureMobileTransport, API_DEFAULTS, apiEndpoint, normalizeApiBase, askAgent, discoverCodexModels, discoverApiModels, discoverPiModels, mergeModels, normalizeModels, type ModelOption,type ModelType, SYSTEM, networkSearch, webContext, parseQuestionSuggestions, QUESTION_SUGGESTION_PROMPT, SEARCH_QUERY_PROMPT, parseSearchQuery, webSystemPrompt, testApiService } from './agent';
 
 import {type ModelService,type ModelRef,type ModelSetup,type ServiceKind,SERVICE_NAMES,SERVICE_ICONS,newService,deviceAssignments,setupForDevice,serviceChoices,resolveModel,serviceSettings,migrateSetup,pruneAssignments,supportsEmbedding,resolveEmbeddingModel,setModelType,migrateEmbeddingModel} from './services';
 
-import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, readingMapSample, mobileLensPlacement, mobileAskLensWidth, selectionSettled, MOBILE_SELECTION_SETTLE_MS, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines, selectionPreviewVisible} from './reading-ui';
+import {placeMarginItems, compactMarginIds, annotationAnchor, anchorRange, paintMarks, readingMapSample, mobileLensPlacement, mobileAskLensWidth, selectionSettled, MOBILE_SELECTION_SETTLE_MS, hasMarginCards, activeTocIndex, type TextMark, type MarginItem, railMagnification, readingMapMetrics, readingMapViewport, readingMapLines, selectionPreviewVisible} from './reading-ui';
+
+import {applyReadingLayout} from './reading-layout';
 
 import {isNativeReadingToggle, readingTogglePane, shouldTakeOverReading} from './reading-hijack';
 
@@ -27,6 +29,8 @@ import {ZLIB_DEFAULT_DOMAIN,ZLIB_EXTENSIONS,ZLIB_LANGUAGES,ZLIB_LANGUAGE_LABELS,
 import {WEREAD_KEY_URL,WereadAuthError,WereadBlockedError,WereadClient,matchLocalBook,normalizeBookKey,type WereadBookNotes,type WereadFetcher,type WereadShelf,type WereadShelfBook} from './weread';
 import {shelfBooks,rowsByWidth,spineStyle,formatShelfProgress,shelfPathMatches,formatBookSize,bookNumber,normalizeShelfTypes,normalizeShelfFolder,SHELF_FILE_TYPES,type ShelfFileType,type ShelfBook,type SpineStyle} from './bookshelf';
 import {LEGACY_PLUGIN_ID,TARGET_PLUGIN_ID,preparePluginIdentity} from './plugin-migration';
+import {readerPathSettings,workspacePaths} from './workspace';
+import {loadWorkspace} from './workspace-desktop';
 
 const PDF_FALLBACK_NOTICES:Record<string,string|undefined>={[PDF_SCAN_CODE]:'这本 PDF 没有可提取的文字层（可能为扫描版），已按原版页面打开。',[PDF_TOO_LARGE_CODE]:'这本 PDF 文字量超出重排上限，已按原版页面打开。',['pdf-engine-unavailable']:undefined};
 const pdfFallbackNotice=(error:unknown):string|undefined=>{const code=error instanceof Error?error.message:'';return code in PDF_FALLBACK_NOTICES?PDF_FALLBACK_NOTICES[code]:'PDF 文字重排失败，已按原版页面打开。';};
@@ -34,9 +38,9 @@ const VIEW = 'gloss-reader';
 const EPUB_VIEW='gloss-epub-file';
 const SHELF_VIEW='gloss-bookshelf';
 interface RetrievalPreferences {topK:number;autoIndex:boolean}
-interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; rail: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
+interface Settings extends AgentSettings, ModelSetup {language:LanguagePreference;embedding:RetrievalPreferences;webSearch:boolean;questionSuggestions:boolean;takeOverReading:boolean;translationEngine:'google'|'model';translationTarget:string;taskPrompts:Record<string,string>;modelLists:Record<string,ModelOption[]>; markStyle:MarkStyle; customFont:string; theme: string; fontSize: number; font: string; lineHeight: number; context: string; maxContext: number; marker: string; pen: string; measure: number; numbers: boolean; rail: boolean; wide: boolean; commands:ReadingCommand[]; apiProfiles:Record<string,{base:string;model:string}>;zlibDomain:string;zlibMirrors:string[];zlibFolder:string;shelfFolder:string;shelfTypes:ShelfFileType[];exportFolder:string }
 interface Store { version: number; settings: Settings; documents: Record<string, Reading> }
-const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, rail: true, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '收集箱', shelfFolder: '',shelfTypes:['pdf','epub'],exportFolder:'收集箱'};
+const DEFAULTS: Settings = {language:'auto',questionSuggestions:false,webSearch:false,takeOverReading:false,translationEngine:'google',translationTarget:'zh-CN',taskPrompts:{},embedding:{topK:6,autoIndex:false},services:[],taskModels:{},modelLists:{},markStyle:'highlight',customFont:'',commands:DEFAULT_COMMANDS.map(c=>({...c})),apiProfiles:{},claudePath:'',claudeModel:'',apiProtocol:'openai',provider: 'codex', codexPath: '', codexModel: '', apiBase: 'https://api.openai.com/v1', apiModel: '', apiKey: '', theme: 'paper', fontSize: 20, font: 'serif', lineHeight: 1.64, context: 'nearby', maxContext: 60000, marker: 'yellow', pen: 'vermilion', measure: 32, numbers: false, rail: true, wide: false, zlibDomain: ZLIB_DEFAULT_DOMAIN, zlibMirrors: [...ZLIB_MIRRORS], zlibFolder: '资料/书籍', shelfFolder: '资料',shelfTypes:['pdf','epub'],exportFolder:'笔记'};
 const uid = () => crypto.randomUUID();
 const modelKey=(s:AgentSettings,provider=s.provider)=>provider==='api'?'api:'+(s.apiProtocol||'openai'):provider;
 const modelId=(s:AgentSettings,provider=s.provider)=>provider==='codex'?s.codexModel:provider==='claude'?s.claudeModel||'':provider==='pi'?s.piModel||'':s.apiModel;
@@ -62,6 +66,12 @@ const wereadRequest:WereadFetcher=async(url,init)=>{
 function button(parent: HTMLElement, text: string, action: () => void | Promise<void>, cls = ''): HTMLButtonElement {
   const b = parent.createEl('button', {text, cls}); b.type = 'button';
   b.addEventListener('click', () => {try {Promise.resolve(action()).catch(showError);} catch(e) {showError(e);}}); return b;
+}
+function resolveTheme(theme:string,win?:Window|null){return theme==='auto'?(win?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[theme]||theme);}
+function confirmAction(app:App,title:string,message:string,confirmText:string):Promise<boolean>{
+  return new Promise(resolve=>{let done=false;const modal=new Modal(app);modal.setTitle(title);modal.modalEl.addClass('gr-model-dialog');modal.contentEl.addClass('gr-model-modal');modal.contentEl.createEl('p',{text:message});const footer=modal.contentEl.createDiv({cls:'gr-settings-footer'});
+    const finish=(value:boolean)=>{if(!done){done=true;resolve(value);}modal.close();};
+    button(footer,ui("取消"),()=>finish(false),'gr-settings-button');button(footer,confirmText,()=>finish(true),'gr-settings-button is-danger');modal.onClose=()=>{if(!done){done=true;resolve(false);}};modal.open();});
 }
 function availableChoices(setup:ModelSetup,type:ModelType='chat'){return serviceChoices(setup,type).filter(choice=>!Platform?.isMobile||choice.kind==='api');}
 function showError(e: unknown) {new Notice(ui(e instanceof Error ? e.message : (typeof e==='string'?e:'未知错误')), 6000);}
@@ -119,13 +129,16 @@ export default class GlossPlugin extends Plugin {
     configureMobileTransport(Platform?.isMobile?async request=>{const response=await requestUrl({...request,throw:false});return{status:response.status,text:response.text};}:undefined);
     try{await preparePluginIdentity({pluginId:this.manifest.id,mobile:!!Platform?.isMobile,configDir:this.app.vault.configDir,adapter:this.app.vault.adapter,legacyActive:(this.app as App&{plugins?:{enabledPlugins?:Set<string>}}).plugins?.enabledPlugins?.has(LEGACY_PLUGIN_ID)});}catch(error){showError(error);throw error;}
     const saved = await this.loadData() as Partial<Omit<Store,'settings'>>&{settings?:Partial<Settings>&{embedding?:Partial<EmbeddingSettings>&RetrievalPreferences}};
-    this.store = {version: 5, settings: {...DEFAULTS, ...saved?.settings, apiKey: ''}, documents: saved?.documents || {}};
+    await loadWorkspace(!Platform?.isMobile,(this.app.vault.adapter as {getBasePath?:()=>string}).getBasePath?.());
+    const pathSettings=readerPathSettings(saved?.settings||{});
+    const migratedPaths=['zlibFolder','shelfFolder','exportFolder','workspacePathsVersion'].some(key=>pathSettings[key]!==saved?.settings?.[key]);
+    this.store = {...saved, version: 5, settings: {...DEFAULTS, ...pathSettings, apiKey: ''}, documents: saved?.documents || {}};
     let recoveredRequests=false;for(const reading of Object.values(this.store.documents))if(recoverInterruptedReading(reading))recoveredRequests=true;
     this.store.settings.language=normalizeLanguage(saved?.settings?.language);configureLanguage(this.store.settings.language,getLanguage());
-    this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.zlibFolder=typeof saved?.settings?.zlibFolder==='string'&&saved.settings.zlibFolder.trim()?saved.settings.zlibFolder.trim().slice(0,200):'收集箱';this.store.settings.shelfFolder=typeof saved?.settings?.shelfFolder==='string'?saved.settings.shelfFolder.trim().slice(0,200):'';this.store.settings.shelfTypes=normalizeShelfTypes(saved?.settings?.shelfTypes);this.store.settings.exportFolder=typeof saved?.settings?.exportFolder==='string'?saved.settings.exportFolder:DEFAULTS.exportFolder;
+    this.store.settings.zlibMirrors=parseMirrorList(Array.isArray(saved?.settings?.zlibMirrors)?saved.settings.zlibMirrors.filter(item=>typeof item==='string').join('\n'):'');if(!this.store.settings.zlibMirrors.length)this.store.settings.zlibMirrors=[...ZLIB_MIRRORS];this.store.settings.zlibDomain=normalizeZlibDomain(saved?.settings?.zlibDomain||'')||this.store.settings.zlibMirrors[0];this.store.settings.shelfTypes=normalizeShelfTypes(saved?.settings?.shelfTypes);
     const legacyEmbedding=normalizeEmbedding(saved?.settings?.embedding);this.store.settings.embedding={topK:legacyEmbedding.topK,autoIndex:saved?.settings?.embedding?.autoIndex===true};
     this.indexCache=new BookIndexCache((this.manifest.dir||this.app.vault.configDir+'/plugins/'+this.manifest.id)+'/indices',this.app.vault.adapter);
-    this.store.settings.commands=normalizeCommands(saved?.settings?.commands).map(command=>{const original=DEFAULT_COMMANDS.find(c=>c.id===command.id);return original&&command.prompt===original.prompt.replaceAll('选中文本','选文')?{...command,prompt:original.prompt}:command;});this.store.settings.webSearch=saved?.settings?.webSearch===true;this.store.settings.takeOverReading=saved?.settings?.takeOverReading===true;this.store.settings.questionSuggestions=saved?.settings?.questionSuggestions===true;this.store.settings.translationEngine=saved?.settings?.translationEngine==='model'?'model':'google';this.store.settings.translationTarget=TRANSLATION_LANGUAGES[saved?.settings?.translationTarget]?saved.settings.translationTarget:'zh-CN';this.store.settings.taskPrompts={};for(const task of ['default','summary']){const value=saved?.settings?.taskPrompts?.[task];if(typeof value==='string')this.store.settings.taskPrompts[task]=value.slice(0,8000);}
+    this.store.settings.commands=normalizeCommands(saved?.settings?.commands).map(command=>{const original=DEFAULT_COMMANDS.find(c=>c.id===command.id);return original&&command.prompt===original.prompt.replaceAll('选中文本','选文')?{...command,prompt:original.prompt}:command;});this.store.settings.webSearch=saved?.settings?.webSearch===true;this.store.settings.takeOverReading=saved?.settings?.takeOverReading===true;this.store.settings.wide=saved?.settings?.wide===true;this.store.settings.questionSuggestions=saved?.settings?.questionSuggestions===true;this.store.settings.translationEngine=saved?.settings?.translationEngine==='model'?'model':'google';this.store.settings.translationTarget=TRANSLATION_LANGUAGES[saved?.settings?.translationTarget]?saved.settings.translationTarget:'zh-CN';this.store.settings.taskPrompts={};for(const task of ['default','summary']){const value=saved?.settings?.taskPrompts?.[task];if(typeof value==='string')this.store.settings.taskPrompts[task]=value.slice(0,8000);}
     const settings=this.store.settings;settings.markStyle=markStyle(settings.markStyle);settings.modelLists={...(saved?.settings?.modelLists||{})};
     if(saved?.settings&&!Array.isArray(saved.settings.services)){
     const local=Platform?.isMobile?[]:await discoverCodexModels();settings.modelLists.codex=settings.modelLists.codex===undefined?local:normalizeModels(settings.modelLists.codex);
@@ -137,7 +150,7 @@ export default class GlossPlugin extends Plugin {
     const migratedEmbedding=migrateEmbeddingModel(settings,legacyEmbedding,service=>{try{return this.serviceKey(service.id)===this.serviceKey('embedding');}catch{return false;}});if(migratedEmbedding?.created)this.saveServiceKey(migratedEmbedding.service.id,this.serviceKey('embedding'));
     if((saved?.version||0)<5)delete settings.taskModels.translate;
     const initializeMobile=!!Platform?.isMobile&&!saved?.settings?.mobileTaskModels;if(Platform?.isMobile)this.taskModels();
-    if(!Array.isArray(saved?.settings?.services)||(saved?.version||0)<5||migratedEmbedding||initializeMobile||recoveredRequests)await this.persist();
+    if(!Array.isArray(saved?.settings?.services)||(saved?.version||0)<5||migratedEmbedding||initializeMobile||recoveredRequests||migratedPaths)await this.persist();
 
     if (saved && (saved.version || 1) < 2) {
       if (saved.settings?.fontSize === 19) this.store.settings.fontSize = 20;
@@ -149,6 +162,8 @@ export default class GlossPlugin extends Plugin {
     try{this.registerExtensions(['epub'],EPUB_VIEW);}catch{/* Keep any existing EPUB plugin's file association. */}
     this.readerSettings=new GlossSettings(this.app,this);this.addSettingTab(this.readerSettings);
 
+    // The host language can settle after onload; resolve it again once the workspace is ready and refresh open readers.
+    this.app.workspace.onLayoutReady(()=>{if(this.syncLanguage())for(const leaf of this.app.workspace.getLeavesOfType(VIEW))if(leaf.view instanceof GlossView)void leaf.view.refreshLanguage();});
     // Reader tabs are opt-in sessions; restored workspaces return to native files.
     this.app.workspace.onLayoutReady(()=>{const restored=this.app.workspace.getLeavesOfType(VIEW);window.requestAnimationFrame(()=>{if(this.unloading)return;for(const leaf of restored){const path=leaf.getViewState().state?.path;if(typeof path==='string'&&this.app.vault.getAbstractFileByPath(path) instanceof TFile){const file=this.app.vault.getAbstractFileByPath(path);if(file instanceof TFile)void leaf.openFile(file,{active:false}).catch(showError);}}});});
     this.readerRibbon=this.addRibbonIcon('book-open-text', ui("打开 Banana Reader"), () => {void this.openCurrent().catch(showError);});
@@ -183,11 +198,34 @@ export default class GlossPlugin extends Plugin {
     this.addCommand({id:'zlibrary-search',name:ui("从 Z-Library 找书"),callback:()=>new ZLibraryModal(this.app,this).open()});
     this.addCommand({id:'open-bookshelf',name:ui("打开书架"),callback:()=>{void this.openShelf().catch(showError);}});
   }
+  /** Re-resolve the UI language from the host; returns true when the resolved language changed. */
+  syncLanguage(){
+    const before=currentLanguage();
+    configureLanguage(this.store.settings.language,getLanguage());
+    return before!==currentLanguage();
+  }
+  /** Reader dialogs whose title follows the UI language, refreshed when the language changes. */
+  private languageModals=new Set<Modal>();
+  readerModal(title:()=>string){
+    const modal=new Modal(this.app);
+    modal.setTitle(title());
+    bindUi(modal.titleEl,{text:title});
+    for(const open of this.languageModals)if(!open.modalEl.isConnected)this.languageModals.delete(open);
+    this.languageModals.add(modal);
+    return modal;
+  }
+  private refreshLanguageModals(){
+    for(const modal of this.languageModals){
+      if(!modal.modalEl.isConnected){this.languageModals.delete(modal);continue;}
+      refreshUi(modal.modalEl);
+    }
+  }
   async changeLanguage(value:unknown){
     const previous=this.store.settings.language;
     this.store.settings.language=normalizeLanguage(value);configureLanguage(this.store.settings.language,getLanguage());
     try{await this.persist();}catch(error){this.store.settings.language=previous;configureLanguage(previous,getLanguage());throw error;}
     this.registerReaderCommands();if(this.readerRibbon)bindUi(this.readerRibbon, {'aria-label':()=>ui('打开 Banana Reader')});if(this.shelfRibbon)bindUi(this.shelfRibbon, {'aria-label':()=>ui('打开书架')});
+    this.refreshLanguageModals();
     for(const leaf of this.app.workspace.getLeavesOfType(VIEW))if(leaf.view instanceof GlossView)await leaf.view.refreshLanguage();
   }
   taskModels(){return deviceAssignments(this.store.settings,!!Platform?.isMobile);}
@@ -209,7 +247,8 @@ export default class GlossPlugin extends Plugin {
       const settings=this.store.settings,previousFolder=settings.shelfFolder,previousTypes=[...settings.shelfTypes];
       const folder=change.folder===undefined?settings.shelfFolder:normalizeShelfFolder(change.folder);
       if(folder===undefined)throw new Error('请填写笔记库内的文件夹路径。');
-      if(folder){const node=this.app.vault.getAbstractFileByPath(folder);if(!(node instanceof TFolder))throw new Error('书架目录不存在，请重新选择。');if(blockedPath(folder))throw new Error('该目录受隐私边界保护，请选择其他文件夹。');}
+      if(blockedPath(folder))throw new Error('该目录受隐私边界保护，请选择其他文件夹。');
+      if(change.folder!==undefined&&folder){const node=this.app.vault.getAbstractFileByPath(folder);if(!(node instanceof TFolder))throw new Error('书架目录不存在，请重新选择。');}
       settings.shelfFolder=folder;if(change.types!==undefined)settings.shelfTypes=normalizeShelfTypes(change.types);
       try{await this.persist();}catch(error){settings.shelfFolder=previousFolder;settings.shelfTypes=previousTypes;throw error;}
       for(const leaf of this.app.workspace.getLeavesOfType(SHELF_VIEW))if(leaf.view instanceof BookshelfView)leaf.view.refreshPreferences();
@@ -442,7 +481,7 @@ class ZLibraryModal extends Modal {
   finally{this.busy=false;this.paintBusy();buttonEl.textContent=label||ui("下载");}
  }
  private async saveBook(bytes:ArrayBuffer,filename:string):Promise<TFile>{
-  const raw=(this.plugin.store.settings.zlibFolder||'收集箱').replace(/^\/+|\/+$/g,''),folder=raw?normalizePath(raw):'',stem=filename.replace(/\.[A-Za-z0-9]{1,8}$/,''),extension=filename.slice(stem.length);
+  const raw=(this.plugin.store.settings.zlibFolder||workspacePaths().booksDir).replace(/^\/+|\/+$/g,''),folder=raw?normalizePath(raw):'',stem=filename.replace(/\.[A-Za-z0-9]{1,8}$/,''),extension=filename.slice(stem.length);
   let path=(folder?folder+'/':'')+filename,n=2;
   while(this.app.vault.getAbstractFileByPath(path))path=(folder?folder+'/':'')+stem+' ('+n+++')'+extension;
   if(blockedPath(path))throw new Error('下载目录位于隐私边界内，请在设置中更改。');
@@ -788,6 +827,12 @@ class GlossView extends ItemView {
   private grid!: HTMLElement;
   private page!: HTMLElement;
   private margin!: HTMLElement;
+  private tocFloat?:HTMLElement;
+  private tocRail?:HTMLButtonElement;
+  private tocTicks:HTMLElement[]=[];
+  private tocItems:{el:HTMLElement;target:()=>HTMLElement|undefined;section?:number}[]=[];
+  private tocActive=-1;
+  private tocKey='';
   private drawer!: HTMLElement;
   private drawerBody!: HTMLElement;
   private drawerSubtitle!:HTMLElement;
@@ -817,7 +862,6 @@ class GlossView extends ItemView {
   private briefCollapsed=false;
   private briefError='';
   private briefJob?:{controller:AbortController;revision:number};
-  private focusButton!: HTMLButtonElement;
   private lens!: HTMLElement;
   private lensMode: 'actions'|'ask'|'note' = 'actions';
   private lensInput?: HTMLTextAreaElement;
@@ -943,7 +987,7 @@ class GlossView extends ItemView {
       if(e.key.toLowerCase()==='b'&&!this.pdf){e.preventDefault();e.stopImmediatePropagation();if(this.data.brief){this.briefCollapsed=!this.briefCollapsed;this.renderBrief();}else void this.generateBrief().catch(showError);return;}
       if(e.key.toLowerCase()==='f'){e.preventDefault();e.stopImmediatePropagation();if(this.focus)void this.exitReader().catch(showError);else this.toggleFocus(true);}
     },{capture:true});
-    this.registerEvent(this.app.vault.on('modify',f=>{if(f.path!==this.path)return;this.win.clearTimeout(this.reloadTimer);this.reloadTimer=this.win.setTimeout(()=>void this.loadDocument(this.path,true).catch(showError),500);}));
+    this.registerEvent(this.app.vault.on('modify',f=>{if(f.path!==this.path)return;this.win.clearTimeout(this.reloadTimer);this.reloadTimer=this.win.setTimeout(()=>void this.loadDocument(this.path).catch(showError),500);}));
     this.registerEvent(this.app.vault.on('delete',f=>{if(f.path===this.path){this.stop();new Notice(ui("原文已移除，批注仍保留。"));}}));
   }
   private iconButton(parent:HTMLElement,name:string,label:string,action:()=>void|Promise<void>,cls='') {
@@ -953,7 +997,7 @@ class GlossView extends ItemView {
   private quietLabels(scope:HTMLElement,includeControls=false){for(const el of [scope,...Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]'))]){if(!el.hasAttribute('aria-label')||el.closest('.gloss-native-pdf')||(!includeControls&&el.matches('button,input,textarea,select,[role=option],[role=tab]')))continue;const label=el.getAttribute('aria-label'),id='reader-group-'+uid();const caption=this.root.createSpan({cls:'gloss-sr-only',text:label,attr:{id}});forwardUiLabel(el,caption);el.removeAttribute('aria-label');el.setAttribute('aria-labelledby',id);}}
   private get data(){return this.plugin.read(this.path);}
   private get threads(){return this.data.threads.filter(t=>!t.removed&&(!this.pdf||!t.anchor||t.anchor.pdfPage===this.pdf.page||!!t.contextInfo?.embeddingModel||t.id===this.referenceFocus?.threadId));}
-  async loadDocument(path:string,retainPosition=false) {
+  async loadDocument(path:string) {
     if(blockedPath(path))throw new Error('此目录受隐私边界保护。');
     this.closeNotePanel();
     const file=this.app.vault.getAbstractFileByPath(path);if(!(file instanceof TFile))throw new Error('找不到这篇文档。');
@@ -971,17 +1015,17 @@ class GlossView extends ItemView {
     this.root?.remove();this.contentEl.empty();
     this.root=this.contentEl.createDiv({cls:'gloss-root banana-reader'});this.root.toggleClass('gloss-pdf',false);this.root.toggleClass('gloss-mobile',Platform?.isMobile);this.narrow=Platform?.isMobile||this.root.clientWidth<1080;this.updateMobileViewport();this.applyAppearance();
     const top=this.root.createEl('header',{cls:'gloss-toolbar'});
-    this.focusButton=bindUi(this.iconButton(top,'arrow-left',ui("返回文档"),()=>this.exitReader(),'gloss-back'), {"label":()=>ui("返回文档")});
+    bindUi(this.iconButton(top,'arrow-left',ui("返回文档"),()=>this.exitReader(),'gloss-back'), {"label":()=>ui("返回文档")});
     bindUi(this.iconButton(top,'folder-open',ui("选择阅读文档"),()=>this.plugin.choose(),'gloss-document-picker'), {"label":()=>ui("选择阅读文档")});
     button(top,file.basename,()=>this.scroller.scrollTo({top:0,behavior:'smooth'}),'gloss-top-title');
     const tools=bindUi(top.createEl('nav',{cls:'gloss-tools',attr:{'aria-label':ui("阅读工具")}}), {"aria-label":()=>ui("阅读工具")});
-    // Phones read with a full-width bottom bar and two floating action circles; desktop keeps one toolbar.
+    // Phones read with a full-width bottom bar and two floating action circles; desktop floats appearance, note and question at the bottom right.
     const dock=Platform?.isMobile?bindUi(this.root.createDiv({cls:'gloss-dock',attr:{role:'toolbar','aria-label':ui("阅读工具")}}), {"aria-label":()=>ui("阅读工具")}):tools;
-    const float=Platform?.isMobile?bindUi(this.root.createDiv({cls:'gloss-dock-float',attr:{role:'toolbar','aria-label':ui("快捷操作")}}), {"aria-label":()=>ui("快捷操作")}):tools;
+    const float=bindUi(this.root.createDiv({cls:'gloss-dock-float',attr:{role:'toolbar','aria-label':ui("快捷操作")}}), {"aria-label":()=>ui("快捷操作")});
     this.dock=Platform?.isMobile?dock:undefined;
-    const contentsButton=bindUi(this.iconButton(dock,'list',ui("文档目录"),()=>this.showContents()), {"label":()=>ui("文档目录")});
-    if(extension==='pdf')bindUi(this.iconButton(tools,'file-text',ui(this.pdfModeOverride==='native'?'文字重排':'原版页面'),()=>{this.pdfModeOverride=this.pdfModeOverride==='native'?undefined:'native';void this.loadDocument(this.path,true).catch(showError);}), {"label":()=>ui(this.pdfModeOverride==='native'?'文字重排':'原版页面')});
-    const aaButton=bindUi(button(dock,'Aa',()=>this.toggleAppearance(),'gloss-aa'), {"aria-label":()=>ui("外观配置")});
+    const contentsButton=Platform?.isMobile?bindUi(this.iconButton(dock,'list',ui("文档目录"),()=>this.showContents()), {"label":()=>ui("文档目录")}):undefined;
+    if(extension==='pdf')bindUi(this.iconButton(tools,'file-text',ui(this.pdfModeOverride==='native'?'文字重排':'原版页面'),()=>{this.pdfModeOverride=this.pdfModeOverride==='native'?undefined:'native';void this.loadDocument(this.path).catch(showError);}), {"label":()=>ui(this.pdfModeOverride==='native'?'文字重排':'原版页面')});
+    const aaButton=bindUi(button(Platform?.isMobile?dock:float,'Aa',()=>this.toggleAppearance(),'gloss-aa'), {"aria-label":()=>ui("外观配置"),"title":()=>ui("外观配置")});
     this.questionButton=bindUi(this.iconButton(float,'message-circle',ui(Platform?.isMobile?"提问":"提问 · /"),()=>this.toggleComposer()), {"label":()=>ui(Platform?.isMobile?"提问":"提问 · /")});this.questionButton.setAttribute('aria-expanded','false');
     const noteButton=bindUi(this.iconButton(float,'square-pen',ui("记笔记"),()=>this.openPersonalNote()), {"label":()=>ui("记笔记")});
     bindUi(this.iconButton(tools,'keyboard',ui("快捷键"),()=>this.showKeys(),'gloss-desktop-tool'), {"label":()=>ui("快捷键")});
@@ -992,10 +1036,13 @@ class GlossView extends ItemView {
       dockItem(contentsButton,'目录');
       dockItem(aaButton,'字号');
       for(const el of [noteButton,this.questionButton])float.appendChild(el);
-    }
+    }else float.append(aaButton,noteButton,this.questionButton);
     this.indexButton=button(tools,'',()=>this.showBookIndex(),'gloss-notebook-button');setIcon(this.indexButton.createSpan({cls:'gloss-index-icon'}),'database');bindUi(this.indexButton.createSpan({cls:'gloss-index-label',text:ui("索引")}), {"text":()=>ui("索引")});bindUi(this.indexButton, {"aria-label":()=>ui("本书检索索引")});this.indexButton.hidden=!this.focus||!!Platform?.isMobile;
     bindUi(this.iconButton(tools,'settings-2',ui("Agent 服务设置"),()=>{this.plugin.openSettings();},'gloss-desktop-tool'), {"label":()=>ui("Agent 服务设置")});
     this.scroller=this.root.createDiv({cls:'gloss-scroll'});
+    // Desktop contents float on the right edge: heading lines that open into the full list on hover, focus or click.
+    this.tocFloat=bindUi(this.root.createEl('nav',{cls:'gloss-toc-float'}), {"aria-label":()=>ui("文档目录")});this.tocFloat.hidden=true;
+    this.tocFloat.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&this.tocFloat.hasClass('is-open')){e.preventDefault();e.stopImmediatePropagation();this.setContentsOpen(false);this.tocRail?.focus();}});
     this.grid=this.scroller.createDiv({cls:'gloss-reader-grid'});
     this.rail=bindUi(this.grid.createDiv({cls:'gloss-rail',attr:{'aria-label':ui("文档导航")}}), {"aria-label":()=>ui("文档导航")});
     this.page=this.grid.createDiv({cls:'gloss-page'});
@@ -1064,11 +1111,11 @@ class GlossView extends ItemView {
     });
     this.article.addEventListener('mouseover',e=>{const g=(e.target as HTMLElement).closest<HTMLElement>('[data-g]')?.dataset.g;this.setHover(g?.split(' ')[0]);});
     this.article.addEventListener('mouseleave',()=>this.setHover());
-    this.root.addEventListener('pointerdown',e=>{const target=e.target as HTMLElement;if(this.modelMenu&&!this.modelMenu.contains(target)&&!target.closest('.gloss-model-picker'))this.closeModelMenu();if(!this.lens.contains(target)&&!target.closest('[data-h]'))this.closeLens();if(!this.appearance.contains(target)&&!target.closest('.gloss-aa'))this.appearance.hidden=true;if(this.notePanel&&!target.closest('.gloss-personal-note-panel'))this.closeNotePanel();if(Platform?.isMobile&&this.composerWrap&&!this.composerWrap.hidden&&!target.closest('.gloss-composer')&&!target.closest('.gloss-dock')&&!target.closest('.gloss-dock-float')&&!target.closest('.gloss-lens')&&!target.closest('.gloss-model-menu'))this.toggleComposer(false);if(!target.closest('.gloss-article')&&!this.lens.contains(target)&&!target.closest('.gloss-composer')&&!target.closest('.gloss-personal-note-panel')){this.selectionLive=false;this.clearSelectionPreview();}});
+    this.root.addEventListener('pointerdown',e=>{const target=e.target as HTMLElement;if(this.modelMenu&&!this.modelMenu.contains(target)&&!target.closest('.gloss-model-picker'))this.closeModelMenu();if(!this.lens.contains(target)&&!target.closest('[data-h]'))this.closeLens();if(!this.appearance.contains(target)&&!target.closest('.gloss-aa'))this.appearance.hidden=true;if(this.tocFloat&&!this.tocFloat.contains(target))this.setContentsOpen(false);if(this.notePanel&&!target.closest('.gloss-personal-note-panel'))this.closeNotePanel();if(Platform?.isMobile&&this.composerWrap&&!this.composerWrap.hidden&&!target.closest('.gloss-composer')&&!target.closest('.gloss-dock')&&!target.closest('.gloss-dock-float')&&!target.closest('.gloss-lens')&&!target.closest('.gloss-model-menu'))this.toggleComposer(false);if(!target.closest('.gloss-article')&&!this.lens.contains(target)&&!target.closest('.gloss-composer')&&!target.closest('.gloss-personal-note-panel')){this.selectionLive=false;this.clearSelectionPreview();}});
     this.root.addEventListener('click',e=>{const a=(e.target as HTMLElement).closest<HTMLAnchorElement>('a.internal-link');if(a){e.preventDefault();void this.app.workspace.openLinkText(a.dataset.href||a.getAttribute('href')||'',path,true);}});
-    this.scroller.addEventListener('scroll',()=>{if(this.restoring)return;this.closeModelMenu();this.captureProgress();this.syncMobileChrome();this.pulseRail();if(!this.railFrame)this.railFrame=this.win.requestAnimationFrame(()=>{this.railFrame=0;this.updateRail();if(!this.lens.hidden)this.placeLens();});top.toggleClass('is-scrolled',this.scroller.scrollTop>180);this.win.clearTimeout(this.progressTimer);this.progressTimer=this.win.setTimeout(()=>void this.plugin.persist().catch(showError),700);},{passive:true});
-    if(this.pdf){void this.pdf.ready(opening.signal).then(()=>{if(token!==this.revision||opening.signal.aborted)return;this.loadError='';this.syncPdfPage();this.restorePosition();this.scheduleLayout();void this.maybeAutoIndex();}).catch(e=>{if(token===this.revision&&!opening.signal.aborted){this.loadError=e instanceof Error?e.message:ui("PDF 打开失败。");new Notice(this.loadError,7000);}});}if(token!==this.revision||opening.signal.aborted)return;this.renderBrief();this.paintHighlights();this.refreshSettings();await this.renderMargin();this.toggleFocus(this.focus);this.scrollAnchor=this.scroller.scrollTop;this.chromeSettleUntil=Date.now()+600;this.setMobileChrome(false);
-    this.resizeObserver=new ResizeObserver(()=>{this.narrow=Platform?.isMobile||this.root.clientWidth<1080;this.root.toggleClass('gloss-narrow',this.narrow);this.restorePosition();this.scheduleLayout();if(!this.lens.hidden)this.placeLens();});
+    this.scroller.addEventListener('scroll',()=>{if(this.restoring)return;this.closeModelMenu();this.captureProgress();this.syncMobileChrome();this.pulseRail();if(!this.railFrame)this.railFrame=this.win.requestAnimationFrame(()=>{this.railFrame=0;this.updateRail();this.updateContentsActive();if(!this.lens.hidden)this.placeLens();});top.toggleClass('is-scrolled',this.scroller.scrollTop>180);this.win.clearTimeout(this.progressTimer);this.progressTimer=this.win.setTimeout(()=>void this.plugin.persist().catch(showError),700);},{passive:true});
+    if(this.pdf){void this.pdf.ready(opening.signal).then(()=>{if(token!==this.revision||opening.signal.aborted)return;this.loadError='';this.syncPdfPage();this.restorePosition();this.scheduleLayout();void this.maybeAutoIndex();}).catch(e=>{if(token===this.revision&&!opening.signal.aborted){this.loadError=e instanceof Error?e.message:ui("PDF 打开失败。");new Notice(this.loadError,7000);}});}if(token!==this.revision||opening.signal.aborted)return;this.renderBrief();this.paintHighlights();this.refreshSettings();await this.renderMargin();this.refreshContentsAffordance();this.toggleFocus(this.focus);this.scrollAnchor=this.scroller.scrollTop;this.chromeSettleUntil=Date.now()+600;this.setMobileChrome(false);
+    this.resizeObserver=new ResizeObserver(()=>{this.narrow=Platform?.isMobile||this.root.clientWidth<1080;this.root.toggleClass('gloss-narrow',this.narrow);this.restorePosition();this.scheduleLayout();this.refreshContentsAffordance();if(!this.lens.hidden)this.placeLens();});
     this.resizeObserver.observe(this.root);this.resizeObserver.observe(this.scroller);this.resizeObserver.observe(this.page);
     this.win.requestAnimationFrame(()=>{if(token===this.revision){this.restorePosition();this.scheduleLayout();if(this.book?.kind==='epub')void this.prepareEpubPagination().catch(()=>{});}});
     this.quietLabels(this.root);this.app.workspace.requestSaveLayout();
@@ -1146,7 +1193,7 @@ class GlossView extends ItemView {
     }catch(error){if(this.revision===revision&&this.path===path)this.briefError=(error instanceof Error?error.message:ui("文章解读失败。"))+(data.brief?ui("（已保留原解读）"):'');}
     finally{if(this.aborter===controller){this.aborter=undefined;this.briefJob=undefined;if(this.path===path&&this.revision===revision&&this.root.isConnected){this.syncComposerBusy();this.root.querySelectorAll<HTMLButtonElement>('.gloss-model-picker').forEach(b=>b.disabled=false);this.renderBrief();await this.renderMargin();}}}
   }
-  applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=s.theme==='auto'?(this.root.ownerDocument.defaultView?.matchMedia('(prefers-color-scheme: dark)').matches?'night':'paper'):({light:'snow',dark:'night'}[s.theme]||s.theme);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-size',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));this.root.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.root.toggleClass('gloss-no-rail',!s.rail);this.syncChrome();this.scheduleLayout();}
+  applyAppearance(){if(!this.root)return;const s=this.plugin.store.settings;this.root.dataset.theme=resolveTheme(s.theme,this.root.ownerDocument.defaultView);this.root.dataset.font=s.font;this.root.dataset.pen=s.pen||'vermilion';this.root.style.setProperty('--read-base',s.fontSize+'px');this.root.style.setProperty('--leading',String(s.lineHeight));this.root.style.setProperty('--measure-k',String(s.measure||32));applyReadingLayout(this.root,!!s.wide);this.root.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');this.root.toggleClass('gloss-show-numbers',!!s.numbers);this.root.toggleClass('gloss-no-rail',!s.rail);this.syncChrome();this.scheduleLayout();}
   private updateMobileViewport(){
     if(!Platform?.isMobile||!this.root)return;
     const doc=this.root.ownerDocument,win=doc.defaultView,viewport=win?.visualViewport;
@@ -1209,9 +1256,9 @@ class GlossView extends ItemView {
     if(this.appearance&&!this.appearance.hidden){this.appearance.hidden=true;this.toggleAppearance();}
     if(this.lens&&!this.lens.hidden&&this.lensMode==='actions')this.showLens('actions');
     if(this.drawerTabs)await this.renderNotebook();
-    this.pruneUiLabels();this.scheduleLayout();
+    this.pruneUiLabels();this.refreshContentsAffordance();this.scheduleLayout();
   }
-  refreshSettings(){this.applyAppearance();void this.maybeAutoIndex();if(!this.root)return;const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.scopeLabel();this.updateContext();this.closeModelMenu();this.refreshModelButtons();if(this.selected&&this.lens&&!this.lens.hidden&&this.lensMode==='actions')this.showLens('actions');}
+  refreshSettings(){this.applyAppearance();void this.maybeAutoIndex();if(!this.root)return;this.refreshContentsAffordance();const scope=this.root.querySelector('.gloss-scope');if(scope)scope.textContent=this.scopeLabel();this.updateContext();this.closeModelMenu();this.refreshModelButtons();if(this.selected&&this.lens&&!this.lens.hidden&&this.lensMode==='actions')this.showLens('actions');}
   async exitReader(){this.indexJob?.abort();this.retrievalJob?.abort();this.captureProgress();this.restoring=true;this.importAborter?.abort();this.pdfModeOverride=undefined;this.pdf?.destroy();this.releasePdfSource();await this.flushDraft();this.toggleFocus(false);const file=this.app.vault.getAbstractFileByPath(this.path);const existing=this.app.workspace.getLeavesOfType(file instanceof TFile&&file.extension==='pdf'?'pdf':file instanceof TFile&&file.extension==='epub'?EPUB_VIEW:'markdown').find(l=>l.getViewState().state?.file===this.path);if(existing){await this.app.workspace.revealLeaf(existing);this.leaf.detach();}else if(file instanceof TFile)await this.leaf.openFile(file,{active:true});}
   /** Leaving the tab hides the reader without dismantling it, so the reading spot and progress survive. */
   private leaveReader(){if(!this.root)return;this.captureProgress();void this.flushDraft().catch(showError);this.root.classList.add('is-away');}
@@ -1223,9 +1270,104 @@ class GlossView extends ItemView {
     if(this.epubPagination?.key===key)return this.epubPagination.promise;this.epubPagination?.controller.abort();const controller=new AbortController();
     const promise=paginateEpub(this.article,this.passages,height,controller.signal).catch(error=>{if(this.epubPagination?.controller===controller)this.epubPagination=undefined;throw error;});this.epubPagination={key,promise,controller};return promise;
   }
+  /** Contents entry: PDFs list pages, phones use the dialog, desktop pins the floating list open. */
   private showContents(){
-    if(this.pdf){const modal=new Modal(this.app);modal.setTitle(ui("PDF 页码"));for(let n=1;n<=this.pdf.total;n++)bindUi(button(modal.contentEl,ui("第 ")+n+ui(" 页"),async()=>{modal.close();await this.pdf?.go(n);},'gloss-contents-item'), {"text":()=>ui("第 ")+n+ui(" 页")});modal.open();return;}
-    const modal=new Modal(this.app);modal.setTitle(ui("文档目录"));modal.modalEl.addClass('gloss-toc-modal');
+    this.plugin.syncLanguage();
+    if(this.pdf){this.showPdfPages();return;}
+    if(Platform?.isMobile||!this.tocFloat||this.tocFloat.hidden){this.showContentsModal();return;}
+    this.setContentsOpen(!this.tocFloat.hasClass('is-open'));
+  }
+  private showPdfPages(){
+    const modal=this.plugin.readerModal(()=>ui("PDF 页码"));
+    for(let n=1;n<=this.pdf.total;n++)bindUi(button(modal.contentEl,ui("第 ")+n+ui(" 页"),async()=>{modal.close();await this.pdf?.go(n);},'gloss-contents-item'), {"text":()=>ui("第 ")+n+ui(" 页")});
+    modal.open();
+  }
+  private setContentsOpen(open:boolean){
+    if(!this.tocFloat||this.tocFloat.hasClass('is-open')===open)return;
+    this.tocFloat.toggleClass('is-open',open);this.tocRail?.setAttribute('aria-expanded',String(open));
+    if(open)this.updateContentsActive(true);
+  }
+  private contentsKey(){return this.revision+'|'+this.path+'|'+this.plugin.store.settings.language+'|'+this.plugin.store.settings.wide;}
+  /** Rebuild the floating contents when the document or language changes; the current heading follows the scroll. */
+  private refreshContentsAffordance(){
+    if(!this.root||!this.tocFloat)return;
+    if(Platform?.isMobile){this.tocFloat.hidden=true;return;}
+    if(this.tocKey!==this.contentsKey()||(!this.pdf&&!this.tocItems.length))this.renderContentsFloat();
+    this.updateContentsActive();
+  }
+  /** The document's headings, shared by the side panel and the dialog; each target resolves to the current DOM. */
+  private contentsEntries():{title:string;page?:string|number;depth:number;section?:number;target:()=>HTMLElement|undefined}[]{
+    const entries:{title:string;page?:string|number;depth:number;section?:number;target:()=>HTMLElement|undefined}[]=[];
+    if(this.book){
+      for(const [index,section] of this.book.sections.entries()){
+        entries.push({title:section.title||ui("（未命名章节）"),page:section.page||undefined,depth:1,section:index,target:()=>this.article?.querySelector<HTMLElement>(`section[data-section-index="${index}"]`)||undefined});
+        let heading=0;
+        for(const block of section.blocks)if(block.kind==='heading'&&block.level&&block.level<=4){
+          heading++;const id=`s${index}-h${heading}`;
+          entries.push({title:block.text,page:block.page||undefined,depth:2,target:()=>this.article?.querySelector<HTMLElement>(`[data-heading-id="${id}"]`)||undefined});
+        }
+      }
+    }
+    if(!entries.length)for(const el of this.blocks)if(/^H[1-6]$/.test(el.tagName))entries.push({title:el.textContent||'',depth:Number(el.tagName[1]),target:()=>el});
+    return entries;
+  }
+  /** A book's own table of contents, flattened for the side panel. */
+  private epubContentsEntries(){
+    const entries:{title:string;page?:string|number;depth:number;section?:number;target:()=>HTMLElement|undefined}[]=[],sections=Array.from(this.article?.querySelectorAll<HTMLElement>('section[data-section-index]')||[]);
+    const walk=(items:BookTocItem[],depth:number)=>{for(const item of items){entries.push({title:item.title,depth:Math.min(depth,3),section:item.section,target:()=>sections[item.section]});walk(item.children,depth+1);}};
+    walk(this.book?.toc||[],1);
+    return entries;
+  }
+  private scrollToContents(entry:{target:()=>HTMLElement|undefined}){
+    const target=entry.target();
+    if(!target)return;
+    target.scrollIntoView({behavior:'instant',block:'start'});
+    this.updateContentsActive();
+  }
+  /** Highlight the last heading that has passed the reading line while the document scrolls. */
+  private updateContentsActive(force=false){
+    if(!this.tocFloat||this.tocFloat.hidden||!this.scroller||!this.tocItems.length)return;
+    const line=this.scroller.getBoundingClientRect().top+100;
+    const tops=this.tocItems.map(item=>{const el=item.target();return el?el.getBoundingClientRect().top:Number.POSITIVE_INFINITY;});
+    const index=Math.max(0,activeTocIndex(tops,line));
+    if(index===this.tocActive&&!force)return;
+    this.tocActive=index;
+    const reveal=(el:HTMLElement|undefined)=>{const box=el?.parentElement;if(!el||!box)return;if(el.offsetTop<box.scrollTop||el.offsetTop+el.offsetHeight>box.scrollTop+box.clientHeight)box.scrollTop=el.offsetTop-box.clientHeight/2;};
+    this.tocItems.forEach((item,i)=>{const current=i===index;item.el.classList.toggle('is-current',current);if(current){item.el.setAttribute('aria-current','location');reveal(item.el);}else item.el.removeAttribute('aria-current');});
+    const tick=this.tocTicks.filter(t=>Number(t.dataset.index)<=index).pop();this.tocTicks.forEach(t=>t.classList.toggle('is-current',t===tick));reveal(tick);
+  }
+  /** Too many lines stop reading as a map, so long books only draw their top-level entries. */
+  private static readonly TOC_TICK_LIMIT=40;
+  private renderContentsFloat(){
+    const float=this.tocFloat;if(!float)return;
+    const epub=this.book?.kind==='epub'&&!!this.book.toc?.length,entries=this.pdf?[]:epub?this.epubContentsEntries():this.contentsEntries();
+    this.tocItems=[];this.tocTicks=[];this.tocActive=-1;this.tocKey=this.contentsKey();float.empty();float.removeClass('is-open');
+    float.hidden=!this.pdf&&!entries.length;if(float.hidden)return;
+    const rail=this.tocRail=button(float,'',()=>this.showContents(),'gloss-toc-rail');rail.setAttribute('aria-expanded','false');
+    bindUi(rail,{"aria-label":()=>ui(this.pdf?"PDF 页码":"文档目录"),"title":()=>ui(this.pdf?"PDF 页码":"文档目录")});
+    if(this.pdf){setIcon(rail.createSpan({cls:'gloss-toc-rail-icon'}),'list');return;}
+    const minDepth=Math.min(...entries.map(entry=>entry.depth)),shown=entries.length>GlossView.TOC_TICK_LIMIT?entries.map((entry,i)=>({entry,i})).filter(({entry})=>entry.depth===minDepth):entries.map((entry,i)=>({entry,i}));
+    for(const {entry,i} of shown.slice(0,GlossView.TOC_TICK_LIMIT*2)){const tick=rail.createSpan({cls:'gloss-toc-tick'});tick.dataset.depth=String(Math.min(3,entry.depth-minDepth+1));tick.dataset.index=String(i);this.tocTicks.push(tick);}
+    const card=float.createDiv({cls:'gloss-toc-card'});
+    bindUi(card.createDiv({cls:'gloss-toc-card-title',text:ui("文档目录")}),{text:()=>ui("文档目录")});
+    const list=card.createDiv({cls:'gloss-toc-list'});
+    const pageLabels:{section:number;el:HTMLElement}[]=[];
+    for(const entry of entries){
+      const row=button(list,'',()=>{this.scrollToContents(entry);this.setContentsOpen(false);},'gloss-toc-item');row.dataset.depth=String(Math.min(3,entry.depth-minDepth+1));
+      row.createSpan({cls:'gloss-toc-title',text:entry.title});row.title=entry.title;
+      if(entry.page!==undefined&&entry.page!==''){row.createSpan({cls:'gloss-toc-dots'});row.createSpan({cls:'gloss-toc-page',text:String(entry.page)});}
+      else if(epub&&entry.section!==undefined){row.createSpan({cls:'gloss-toc-dots'});pageLabels.push({section:entry.section,el:row.createSpan({cls:'gloss-toc-page'})});}
+      this.tocItems.push({el:row,target:entry.target,section:entry.section});
+    }
+    if(!epub)return;
+    const key=this.contentsKey();
+    void this.prepareEpubPagination().then(pages=>{if(this.tocKey!==key)return;for(const label of pageLabels){const page=pages.sectionPages[label.section];if(page)label.el.textContent=String(page);}}).catch(()=>{/* Page numbers stay blank when pagination is unavailable. */});
+  }
+  private showContentsModal(){
+    const modal=this.plugin.readerModal(()=>ui("文档目录"));modal.modalEl.addClass('gloss-toc-modal');
+    // Match the reading paper instead of the host theme, like the shortcut dialog.
+    const theme=this.root?.dataset.theme;if(theme)modal.modalEl.dataset.theme=theme;
+    if(this.root){const palette=getComputedStyle(this.root);for(const key of ['--bg-raised','--ink','--ink-2','--ink-3','--rule','--font-serif','--font-sans'])modal.modalEl.style.setProperty(key,palette.getPropertyValue(key));}
     if(this.book?.kind==='epub'&&this.book.toc?.length){
      modal.modalEl.addClass('gloss-epub-toc');const sections=Array.from(this.article.querySelectorAll<HTMLElement>('section[data-section-index]')),top=this.scroller.getBoundingClientRect().top;let current=0;
      for(const el of sections)if(el.getBoundingClientRect().top<=top+100)current=Number(el.dataset.sectionIndex)||0;
@@ -1238,30 +1380,30 @@ class GlossView extends ItemView {
       if(item.children.length){children=group.createDiv({cls:'gloss-epub-toc-children'});draw(item.children,children);}
      }};draw(this.book.toc,modal.contentEl);modal.open();void this.prepareEpubPagination().then(pages=>{if(!modal.modalEl.isConnected)return;for(const label of pageLabels){const page=pages.sectionPages[label.section];if(page)label.el.textContent=String(page);}status.textContent=ui('共 {0} 页',pages.pageCount);}).catch(()=>{if(modal.modalEl.isConnected)status.textContent=ui('暂时无法计算页码。');});return;
     }
-    const addRow=(title:string,page: number|string|undefined,sub:boolean,action:()=>void)=>{
-     const row=button(modal.contentEl.createDiv({cls:'gloss-toc-item'+(sub?' is-sub':'')}),'',()=>{modal.close();action();},'gloss-toc-item'+(sub?' is-sub':''));
-     row.createSpan({cls:'gloss-toc-title',text:title});
-     if(page!==undefined&&page!==''){row.createSpan({cls:'gloss-toc-dots'});row.createSpan({cls:'gloss-toc-page',text:String(page)});}};
+    const entries=this.contentsEntries();
+    const addRow=(entry:{title:string;page?:string|number;depth:number;target:()=>HTMLElement|undefined})=>{
+     const row=button(modal.contentEl,'',()=>{modal.close();this.scrollToContents(entry);},'gloss-toc-item');row.dataset.depth=String(entry.depth);
+     row.createSpan({cls:'gloss-toc-title',text:entry.title});
+     if(entry.page!==undefined&&entry.page!==''){row.createSpan({cls:'gloss-toc-dots'});row.createSpan({cls:'gloss-toc-page',text:String(entry.page)});}};
     const meta=modal.contentEl.createDiv({cls:'gloss-toc-meta'});meta.hidden=true;
-    let count=0;
-    if(this.book){for(const [index,section] of this.book.sections.entries()){
-     addRow(section.title||ui("（未命名章节）"),section.page||undefined,false,()=>{const target=this.article?.querySelector<HTMLElement>(`section[data-section-index="${index}"]`);if(target)target.scrollIntoView({behavior:'instant',block:'start'});});count++;
-     for(const block of section.blocks)if(block.kind==='heading'&&block.level&&block.level<=4){
-      const headingId=`s${index}-h${section.blocks.filter((b,i)=>i<=section.blocks.indexOf(block)&&b.kind==='heading').length}`;
-      addRow(block.text,block.page||undefined,true,()=>{const target=this.article?.querySelector<HTMLElement>(`[data-heading-id="${headingId}"]`);if(target)target.scrollIntoView({behavior:'instant',block:'start'});});count++;
-     }
-    }}
-    if(!count)this.blocks.forEach(el=>{if(/^H[1-6]$/.test(el.tagName)){addRow(el.textContent||'',undefined,false,()=>{el.scrollIntoView({behavior:'instant',block:'start'});});count++;}});
-    if(!count)modal.contentEl.createEl('p',{cls:'gloss-toc-empty',text:ui("这篇文档没有分节标题。")});
-    else{meta.textContent=ui("共 {0} 项",count);meta.hidden=false;}
-    modal.open();}
-  private toggleAppearance(){if(!this.appearance.hidden){this.appearance.hidden=true;return;}this.appearance.empty();const s=this.plugin.store.settings;bindUi(this.appearance.createDiv({cls:'gloss-pop-title',text:ui("外观配置")}), {"text":()=>ui("外观配置")});const themes=this.appearance.createDiv({cls:'gloss-theme-swatches'});for(const [key,label] of [['auto',ui("跟随系统")],['paper',ui("纸张")],['sepia',ui("暖黄")],['snow',ui("雪白")],['night',ui("夜读")],['ink',ui("墨蓝")]]){const b=button(themes,label,()=>{s.theme=key;this.applyAppearance();themes.querySelectorAll<HTMLButtonElement>('.gloss-theme-swatch').forEach(choice=>{const selected=choice.dataset.theme===key;choice.classList.toggle('is-selected',selected);choice.setAttribute('aria-pressed',String(selected));});void this.plugin.persist().catch(showError);},'gloss-theme-swatch');b.dataset.theme=key;b.classList.toggle('is-selected',s.theme===key);b.setAttribute('aria-pressed',String(s.theme===key));}
-    if(!this.pdf){const faces=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [key,label] of [['serif','Newsreader'],['sans','Schibsted'],['song',ui("宋体")],['system',ui("系统")]])button(faces,label,()=>{s.font=key;this.applyAppearance();void this.plugin.persist().catch(showError);});
-    const size=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(this.iconButton(size,'minus',ui("减小字号"),()=>{s.fontSize=Math.max(15,s.fontSize-1);this.applyAppearance();size.querySelector('.gloss-size-value').textContent=String(s.fontSize);void this.plugin.persist().catch(showError);}), {"label":()=>ui("减小字号")});size.createSpan({cls:'gloss-size-value',text:String(s.fontSize)});bindUi(this.iconButton(size,'plus',ui("增大字号"),()=>{s.fontSize=Math.min(28,s.fontSize+1);this.applyAppearance();size.querySelector('.gloss-size-value').textContent=String(s.fontSize);void this.plugin.persist().catch(showError);}), {"label":()=>ui("增大字号")});
-    const leading=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [[ui("紧凑"),1.5],[ui("标准"),1.64],[ui("宽松"),1.82]]as const)button(leading,label,()=>{s.lineHeight=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
-    const widths=this.appearance.createDiv({cls:'gloss-pop-row'});for(const [label,value]of [[ui("窄"),28],[ui("适中"),32],[ui("宽"),37]]as const)button(widths,label,()=>{s.measure=value;this.applyAppearance();void this.plugin.persist().catch(showError);});
-    }const pens=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(pens.createSpan({text:ui("批注笔色")}), {"text":()=>ui("批注笔色")});for(const [pen,label]of [['vermilion',ui("朱红")],['cobalt',ui("钴蓝")],['moss',ui("苔绿")],['graphite',ui("石墨")]]){const b=button(pens,'',()=>{s.pen=pen;this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-pen-swatch');b.dataset.pen=pen;b.title=label;bindUi(b, {"aria-label":()=>label+ui("批注笔")});}
-    if(!this.pdf){const toggle=(label:string,get:()=>boolean,set:(value:boolean)=>void)=>{const row=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(row.createSpan({text:label}), {"text":()=>label});const sw=button(row,'',()=>{set(!get());sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-switch');sw.createSpan({cls:'gloss-switch-knob'});sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());bindUi(sw, {"aria-label":()=>label});};toggle(ui("段落编号"),()=>s.numbers,value=>s.numbers=value);toggle(ui("左侧预览"),()=>s.rail,value=>s.rail=value);}this.appearance.hidden=false;}
+    for(const entry of entries)addRow(entry);
+    if(!entries.length)modal.contentEl.createEl('p',{cls:'gloss-toc-empty',text:ui("这篇文档没有分节标题。")});
+    else{bindUi(meta,{text:()=>ui("共 {0} 项",entries.length)});meta.textContent=ui("共 {0} 项",entries.length);meta.hidden=false;}
+    modal.open();
+  }
+  private toggleAppearance(){if(!this.appearance.hidden){this.appearance.hidden=true;return;}this.appearance.empty();const s=this.plugin.store.settings;bindUi(this.appearance.createDiv({cls:'gloss-pop-title',text:ui("外观配置")}), {"text":()=>ui("外观配置")});
+    const choices=<T extends string|number>(parent:HTMLElement,items:readonly (readonly [T,string])[],current:()=>T,pick:(value:T)=>void,cls='',label=false)=>{const buttons=items.map(([value,text])=>{const b=button(parent,label?'':text,()=>{pick(value);this.applyAppearance();sync();void this.plugin.persist().catch(showError);},cls);if(label){b.title=text;b.setAttribute('aria-label',text);}return [value,b] as const;});const sync=()=>{for(const [value,b] of buttons){const selected=value===current();b.classList.toggle('is-selected',selected);b.setAttribute('aria-pressed',String(selected));}};sync();return buttons;};
+    for(const [key,b] of choices(this.appearance.createDiv({cls:'gloss-theme-swatches'}),[['auto',ui("跟随系统")],['paper',ui("纸张")],['sepia',ui("暖黄")],['snow',ui("雪白")],['night',ui("夜读")],['ink',ui("墨蓝")]],()=>s.theme,value=>s.theme=value,'gloss-theme-swatch'))b.dataset.theme=key;
+    if(!this.pdf){choices(this.appearance.createDiv({cls:'gloss-pop-row'}),[['serif','Newsreader'],['sans','Schibsted'],['song',ui("宋体")],['system',ui("系统")]],()=>s.font,value=>s.font=value);
+    const size=this.appearance.createDiv({cls:'gloss-pop-row'}),step=(delta:number)=>{s.fontSize=Math.min(28,Math.max(15,s.fontSize+delta));this.applyAppearance();value.textContent=String(s.fontSize);void this.plugin.persist().catch(showError);};bindUi(this.iconButton(size,'minus',ui("减小字号"),()=>step(-1)), {"label":()=>ui("减小字号")});const value=size.createSpan({cls:'gloss-size-value',text:String(s.fontSize),attr:{'aria-live':'polite'}});bindUi(this.iconButton(size,'plus',ui("增大字号"),()=>step(1)), {"label":()=>ui("增大字号")});
+    choices(this.appearance.createDiv({cls:'gloss-pop-row'}),[[1.5,ui("紧凑")],[1.64,ui("标准")],[1.82,ui("宽松")]],()=>s.lineHeight,value=>s.lineHeight=value);
+    choices(this.appearance.createDiv({cls:'gloss-pop-row'}),[[28,ui("窄")],[32,ui("适中")],[37,ui("宽")]],()=>s.measure||32,value=>s.measure=value);
+    }const pens=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(pens.createSpan({text:ui("批注笔色")}), {"text":()=>ui("批注笔色")});for(const [pen,b] of choices(pens,[['vermilion',ui("朱红")],['cobalt',ui("钴蓝")],['moss',ui("苔绿")],['graphite',ui("石墨")]],()=>s.pen||'vermilion',value=>s.pen=value,'gloss-pen-swatch',true))b.dataset.pen=pen;
+    if(!this.pdf){const toggle=(label:string,get:()=>boolean,set:(value:boolean)=>void)=>{const row=this.appearance.createDiv({cls:'gloss-pop-row'});bindUi(row.createSpan({text:label}), {"text":()=>label});const sw=button(row,'',()=>{set(!get());sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());this.applyAppearance();void this.plugin.persist().catch(showError);},'gloss-switch');sw.createSpan({cls:'gloss-switch-knob'});sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(get()));sw.classList.toggle('is-on',get());bindUi(sw, {"aria-label":()=>label});};toggle(ui("段落编号"),()=>s.numbers,value=>s.numbers=value);toggle(ui("左侧预览"),()=>s.rail,value=>s.rail=value);toggle(ui("宽屏模式"),()=>s.wide,value=>s.wide=value);}this.appearance.hidden=false;this.placeAppearance();}
+  /** Anchor the popover under the Aa button and keep it inside the reader in any language or toolbar layout. */
+  private placeAppearance(){const anchor=this.root.querySelector<HTMLElement>('.gloss-aa');if(!anchor)return;const root=this.root.getBoundingClientRect(),a=anchor.getBoundingClientRect(),pop=this.appearance,gap=8,edge=14;
+    const right=Math.max(edge,Math.min(root.right-a.right,root.width-pop.offsetWidth-edge));let top=a.bottom-root.top+gap;if(top+pop.offsetHeight>root.height-edge)top=Math.max(edge,a.top-root.top-gap-pop.offsetHeight);
+    pop.style.setProperty('--appearance-right',right+'px');pop.style.setProperty('--appearance-top',top+'px');}
   private buildRail(){
     this.rail.empty();this.rail.setAttribute('role','slider');bindUi(this.rail, {"aria-label":()=>ui("阅读位置")});this.rail.setAttribute('aria-valuemin','0');this.rail.setAttribute('aria-valuemax','100');
     const lines=this.rail.createDiv({cls:'gloss-rail-lines'});
@@ -1564,7 +1706,7 @@ class GlossView extends ItemView {
   }
   private closeNotePanel(){this.notePanel?.remove();this.notePanel=undefined;}
   private async deletePersonalNote(note:PersonalNote){note.removed=true;try{await this.plugin.persist();}catch(e){delete note.removed;throw e;}await this.renderNotebook();}
-  private answerFooter(card:HTMLElement,thread:Thread,notebook=false){
+  private answerFooter(card:HTMLElement,thread:Thread){
     if(this.aborter&&this.runningThread===thread.id){const foot=card.createDiv({cls:'gloss-answer-controls'});this.answerStop(foot);return;}
     if(thread.messages.at(-1)?.role!=='assistant'||!thread.messages.at(-1).content.trim()){const foot=card.createDiv({cls:'gloss-answer-controls'});bindUi(this.iconButton(foot,'rotate-ccw',ui("重试回答"),()=>this.regenerateThread(thread)), {"label":()=>ui("重试回答")});bindUi(this.iconButton(foot,'trash-2',ui("删除这条问答"),()=>this.deleteThread(thread)), {"label":()=>ui("删除这条问答")});return foot;}
     const foot=card.createDiv({cls:'gloss-card-footer gloss-answer-controls'}),last=thread.messages.at(-1),receipt=foot.createSpan({cls:'gloss-answer-receipt'}),service=this.plugin.store.settings.services.find(s=>s.id===last.serviceId),saved=answerReceipt(last,service?.models.find(m=>m.id===last.model)?.name);bindUi(receipt.createSpan({cls:'gloss-receipt-model',text:last.model?saved.model:ui(saved.model)}), {"text":()=>last.model?saved.model:ui(saved.model)});if(saved.usage){receipt.createSpan({cls:'gloss-receipt-divider',text:'/'});bindUi(receipt.createSpan({cls:'gloss-receipt-tokens',text:receiptText(saved.usage)}), {"text":()=>receiptText(saved.usage)});}receipt.title=last.provider==='Google Translate'?ui(saved.detail):[last.provider,last.model,last.usage?receiptText(tokenDetails(last.usage)):ui(last.model?'服务未返回本轮用量':'这条历史记录没有保存模型或用量，无法补算。')].filter(Boolean).join(' · ');
@@ -1593,7 +1735,7 @@ class GlossView extends ItemView {
         let pair:HTMLElement|undefined;for(const [index,message]of t.messages.entries()){if(message.role==='user'){pair=card.createDiv({cls:'gloss-notebook-pair'});const question=pair.createDiv({cls:'gloss-notebook-qa is-question'});bindUi(question.createSpan({cls:'gloss-notebook-qa-label',text:'Q',attr:{'aria-label':ui("问题")}}), {"aria-label":()=>ui("问题")});question.createEl('p',{text:message.content});}else{pair||=card.createDiv({cls:'gloss-notebook-pair'});const answer=pair.createDiv({cls:'gloss-notebook-qa is-answer'});bindUi(answer.createSpan({cls:'gloss-notebook-qa-label',text:'A',attr:{'aria-label':ui("回答")}}), {"aria-label":()=>ui("回答")});const copy=answer.createDiv({cls:'gloss-notebook-answer-content'}),body=copy.createDiv({cls:'gloss-answer gloss-notebook-clamp markdown-rendered'}),key=t.id+':'+index,expanded=this.notebookAnswers.has(key);body.classList.toggle('is-expanded',expanded);
             if(!message.content&&this.runningThread===t.id&&this.aborter)bindUi(body.createDiv({cls:'gloss-writing',attr:{role:'status','aria-label':ui("正在回答")}}), {"aria-label":()=>ui("正在回答")});else if(message.content){await MarkdownRenderer.render(this.app,passiveEmbeds(message.content),body,this.path,component);if(component!==this.notebookRender)return;this.citeButtons(body,t);}else bindUi(body.createSpan({cls:'gloss-notebook-unanswered',text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});
             const more=bindUi(button(copy,expanded?ui("收起"):ui("展开"),()=>{const open=!body.classList.contains('is-expanded');body.classList.toggle('is-expanded',open);body.classList.toggle('is-over',!open);if(open)this.notebookAnswers.add(key);else this.notebookAnswers.delete(key);more.textContent=open?ui("收起"):ui("展开");},'gloss-notebook-read-more'), {"text":()=>expanded?ui("收起"):ui("展开")});more.hidden=!expanded;this.win.requestAnimationFrame(()=>{if(component!==this.notebookRender||!body.isConnected)return;const over=body.scrollHeight>body.clientHeight+2;body.classList.toggle('is-over',!expanded&&over);more.hidden=!expanded&&!over;});
-          }}if(t.messages.at(-1)?.role==='user'){const status=bindUi(card.createDiv({cls:'gloss-notebook-unanswered',text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});status.setAttribute('role','status');}if(visibleThreadError(t)&&t.messages.at(-1)?.role==='assistant')bindUi(card.createDiv({cls:'gloss-error',text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});this.answerFooter(card,t,true);if(this.narrow&&t.messages.at(-1)?.provider!=='Google Translate')this.renderFollowup(card,t);
+          }}if(t.messages.at(-1)?.role==='user'){const status=bindUi(card.createDiv({cls:'gloss-notebook-unanswered',text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});status.setAttribute('role','status');}if(visibleThreadError(t)&&t.messages.at(-1)?.role==='assistant')bindUi(card.createDiv({cls:'gloss-error',text:ui(visibleThreadError(t)||'')}), {"text":()=>ui(visibleThreadError(t)||'')});this.answerFooter(card,t);if(this.narrow&&t.messages.at(-1)?.provider!=='Google Translate')this.renderFollowup(card,t);
       }}
     if(!entries.length){const empty=this.drawerBody.createDiv({cls:'gloss-notebook-empty'});setIcon(empty.createSpan(),'notebook-pen');bindUi(empty.createEl('p',{text:this.notebookFilter==='questions'?ui("还没有问答"):this.notebookFilter==='highlights'?ui("还没有划线"):this.notebookFilter==='notes'?ui('还没有笔记'):ui("选中一句话，留下问题或划线。")}), {"text":()=>this.notebookFilter==='questions'?ui("还没有问答"):this.notebookFilter==='highlights'?ui("还没有划线"):this.notebookFilter==='notes'?ui('还没有笔记'):ui("选中一句话，留下问题或划线。")});}
     this.quietNotebook();
@@ -1601,13 +1743,15 @@ class GlossView extends ItemView {
   }
   private async renderMargin(){if(!this.margin)return;if(this.marginRender){this.removeChild(this.marginRender);this.marginRender.unload();}this.marginObserver?.disconnect();const component=new Component();this.marginRender=component;this.addChild(component);for(const[id,card]of this.cards)this.previousPositions.set(id,card.style.transform);this.margin.empty();this.leader?.remove();this.leader=undefined;this.win.cancelAnimationFrame(this.leaderFrame);this.cards.clear();
     const notes=this.data.highlights.filter(h=>!h.removed&&h.note&&(!this.pdf||h.anchor.pdfPage===this.pdf.page));
+    // Nothing to show on the side: drop the column so the text column stays centered in the reader.
+    this.root.toggleClass('gloss-no-margin',!hasMarginCards(this.threads,notes));
     for(const t of this.threads){await this.renderThread(this.margin,t,component);if(component!==this.marginRender)return;}
     for(const h of notes)this.renderNote(this.margin,h);
 
     await this.renderNotebook();if(component!==this.marginRender)return;
     this.marginObserver=new ResizeObserver(()=>this.scheduleLayout());for(const card of this.cards.values())this.marginObserver.observe(card);
     // Place the cards in the same pass: a fresh answer block has to be visible without waiting for a frame.
-    this.layoutMargin();}
+    this.layoutMargin();this.refreshContentsAffordance();}
   private scheduleLayout(){this.win.cancelAnimationFrame(this.frame);this.frame=this.win.requestAnimationFrame(()=>this.layoutMargin());}
   private layoutMargin(){if(!this.margin?.isConnected)return;const compose=this.root.querySelector<HTMLElement>('.gloss-composer');if(compose){const r=this.page.getBoundingClientRect(),root=this.root.getBoundingClientRect();compose.style.setProperty('--composer-center',(r.left-root.left+r.width/2)+'px');}const base=this.margin.getBoundingClientRect().top,items:MarginItem[]=[];
     for(const t of this.threads){const card=this.cards.get(t.id);if(!card)continue;const rect=t.anchor?anchorRange(this.blocks,this.passages,this.text,t.anchor)?.getClientRects()[0]:this.article.getBoundingClientRect();const desired=rect?rect.top-base-6:0;items.push({id:t.id,desired:Math.max(0,desired),sourceY:rect?desired:NaN,height:card.offsetHeight||64,created:t.created});}
@@ -1638,12 +1782,6 @@ class GlossView extends ItemView {
     for(const [keys,description] of [[ui("选择文字后输入"),ui("询问选中文本")],['/',ui("新建文档问题")],['J  K',ui("下一段 / 上一段")],['Enter',ui("询问当前段落")],['[  ]',ui("上一条 / 下一条批注")],['B',ui("文章解读 · Markdown / EPUB")],['N',ui("笔记本")],['Shift + N',ui('记一条笔记')],['F',ui("进入 / 退出沉浸阅读")],['Esc',ui("关闭或返回")],['?',ui("快捷键列表")]]){const row=modal.contentEl.createDiv({cls:'gloss-key-row'}),key=row.createSpan();for(const k of keys.split('  '))key.createEl('kbd',{text:k});row.createSpan({text:description});}modal.open();}
 
   private scopeLabel(){return this.readingScope==='rag'?ui("整书检索"):this.readingScope==='page'?ui("当前页"):this.readingScope==='whole'?ui("全文"):this.selected?ui("选中文本及附近"):this.pdf?ui("当前页"):ui("全文");}
-  private chooseReadingScope(){
-    if(this.aborter||this.retrievalJob)return;const modal=new Modal(this.app);modal.setTitle(ui("问答范围"));modal.contentEl.addClass('gr-scope-modal');
-    const choices:[typeof this.readingScope,string,string][]=[['selection',ui("选中文本及附近"),ui("只阅读选中文本和相邻段落")],...(this.pdf?[['page',ui("当前页"),ui("使用当前 PDF 页文字")] as [typeof this.readingScope,string,string]]:[['whole',ui("当前文档全文"),ui("使用全文，超过上下文上限时提示")] as [typeof this.readingScope,string,string]]),['rag',ui("整书检索"),ui("按问题查找本书原文，回答带来源")]];
-    for(const [scope,label,desc]of choices){const b=button(modal.contentEl,'',()=>{this.readingScope=scope;this.activeThread=undefined;this.refreshSettings();modal.close();},'gr-scope-choice');b.createSpan({text:label});b.createSpan({text:desc});b.classList.toggle('is-selected',scope===this.readingScope);}
-    bindUi(button(modal.contentEl,ui("管理本书索引"),()=>{modal.close();return this.showBookIndex();},'gr-settings-button'), {"text":()=>ui("管理本书索引")});modal.open();
-  }
   private stamp(){const f=this.app.vault.getAbstractFileByPath(this.path);if(!(f instanceof TFile)||blockedPath(this.path))throw new Error('当前文档不可用于检索。');return{path:f.path,mtime:f.stat.mtime,size:f.stat.size};}
   private async indexSections(signal:AbortSignal,status:(text:()=>string)=>void):Promise<{sections:SourceSection[];skipped:number}>{
     const sections:SourceSection[]=[];let skipped=0;
@@ -1767,10 +1905,14 @@ class GlossSettings extends PluginSettingTab {
   }
   display(){this.settingsRoot=undefined;this.renderSettings();}
   redraw(){this.renderSettings();if(requireApiVersion('1.13.0'))this.update();}
+  private renderedTab?:string;
   private renderSettings(){
     this.test?.abort();this.test=undefined;
     this.watcher?.();this.watcher=this.plugin.onSettingsChanged(()=>{if(this.suppressRefresh)return;this.renderSettings();});
-    const el=this.settingsRoot||this.containerEl;el.empty();el.addClass('gr-settings');const s=this.plugin.store.settings;
+    const el=this.settingsRoot||this.containerEl,scroller=el.closest?.<HTMLElement>('.vertical-tab-content')||el,keepScroll=this.renderedTab===this.tab?scroller.scrollTop:0;this.renderedTab=this.tab;el.empty();el.addClass('gr-settings');const s=this.plugin.store.settings;
+    try{this.renderSettingsBody(el,s);}finally{scroller.scrollTop=keepScroll;}
+  }
+  private renderSettingsBody(el:HTMLElement,s:Settings){
     const head=el.createDiv({cls:'gr-settings-head'}),identity=head.createDiv({cls:'gr-settings-identity'});
     identity.createSpan({cls:'gr-settings-name',text:'Banana Reader'});identity.createSpan({cls:'gr-settings-version',text:'v'+this.plugin.manifest.version});
     const tabs=bindUi(head.createDiv({cls:'gr-settings-tabs',attr:{role:'tablist','aria-label':ui("Banana Reader 设置")}}), {"aria-label":()=>ui("Banana Reader 设置")});
@@ -1779,8 +1921,10 @@ class GlossSettings extends PluginSettingTab {
     }
     const body=el.createDiv({cls:'gr-settings-body',attr:{id:'gr-settings-panel',role:'tabpanel','aria-labelledby':'gr-tab-'+this.tab}});
     let group=body;const section=(title:string)=>{const card=body.createEl('section',{cls:'gr-settings-group'});this.heading(card,title,'gr-settings-section');group=card.createDiv({cls:'gr-settings-group-body'});return group;};
-    const row=(label:string,description='')=>{const r=group.createDiv({cls:'gr-settings-row'+(description?'':' gr-settings-row-inline')}),info=r.createDiv({cls:'gr-settings-info'});info.createDiv({cls:'gr-settings-label',text:label});if(description)info.createDiv({cls:'gr-settings-description',text:description});return r.createDiv({cls:'gr-settings-controls'});};
+    const infoOf=new WeakMap<HTMLElement,HTMLElement>(),row=(label:string,description='')=>{const r=group.createDiv({cls:'gr-settings-row'+(description?'':' gr-settings-row-inline')}),info=r.createDiv({cls:'gr-settings-info'});info.createDiv({cls:'gr-settings-label',text:label});if(description)info.createDiv({cls:'gr-settings-description',text:description});const controls=r.createDiv({cls:'gr-settings-controls'});infoOf.set(controls,info);return controls;};
     const select=(label:string,description:string,value:string,options:Record<string,string>,change:(v:string)=>void)=>{const d=row(label,description).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':label}});for(const[k,t]of Object.entries(options))d.createEl('option',{value:k,text:t});d.value=value;d.onchange=()=>{change(d.value);void this.save().catch(showError);};};
+    const syncPressed=(parent:HTMLElement,value:string)=>parent.querySelectorAll<HTMLButtonElement>('button[data-value]').forEach(b=>{const on=b.dataset.value===value;b.classList.toggle('is-active',on);b.setAttribute('aria-pressed',String(on));});
+    const swatches=(label:string,cls:string,items:[string,string][],value:string,change:(v:string)=>void)=>{const wrap=row(label).createDiv({cls:'gr-swatches',attr:{role:'group','aria-label':label}});for(const [key,name] of items){const b=button(wrap,'',async()=>{change(key);syncPressed(wrap,key);await this.save();},'gr-swatch '+cls);b.dataset.value=key;b.title=name;b.setAttribute('aria-label',name);}syncPressed(wrap,value);};
     const input=(label:string,desc:string,value:string,placeholder:string,change:(v:string)=>void,type='text')=>{const t=row(label,desc).createEl('input',{cls:'gr-settings-input',attr:{'aria-label':label,type,placeholder}});t.value=value;t.autocomplete='off';t.spellcheck=false;t.onchange=()=>{change(t.value.trim());void this.save().catch(showError);};return t;};
     if(this.tab==='models'){
       this.renderModelsPage(body);this.renderIndexSettings(body);
@@ -1797,21 +1941,24 @@ class GlossSettings extends PluginSettingTab {
       takeover.parentElement?.addClass('gr-settings-row-toggle');
       new ToggleComponent(takeover).setTooltip(ui("接管默认阅读模式")).setValue(s.takeOverReading).onChange(async value=>{s.takeOverReading=value;await this.save();});
       const appearance=section(ui("默认阅读外观"));
-      const preview=appearance.createDiv({cls:'gloss-root gr-reading-preview'});preview.dataset.theme=s.theme==='auto'?'paper':s.theme;preview.dataset.font=s.font;preview.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');bindUi(preview.createDiv({cls:'gr-preview-kicker',text:ui("READING / 阅读预览")}), {"text":()=>ui("READING / 阅读预览")});bindUi(preview.createEl('p',{text:ui("阅读时，让问题自然发生。")}), {"text":()=>ui("阅读时，让问题自然发生。")});bindUi(preview.createSpan({text:ui("选中一句话，留下你的理解。")}), {"text":()=>ui("选中一句话，留下你的理解。")});
-      const papers=row(ui("默认背景")).createDiv({cls:'gr-paper-choices'});for(const [key,label]of [['auto',ui("跟随系统")],['paper',ui("纸张")],['sepia',ui("暖黄")],['snow',ui("雪白")],['night',ui("夜读")],['ink',ui("墨蓝")]]){const b=button(papers,label,async()=>{s.theme=key;await this.save();this.redraw();},'gr-paper-choice');b.dataset.theme=key;b.classList.toggle('is-active',s.theme===key);b.setAttribute('aria-pressed',String(s.theme===key));}
+      const preview=appearance.createDiv({cls:'gloss-root gr-reading-preview'});preview.dataset.theme=resolveTheme(s.theme,el.ownerDocument.defaultView);preview.dataset.font=s.font;preview.style.setProperty('--reader-custom-font',s.customFont||'var(--font-serif)');bindUi(preview.createDiv({cls:'gr-preview-kicker',text:ui("READING / 阅读预览")}), {"text":()=>ui("READING / 阅读预览")});bindUi(preview.createEl('p',{text:ui("阅读时，让问题自然发生。")}), {"text":()=>ui("阅读时，让问题自然发生。")});bindUi(preview.createSpan({text:ui("选中一句话，留下你的理解。")}), {"text":()=>ui("选中一句话，留下你的理解。")});
+      const papers=row(ui("默认背景")).createDiv({cls:'gr-paper-choices'});for(const [key,label]of [['auto',ui("跟随系统")],['paper',ui("纸张")],['sepia',ui("暖黄")],['snow',ui("雪白")],['night',ui("夜读")],['ink',ui("墨蓝")]]){const b=button(papers,label,async()=>{s.theme=key;preview.dataset.theme=resolveTheme(key,el.ownerDocument.defaultView);syncPressed(papers,key);await this.save();},'gr-paper-choice');b.dataset.value=b.dataset.theme=key;}syncPressed(papers,s.theme);
       select(ui("默认字体"),'',s.font,{serif:ui("Newsreader · 书籍衬线"),sans:ui("Schibsted · 清晰无衬线"),song:ui("宋体 · 中文长文"),kai:ui("楷体 · 中文阅读"),system:ui("系统字体"),custom:ui("自定义字体")},v=>{s.font=v;this.redraw();});
       if(s.font==='custom')input(ui("字体名称"),'',s.customFont,ui("例如：LXGW WenKai"),v=>{s.customFont=v;this.redraw();});
-      select(ui("字号"),'',String(s.fontSize),Object.fromEntries(Array.from({length:14},(_,i)=>[String(i+15),(i+15)+' px'])),v=>s.fontSize=Number(v));
+      const size=row(ui("字号")).createDiv({cls:'gr-stepper'}),syncSize=()=>{sizeValue.textContent=s.fontSize+' px';less.disabled=s.fontSize<=15;more.disabled=s.fontSize>=28;},step=(delta:number)=>{s.fontSize=Math.min(28,Math.max(15,s.fontSize+delta));syncSize();void this.save().catch(showError);};
+      const less=this.settingsIcon(size,'minus',ui("减小字号"),()=>step(-1)),sizeValue=size.createSpan({cls:'gr-stepper-value',attr:{'aria-live':'polite'}}),more=this.settingsIcon(size,'plus',ui("增大字号"),()=>step(1));syncSize();
       select(ui("行距"),'',String(s.lineHeight),{'1.5':ui("紧凑 · 1.5"),'1.64':ui("标准 · 1.64"),'1.82':ui("宽松 · 1.82"),[String(s.lineHeight)]:String(s.lineHeight)},v=>s.lineHeight=Number(v));
       select(ui("正文宽度"),'',String(s.measure),{'28':ui("窄"),'32':ui("适中"),'37':ui("宽")},v=>s.measure=Number(v));
+      const wide=row(ui("宽屏模式"),ui("屏幕够宽时放宽正文列、加宽页边批注列；窄屏保持原有排版。"));wide.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(wide).setTooltip(ui("宽屏模式")).setValue(s.wide).onChange(async value=>{s.wide=value;await this.save();});
       const numbers=row(ui("段落编号"),ui("在正文左侧显示段落编号，方便和引用、批注对应。"));numbers.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(numbers).setTooltip(ui("段落编号")).setValue(s.numbers).onChange(async value=>{s.numbers=value;await this.save();});
       const rail=row(ui("左侧预览"),ui("在正文左侧显示文档缩略轨道，可以点按跳转。"));rail.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(rail).setTooltip(ui("左侧预览")).setValue(s.rail).onChange(async value=>{s.rail=value;await this.save();});
       section(ui("默认标记"));select(ui("标记样式"),'',s.markStyle,{highlight:ui("荧光笔"),underline:ui("直线"),wavy:ui("波浪线")},v=>s.markStyle=v as MarkStyle);
-      select(ui("标记颜色"),'',s.marker,{yellow:ui("黄色"),green:ui("绿色"),blue:ui("蓝色"),pink:ui("粉色")},v=>s.marker=v);
-      select(ui("问答批注笔色"),'',s.pen,{vermilion:ui("朱红"),cobalt:ui("钴蓝"),moss:ui("苔绿"),graphite:ui("石墨")},v=>s.pen=v);
+      swatches(ui("标记颜色"),'gr-marker-swatch',[['yellow',ui("黄色")],['green',ui("绿色")],['blue',ui("蓝色")],['pink',ui("粉色")]],s.marker,v=>s.marker=v);
+      swatches(ui("问答批注笔色"),'gr-pen-swatch',[['vermilion',ui("朱红")],['cobalt',ui("钴蓝")],['moss',ui("苔绿")],['graphite',ui("石墨")]],s.pen||'vermilion',v=>s.pen=v);
       section(ui("问答"));const suggestions=row(ui("问题建议"));suggestions.parentElement?.addClass('gr-settings-row-toggle');new ToggleComponent(suggestions).setTooltip(ui("问题建议")).setValue(s.questionSuggestions).onChange(async value=>{s.questionSuggestions=value;await this.save();});
-      section(ui("问答范围"));select(ui("新问题默认范围"),'',s.context,{nearby:ui("选中文本及相邻段落"),whole:ui("当前文档全文")},v=>s.context=v);
-      const limit=input(ui("上下文上限"),'',String(s.maxContext),'60000',()=>{} ,'number');limit.min='1000';limit.max='300000';limit.onchange=()=>{const n=Number(limit.value);if(Number.isInteger(n)&&n>=1000&&n<=300000){s.maxContext=n;void this.save().catch(showError);}else{limit.value=String(s.maxContext);new Notice(ui("请输入1,000–300,000之间的整数。"));}};
+      select(ui("新问题默认范围"),'',s.context,{nearby:ui("选中文本及相邻段落"),whole:ui("当前文档全文")},v=>s.context=v);
+      const limit=input(ui("上下文上限"),ui("按字符计算，本轮原文与对话合计不超过此值，范围 1,000–300,000。"),String(s.maxContext),'60000',()=>{} ,'number');limit.min='1000';limit.max='300000';limit.step='1000';const limitError=infoOf.get(limit.parentElement).createDiv({cls:'gr-settings-description gr-settings-error',attr:{role:'status','aria-live':'polite'}});
+      limit.onchange=()=>{const n=Number(limit.value);if(Number.isInteger(n)&&n>=1000&&n<=300000){limitError.textContent='';limit.removeAttribute('aria-invalid');s.maxContext=n;void this.save().catch(showError);}else{limit.value=String(s.maxContext);limit.setAttribute('aria-invalid','true');limitError.textContent=ui("请输入1,000–300,000之间的整数。");}};
     }
   }
   private activeService?:string;
@@ -1827,24 +1974,26 @@ class GlossSettings extends PluginSettingTab {
     mirrors.addEventListener('change',()=>{const list=parseMirrorList(mirrors.value);if(!list.length){new Notice(ui("至少保留一个有效的镜像地址。"));mirrors.value=s.zlibMirrors.join('\n');return;}s.zlibMirrors=list;void this.save().catch(showError);});
     const activeRow=group.createDiv({cls:'gr-settings-row'}),activeInfo=activeRow.createDiv({cls:'gr-settings-info'});
     bindUi(activeInfo.createDiv({cls:'gr-settings-label',text:ui("当前镜像")}), {"text":()=>ui("当前镜像")});
-    bindUi(activeInfo.createDiv({cls:'gr-settings-description',text:s.zlibDomain}), {"text":()=>this.plugin.store.settings.zlibDomain});
-    const probeStatus=group.createDiv({cls:'gr-settings-description gr-zlib-probe-status'});probeStatus.hidden=true;
+    const activeDomain=bindUi(activeInfo.createDiv({cls:'gr-settings-description',text:s.zlibDomain}), {"text":()=>this.plugin.store.settings.zlibDomain});
+    const probeStatus=group.createDiv({cls:'gr-settings-description gr-zlib-probe-status',attr:{role:'status','aria-live':'polite'}});probeStatus.hidden=true;
     const probeControls=activeRow.createDiv({cls:'gr-settings-controls'}),probeButton=bindUi(button(probeControls,ui("探测镜像"),async()=>{
      probeButton.disabled=true;probeStatus.hidden=false;probeStatus.textContent=ui("正在探测…");
-     const probes=await Promise.all(this.plugin.store.settings.zlibMirrors.map(domain=>probeMirror(domain,zlibRequest)));
-     const best=probes.filter(item=>item.ok).sort((a,b)=>a.ms-b.ms)[0];
-     if(best){this.plugin.store.settings.zlibDomain=best.domain;await this.save().catch(showError);this.redraw();return;}
-     probeStatus.textContent=probes.map(item=>item.domain.replace(/^https:\/\//,'')+' · '+(item.ok?ui("可用")+' · '+item.ms+' ms':ui("失败")+(item.error?' · '+item.error:''))).join('\n');
-     probeButton.disabled=false;
+     try{
+      const probes=await Promise.all(this.plugin.store.settings.zlibMirrors.map(domain=>probeMirror(domain,zlibRequest)));
+      const best=probes.filter(item=>item.ok).sort((a,b)=>a.ms-b.ms)[0];
+      if(best){this.plugin.store.settings.zlibDomain=best.domain;await this.save();activeDomain.textContent=best.domain;probeStatus.textContent=ui("已切换到 {0} · {1} ms",best.domain.replace(/^https:\/\//,''),best.ms);return;}
+      probeStatus.textContent=probes.map(item=>item.domain.replace(/^https:\/\//,'')+' · '+(item.ok?ui("可用")+' · '+item.ms+' ms':ui("失败")+(item.error?' · '+item.error:''))).join('\n');
+     }catch(error){probeStatus.textContent=ui(error instanceof Error?error.message:'测试失败');}
+     finally{probeButton.disabled=false;}
     },'gr-settings-button'), {"text":()=>ui("探测镜像")});
-    field(ui("下载目录"),ui("下载的书籍保存到库内此文件夹；隐私目录仍不进入阅读器。"),s.zlibFolder,'收集箱',v=>{s.zlibFolder=v||'收集箱';});
+    field(ui("下载目录"),ui("下载的书籍保存到库内此文件夹；隐私目录仍不进入阅读器。"),s.zlibFolder,workspacePaths().booksDir,v=>{s.zlibFolder=v||workspacePaths().booksDir;});
     const credentialRow=group.createDiv({cls:'gr-settings-row'}),credentialInfo=credentialRow.createDiv({cls:'gr-settings-info'});
     bindUi(credentialInfo.createDiv({cls:'gr-settings-label',text:ui("Z-Library 登录")}), {"text":()=>ui("Z-Library 登录")});
     bindUi(credentialInfo.createDiv({cls:'gr-settings-description',text:ui("登录凭据保存在 Obsidian 密钥存储，不会写入插件数据文件。")}), {"text":()=>ui("登录凭据保存在 Obsidian 密钥存储，不会写入插件数据文件。")});
     const controls=credentialRow.createDiv({cls:'gr-settings-controls gr-zlib-credential'}),statusSpan=controls.createSpan({cls:'gr-zlib-credential-status',text:this.plugin.zlibCredentials().userId?ui("已登录"):ui("未登录")});
     bindUi(statusSpan, {"text":()=>this.plugin.zlibCredentials().userId?ui("已登录"):ui("未登录")});
     bindUi(button(controls,ui("账号登录"),()=>new ZLibraryModal(this.app,this.plugin).open(),'gr-settings-button'), {"text":()=>ui("账号登录")});
-    bindUi(button(controls,ui("清除登录"),()=>{this.plugin.saveZlibCredentials({userId:'',userKey:''});statusSpan.textContent=ui("未登录");},'gr-settings-button'), {"text":()=>ui("清除登录")});
+    const signOut=bindUi(button(controls,ui("清除登录"),async()=>{if(!await confirmAction(this.app,ui("清除 Z-Library 登录？"),ui("将删除保存的 Z-Library 登录凭据，之后下载需要重新登录。"),ui("清除登录")))return;this.plugin.saveZlibCredentials({userId:'',userKey:''});statusSpan.textContent=ui("未登录");signOut.disabled=true;},'gr-settings-button'), {"text":()=>ui("清除登录")});signOut.disabled=!this.plugin.zlibCredentials().userId;
     bindUi(section.createDiv({cls:'gr-settings-description',text:ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")}), {"text":()=>ui("搜索词与下载请求会发送到你配置的 Z-Library 镜像站点；下载结果保存到上面的目录。请仅获取你有权获取的资源。")});
   }
   private renderWereadSource(body:HTMLElement){
@@ -1911,7 +2060,7 @@ class GlossSettings extends PluginSettingTab {
   private renderExportSettings(body:HTMLElement){
     const section=body.createEl('section',{cls:'gr-settings-group'});this.heading(section,ui("阅读笔记"),'gr-settings-section');
     const group=section.createDiv({cls:'gr-settings-group-body'}),row=group.createDiv({cls:'gr-settings-row'}),info=row.createDiv({cls:'gr-settings-info'});
-    info.createDiv({cls:'gr-settings-label',text:ui("Markdown 导出目录")});info.createDiv({cls:'gr-settings-description',text:ui("每次导出在此目录新建 Markdown 笔记。默认使用收集箱；留空使用笔记库根目录。")});
+    info.createDiv({cls:'gr-settings-label',text:ui("Markdown 导出目录")});info.createDiv({cls:'gr-settings-description',text:ui("每次导出在此目录新建 Markdown 笔记。默认使用笔记；留空使用笔记库根目录。")});
     const controls=row.createDiv({cls:'gr-settings-controls gr-shelf-folder-controls'}),folder=controls.createEl('input',{cls:'gr-settings-input',attr:{type:'text','aria-label':ui("Markdown 导出目录"),placeholder:ui("笔记库根目录")}});folder.value=this.plugin.store.settings.exportFolder;folder.autocomplete='off';folder.spellcheck=false;
     const browse=button(controls,ui("选择文件夹"),()=>new ShelfFolderPicker(this.app,node=>save(node.path),ui("选择 Markdown 导出目录…")).open(),'gr-settings-button');
     const status=group.createDiv({cls:'gr-settings-description gr-shelf-save-status',attr:{role:'status','aria-live':'polite'}});
@@ -1931,7 +2080,7 @@ class GlossSettings extends PluginSettingTab {
     const modelsHead=panel.createDiv({cls:'gr-service-model-head'});bindUi(modelsHead.createSpan({text:ui("已添加模型")}), {"text":()=>ui("已添加模型")});bindUi(button(modelsHead,ui("获取模型"),()=>this.manageServiceModels(service,true),'gr-settings-button'), {"text":()=>ui("获取模型")});
     const list=panel.createDiv({cls:'gr-service-models'});
     if(!service.models.length){const empty=list.createDiv({cls:'gr-service-model-empty'});bindUi(empty.createSpan({text:ui("还没有添加模型")}), {"text":()=>ui("还没有添加模型")});bindUi(button(empty,ui("获取并选择模型"),()=>this.manageServiceModels(service,true),'gr-settings-button gr-ghost'), {"text":()=>ui("获取并选择模型")});}
-    for(const model of service.models){const row=list.createDiv({cls:'gr-saved-model'});setIcon(row.createSpan({cls:'gr-saved-model-icon'}),'box');const copy=row.createDiv({cls:'gr-saved-model-copy'});copy.createSpan({cls:'gr-model-name',text:model.name});bindUi(copy.createSpan({cls:'gr-model-id',text:model.id+' · '+(model.type==='embedding'?ui("嵌入"):ui("聊天"))}), {"text":()=>model.id+' · '+(model.type==='embedding'?ui("嵌入"):ui("聊天"))});const uses=Object.entries(this.plugin.taskModels()).filter(([key,ref])=>(key!=='translate'||s.translationEngine==='model')&&ref?.serviceId===service.id&&ref.modelId===model.id).map(([key])=>({default:ui("问答"),translate:ui("翻译"),summary:ui("总结"),embedding:ui("嵌入")}[key]||s.commands.find(c=>c.id===key)?.name||ui("指令")));if(uses.length)row.createSpan({cls:'gr-model-use-badge',text:uses.join(' · ')});this.settingsIcon(row,'pencil',ui("编辑模型 ")+model.name,()=>this.renameServiceModel(service,model));this.settingsIcon(row,'x',ui("移除 ")+model.name,async()=>{service.models=service.models.filter(m=>m.id!==model.id);pruneAssignments(s);await this.save();this.redraw();});}
+    for(const model of service.models){const row=list.createDiv({cls:'gr-saved-model'});setIcon(row.createSpan({cls:'gr-saved-model-icon'}),'box');const copy=row.createDiv({cls:'gr-saved-model-copy'});copy.createSpan({cls:'gr-model-name',text:model.name});bindUi(copy.createSpan({cls:'gr-model-id',text:model.id+' · '+(model.type==='embedding'?ui("嵌入"):ui("聊天"))}), {"text":()=>model.id+' · '+(model.type==='embedding'?ui("嵌入"):ui("聊天"))});const uses=Object.entries(this.plugin.taskModels()).filter(([key,ref])=>(key!=='translate'||s.translationEngine==='model')&&ref?.serviceId===service.id&&ref.modelId===model.id).map(([key])=>({default:ui("问答"),translate:ui("翻译"),summary:ui("总结"),embedding:ui("嵌入")}[key]||s.commands.find(c=>c.id===key)?.name||ui("指令")));if(uses.length)row.createSpan({cls:'gr-model-use-badge',text:uses.join(' · ')});this.settingsIcon(row,'pencil',ui("编辑模型 ")+model.name,()=>this.renameServiceModel(service,model));this.settingsIcon(row,'x',ui("移除 ")+model.name,async()=>{if(!await confirmAction(this.app,ui("移除模型“{0}”？",model.name),ui("移除后会清除该模型的任务分配。已有阅读对话会保留。"),ui("移除模型")))return;service.models=service.models.filter(m=>m.id!==model.id);pruneAssignments(s);await this.save();this.redraw();});}
     const footer=panel.createDiv({cls:'gr-service-model-footer'});bindUi(button(footer,ui("手动添加模型"),()=>this.manageServiceModels(service,false),'gr-settings-button gr-ghost'), {"text":()=>ui("手动添加模型")});
   }
   private renderIndexSettings(body:HTMLElement){
@@ -1940,7 +2089,7 @@ class GlossSettings extends PluginSettingTab {
     const model=bindUi(row(ui("索引模型")).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui("索引模型")}}), {"aria-label":()=>ui("索引模型")}),choices=availableChoices(s,'embedding');model.createEl('option',{value:'',text:''});for(const choice of choices)model.createEl('option',{value:JSON.stringify([choice.serviceId,choice.id]),text:choice.serviceName+' · '+choice.name});const ref=this.plugin.taskModels().embedding;model.value=ref?JSON.stringify([ref.serviceId,ref.modelId]):'';model.onchange=()=>{if(model.value){const [serviceId,modelId]=arrayValue(JSON.parse(model.value));if(typeof serviceId==='string'&&typeof modelId==='string')this.plugin.taskModels().embedding={serviceId,modelId};}else delete this.plugin.taskModels().embedding;void this.save().then(()=>this.redraw()).catch(showError);};
     const autoControls=row(ui("自动建立索引"));autoControls.parentElement?.addClass('gr-settings-row-toggle');const auto=new ToggleComponent(autoControls);auto.setValue(e.autoIndex).onChange(value=>{e.autoIndex=value;void this.save().catch(showError);});bindUi(auto.toggleEl, {"aria-label":()=>ui("自动建立索引")});
     const top=bindUi(row(ui("参考片段")).createEl('select',{cls:'gr-settings-input',attr:{'aria-label':ui("参考片段")}}), {"aria-label":()=>ui("参考片段")});for(const count of [4,6,8,12])bindUi(top.createEl('option',{value:String(count),text:count+ui(" 处")}), {"text":()=>count+ui(" 处")});top.value=String(e.topK);top.onchange=()=>{e.topK=Number(top.value);void this.save().catch(showError);};
-    const test=bindUi(button(row(ui("连接")),ui("测试连接"),async()=>{test.disabled=true;const controller=this.test=new AbortController();try{const connection=this.plugin.embeddingConnection();await embedTexts(connection.settings,connection.key,['阅读检索连接测试'],controller.signal);if(!controller.signal.aborted)new Notice(ui("嵌入模型连接成功"));}finally{test.disabled=!this.plugin.taskModels().embedding;}},'gr-settings-button'), {"text":()=>ui("测试连接")});test.disabled=!choices.some(c=>c.serviceId===ref?.serviceId&&c.id===ref?.modelId);
+    const test=bindUi(button(row(ui("连接")),ui("测试连接"),async()=>{test.disabled=true;this.test?.abort();const controller=this.test=new AbortController();try{const connection=this.plugin.embeddingConnection();await embedTexts(connection.settings,connection.key,['阅读检索连接测试'],controller.signal);if(!controller.signal.aborted)new Notice(ui("嵌入模型连接成功"));}catch(error){if(!controller.signal.aborted)throw error;}finally{test.disabled=!this.plugin.taskModels().embedding;if(this.test===controller)this.test=undefined;}},'gr-settings-button'), {"text":()=>ui("测试连接")});test.disabled=!choices.some(c=>c.serviceId===ref?.serviceId&&c.id===ref?.modelId);
     bindUi(section.createDiv({cls:'gr-settings-description',text:ui("自动索引仅处理当前沉浸阅读文档，文字会发送至所选服务。也可点击 PDF 或阅读顶部的索引按钮。")}), {"text":()=>ui("自动索引仅处理当前沉浸阅读文档，文字会发送至所选服务。也可点击 PDF 或阅读顶部的索引按钮。")});
   }
   private settingsIcon(parent:HTMLElement,icon:string,label:string,action:()=>void|Promise<void>){const b=button(parent,'',action,'gr-settings-icon');setIcon(b,icon);const id='reader-label-'+uid();b.createSpan({cls:'gloss-sr-only',text:label,attr:{id}});b.setAttribute('aria-labelledby',id);return b;}
@@ -1962,7 +2111,7 @@ class GlossSettings extends PluginSettingTab {
     }
   }
   private editService(existing?:ModelService){
-    const draft:ModelService=existing?{...existing,models:[...existing.models]}:newService(Platform?.isMobile?'api':'codex',uid()),modal=new Modal(this.app);modal.setTitle(existing?ui("编辑服务"):ui("添加模型服务"));modal.modalEl.addClass('gr-model-dialog','gr-service-dialog');modal.contentEl.addClass('gr-model-modal','gr-service-editor');
+    const draft:ModelService=existing?{...existing,models:[...existing.models]}:newService(Platform?.isMobile?'api':'codex',uid()),modal=new Modal(this.app);modal.setTitle(existing?ui("编辑服务"):ui("添加模型服务"));modal.modalEl.addClass('gr-model-dialog','gr-service-dialog');modal.contentEl.addClass('gr-model-modal','gr-service-editor');let testRun:AbortController|undefined;modal.onClose=()=>{testRun?.abort();testRun=undefined;};
     const kinds=modal.contentEl.createDiv({cls:'gr-service-types'}),form=modal.contentEl.createDiv();let kind=draft.kind;const nativeSecrets=!!this.app.secretStorage&&typeof SecretComponent==='function';const drafts=new Map<ServiceKind,{name:string;path:string;base:string;protocol:ApiProtocol;key:string;secretRef:string}>();let collect:()=>void=()=>{};
     const draw=()=>{kinds.empty();form.empty();const values=drafts.get(kind)||{name:existing?.name||ui(SERVICE_NAMES[kind]),path:draft.path,base:kind==='api'?draft.base:'',protocol:draft.protocol,key:!nativeSecrets&&existing?this.plugin.serviceKey(existing.id):'',secretRef:existing?.secretRef??(existing&&this.app.secretStorage?.getSecret('reader-'+existing.id)?'reader-'+existing.id:'')};
       for(const value of (Platform?.isMobile?['api']:['codex','claude','pi','api'])as ServiceKind[]){const b=button(kinds,'',()=>{collect();kind=value;draw();},'gr-service-type');setIcon(b.createSpan(),SERVICE_ICONS[value]);bindUi(b.createSpan({text:ui(SERVICE_NAMES[value])}), {"text":()=>ui(SERVICE_NAMES[value])});b.classList.toggle('is-active',value===kind);b.setAttribute('aria-pressed',String(value===kind));b.disabled=!!existing||(Platform?.isMobile&&value!=='api');}
@@ -1972,12 +2121,13 @@ class GlossSettings extends PluginSettingTab {
       const testRow=form.createDiv({cls:'gr-connection-row'}),testStatus=testRow.createSpan({cls:'gr-settings-description',attr:{role:'status','aria-live':'polite'}});
       const testButton=bindUi(button(testRow,ui("测试连接"),async()=>{
         const baseValue=base?.value.trim()||'',protocolValue=(protocol?.value||'openai')as ApiProtocol,keyValue=nativeSecrets?(secretRef?this.app.secretStorage?.getSecret(secretRef)||'':''):(key?.value||'').trim();
-        testButton.disabled=true;testStatus.textContent=ui("正在测试…");
-        try{const report=await testApiService({provider:'api',codexPath:'',codexModel:'',apiBase:baseValue,apiModel:'',apiKey:keyValue,apiProtocol:protocolValue},new AbortController().signal);
+        testButton.disabled=true;testStatus.textContent=ui("正在测试…");testRun?.abort();const controller=testRun=new AbortController();
+        try{const report=await testApiService({provider:'api',codexPath:'',codexModel:'',apiBase:baseValue,apiModel:'',apiKey:keyValue,apiProtocol:protocolValue},controller.signal);
+          if(controller.signal.aborted)return;
           testStatus.textContent=this.apiTestMessage(report);
           if(report.suggestion&&base){base.value=report.suggestion;testStatus.textContent+=' '+ui('已改用可用地址。');}
-        }catch(error){testStatus.textContent=ui(error instanceof Error?error.message:'测试失败');}
-        finally{testButton.disabled=false;}
+        }catch(error){if(!controller.signal.aborted)testStatus.textContent=ui(error instanceof Error?error.message:'测试失败');}
+        finally{testButton.disabled=false;if(testRun===controller)testRun=undefined;}
       },'gr-settings-button'),{"text":()=>ui("测试连接")});
       bindUi(testRow.createDiv({cls:'gr-settings-description',text:ui('测试会向该地址发起一次请求，不会保存设置。')}),{'text':()=>ui('测试会向该地址发起一次请求，不会保存设置。')});}
       else path=field(ui("可执行文件路径"),values.path,ui("自动查找，无需填写"));
@@ -1998,7 +2148,6 @@ class GlossSettings extends PluginSettingTab {
     const footer=modal.contentEl.createDiv({cls:'gr-settings-footer'});bindUi(button(footer,ui("取消"),()=>modal.close(),'gr-settings-button'), {"text":()=>ui("取消")});bindUi(button(footer,ui("添加所选模型"),async()=>{const s=this.plugin.store.settings;service.models=available.filter(m=>selected.has(m.id));pruneAssignments(s);await this.save();modal.close();this.redraw();},'gr-settings-button is-primary'), {"text":()=>ui("添加所选模型")});modal.open();draw();if(fetchNow)fetch.click();else id.focus();
   }
   private modelLabel(ref:ModelRef|null|undefined){if(!ref)return ui("默认");const service=this.plugin.store.settings.services.find(s=>s.id===ref.serviceId),model=service?.models.find(m=>m.id===ref.modelId);return model?model.name:ui("重新选择模型");}
-  private chooseTaskModel(task:string,done:()=>void){new ModelAssignmentPicker(this.app,this.plugin.modelSetup(),task!=='default',async ref=>{if(ref)this.plugin.taskModels()[task]=ref;else delete this.plugin.taskModels()[task];await this.save();done();},this.plugin.taskModels()[task]).open();}
   private renderCommands(body:HTMLElement){
     const s=this.plugin.store.settings;const base=body.createEl('section',{cls:'gr-settings-group'});bindUi(this.heading(base,ui("阅读提示词"),'gr-settings-section'), {"text":()=>ui("阅读提示词")});const prompts=base.createDiv({cls:'gr-settings-group-body'});for(const [id,name,description]of [['default',ui("默认问答"),ui("阅读提问与追问")],['summary',ui("文章解读"),ui("全文概览、论点与段落地图")]]){const row=prompts.createDiv({cls:'gr-command-row'}),copy=row.createDiv({cls:'gr-command-copy'});copy.createDiv({cls:'gr-settings-label',text:name});bindUi(copy.createDiv({cls:'gr-command-preview',text:description+' · '+(this.plugin.taskModels()[id]?this.modelLabel(this.plugin.taskModels()[id]):id==='default'?ui("选择模型"):ui("默认"))}), {"text":()=>description+' · '+(this.plugin.taskModels()[id]?this.modelLabel(this.plugin.taskModels()[id]):id==='default'?ui("选择模型"):ui("默认"))});bindUi(button(row,ui("编辑"),()=>this.editCommand({id,name,prompt:s.taskPrompts[id]||(id==='default'?SYSTEM:'请概述文章要旨、关键论点与阅读提醒。')},true),'gr-settings-button'), {"text":()=>ui("编辑")});}
     const card=body.createEl('section',{cls:'gr-settings-group gr-commands-group'}),head=card.createDiv({cls:'gr-command-heading'});body=card;bindUi(this.heading(head,ui("选中文本指令 {0} / {1}",s.commands.length,MAX_COMMANDS),'gr-settings-section'), {"text":()=>ui("选中文本指令 {0} / {1}",s.commands.length,MAX_COMMANDS)});

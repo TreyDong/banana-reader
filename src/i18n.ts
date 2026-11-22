@@ -6,9 +6,22 @@ export function resolveLanguage(preference:unknown,hostLanguage:string):UiLangua
  const choice=normalizeLanguage(preference);return choice==='auto'?(/^zh(?:[-_]|$)/i.test(hostLanguage)?'zh-CN':'en'):choice;
 }
 let language:UiLanguage='zh-CN';
-export function configureLanguage(preference:unknown,hostLanguage:string){language=resolveLanguage(preference,hostLanguage);return language;}
+export function configureLanguage(preference:unknown,hostLanguage:string){
+ const choice=normalizeLanguage(preference);
+ // The host can report no language while it starts up; keep the last resolved one instead of falling back to English.
+ language=choice==='auto'&&!hostLanguage?language:resolveLanguage(choice,hostLanguage);
+ return language;
+}
 export function currentLanguage(){return language;}
 export const ENGLISH:Readonly<Record<string,string>> = {
+  "收集箱": "Inbox",
+  "已切换到 {0} · {1} ms": "Switched to {0} · {1} ms",
+  "清除 Z-Library 登录？": "Sign out of Z-Library?",
+  "将删除保存的 Z-Library 登录凭据，之后下载需要重新登录。": "The saved Z-Library credentials will be deleted. You'll need to sign in again to download.",
+  "移除模型“{0}”？": "Remove model “{0}”?",
+  "移除后会清除该模型的任务分配。已有阅读对话会保留。": "Its task assignments will be cleared. Existing reading conversations are kept.",
+  "移除模型": "Remove model",
+  "按字符计算，本轮原文与对话合计不超过此值，范围 1,000–300,000。": "Counted in characters. Source text plus conversation per turn stays under this limit, between 1,000 and 300,000.",
   "记笔记": "Write a note",
   "我的笔记": "My notes",
   "保存笔记": "Save note",
@@ -24,7 +37,7 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "接管默认阅读模式": "Take over the reading view",
   "开启后，点击 Obsidian 自带的阅读视图切换按钮时，改用 Banana Reader 打开当前笔记。受隐私保护的目录不会被接管。": "When enabled, clicking Obsidian's own reading-view button opens the note in Banana Reader instead. Notes in protected folders are never taken over.",
   "Markdown 导出目录": "Markdown export folder",
-  "每次导出在此目录新建 Markdown 笔记。默认使用收集箱；留空使用笔记库根目录。": "Each export creates a new Markdown note in this folder. The default is the inbox folder; leave empty for the vault root.",
+  "每次导出在此目录新建 Markdown 笔记。默认使用笔记；留空使用笔记库根目录。": "Each export creates a new Markdown note in this folder. The default is the notes folder; leave empty for the vault root.",
   "笔记库根目录": "Vault root",
   "选择 Markdown 导出目录…": "Choose a Markdown export folder…",
   "导出目录已保存。": "Export folder saved.",
@@ -59,6 +72,9 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "查看注释": "View note",
   "注释": "Note",
   "展开或收起目录": "Expand or collapse contents",
+  "打开文档目录": "Open table of contents",
+  "收起目录": "Collapse contents",
+  "目录": "Contents",
   "当前读到": "Currently reading",
   "正在计算页码…": "Calculating pages…",
   "共 {0} 页": "{0} pages",
@@ -235,7 +251,7 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "开始阅读": "Start reading",
   "继续阅读": "Continue reading",
   "放回去 · Esc": "Put it back · Esc",
-  "提问，或直接输入…": "Ask, or just start typing…",
+  "提问，或直接输入…": "Ask, or start typing…",
   "向选中文本提问": "Ask about the selection",
   "未开始": "Not started",
   "原版页面": "Original pages",
@@ -397,7 +413,6 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "复制": "Copy",
   "管理指令": "Manage commands",
   "移除标记": "Remove mark",
-  "目录": "Contents",
   "移除这处划线": "Remove this mark",
   "全文问答": "Document Q&A",
   "收起": "Collapse",
@@ -526,6 +541,8 @@ export const ENGLISH:Readonly<Record<string,string>> = {
   "在正文左侧显示段落编号，方便和引用、批注对应。": "Show paragraph numbers on the left of the text so they line up with citations and notes.",
   "左侧预览": "Side preview",
   "在正文左侧显示文档缩略轨道，可以点按跳转。": "Show the document thumbnail rail on the left; click a line to jump to that paragraph.",
+  "宽屏模式": "Wide screen",
+  "屏幕够宽时放宽正文列、加宽页边批注列；窄屏保持原有排版。": "On a wide screen, widen the text column and the margin note column; narrow screens keep the current layout.",
   "隐藏": "Hide",
   "显示": "Show",
   "默认标记": "Default marks",

@@ -12,9 +12,10 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 ## Features
 
-- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
+- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a floating table of contents on the right edge and adjustable appearance. On desktop, heading lines open into the full list on hover or click, and appearance, notes and questions sit in floating buttons at the bottom right. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
+- **Use a wide screen:** turn on **Wide screen** under **Settings → Banana Reader → Appearance → Default reading**, or from the reader's **Aa** panel. From 1200 px up, the text column takes the width left after the number gutter, the margin note column and the side padding, so it fills the reader; from 1440 px the margin column widens too, and on very wide displays the type size steps up with the column while the line stays at 50–60 characters. Readers below 1200 px keep the current layout. In either mode, a document with no margin notes no longer reserves the margin column, so its text stays centered.
 - **Highlight and annotate:** mark text in different styles and colors, write notes, and revisit them in the reading notebook.
-- **Write your own notes:** use the reader toolbar, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
+- **Write your own notes:** use the floating note button, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
 - **Ask about a passage:** explain, translate, or ask your own questions; follow citations back to the source.
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.
@@ -42,6 +43,12 @@ Select text to highlight it, add a note, or ask a question. Open the reading not
 Reading, highlighting, and export do not require an AI account. For AI features, add a service under **Settings → Banana Reader → Model services**, select or add a model, and assign it to the task. With LM Studio on the same computer, start its local server, choose **OpenAI compatible**, and use its displayed base URL (typically `http://localhost:1234/v1`) and model ID.
 
 For setup details and format limits, see the [Chinese user guide](docs/guide.zh-CN.md).
+
+## Workspace paths
+
+On desktop, the plugin reads `~/.config/banana/workspace.json` (version 1) for the matching vault. New downloads use `materialFolders.books`, the bookshelf scans `materialsDir`, and exported reading notes use `notesDir`. Mobile uses the current portable defaults. Existing custom folder settings take precedence; recognized legacy defaults are updated. The bookshelf keeps its saved file-type filters. Diary, company, and investment folders are excluded from reading, indexing, and AI requests, including restored views and old diary locations.
+
+`scripts/workspace-migration.mjs` provides pure helpers for moving Reader document keys, Home history paths, Studio sessions and image references, publication records, exported reading links, and index filenames using an explicit old-to-new path map. It never reads or writes user data. Key collisions throw before returning a result, and unknown settings and annotation IDs are preserved. Apply results only while the plugins are stopped; verify source files before reusing an index.
 
 ## Privacy and limitations
 
