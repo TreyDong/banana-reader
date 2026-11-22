@@ -1,7 +1,7 @@
 import {documentWindow} from './core';
 // Native DOM annotation helpers for Banana Reader.
 // Historical references and the replaced layout routine are recorded in the private project notes.
-import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, markStyle} from './core';
+import {resolveAnchor, type Anchor, type Passage, type MarkStyle, type Thread, type Highlight, markStyle} from './core';
 export interface LensRect {left:number;right:number;top:number;bottom:number}
 /** Long-press selections keep moving under the finger; wait this long after the last change. */
 export const MOBILE_SELECTION_SETTLE_MS=550;
@@ -25,6 +25,14 @@ export function mobileLensPlacement(rects:LensRect[],root:LensRect,visible:LensR
  const y=below?last.bottom+gap:above?first.top-gap-height:clamp(last.bottom+gap,top,bottom-height);
  return {left:x-root.left,top:y-root.top,below,arrow:clamp(center-x,18,width-18)};
 }
+/** The contents list highlights the last entry that has passed the reading line; -1 when nothing has. */
+export function activeTocIndex(tops:number[],line:number):number{
+ let index=-1;
+ for(let i=0;i<tops.length;i++)if(tops[i]<=line)index=i;
+ return index;
+}
+/** The margin column only earns its width when this document actually shows cards there; pass the lists about to be rendered. */
+export function hasMarginCards(threads:Thread[],notes:Highlight[]):boolean{return threads.length>0||notes.length>0;}
 export interface MarginItem {id: string; desired: number; height: number; created: number; mini?:boolean; sourceY?:number; note?:boolean}
 /** Solve spacing in cumulative-height coordinates; retain the active source when it fits. */
 export function placeMarginItems(items: MarginItem[], active?: string): Record<string, number> {

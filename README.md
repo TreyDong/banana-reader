@@ -12,9 +12,10 @@ Banana Reader turns Markdown, PDF, and EPUB files into a focused reading workspa
 
 ## Features
 
-- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a table of contents and adjustable appearance. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
+- **Read in context:** open Markdown, EPUB, or PDF in a dedicated reader with a floating table of contents on the right edge and adjustable appearance. On desktop, heading lines open into the full list on hover or click, and appearance, notes and questions sit in floating buttons at the bottom right. EPUB contents include nested chapters and estimated page numbers; PDFs can use text reflow or original pages.
+- **Use a wide screen:** turn on **Wide screen** under **Settings → Banana Reader → Appearance → Default reading**, or from the reader's **Aa** panel. From 1200 px up, the text column takes the width left after the number gutter, the margin note column and the side padding, so it fills the reader; from 1440 px the margin column widens too, and on very wide displays the type size steps up with the column while the line stays at 50–60 characters. Readers below 1200 px keep the current layout. In either mode, a document with no margin notes no longer reserves the margin column, so its text stays centered.
 - **Highlight and annotate:** mark text in different styles and colors, write notes, and revisit them in the reading notebook.
-- **Write your own notes:** use the reader toolbar, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
+- **Write your own notes:** use the floating note button, the button beside an AI answer, or `Shift + N` to save a thought without selecting text. Review, edit, and export it from the notebook.
 - **Ask about a passage:** explain, translate, or ask your own questions; follow citations back to the source.
 - **Choose your model:** use an OpenAI-compatible, Anthropic, or Gemini API, or a locally authenticated Codex, Claude, or Pi CLI. Optional embeddings support retrieval across longer texts.
 - **Keep your notes:** export excerpts, annotations, and conversations as a new Markdown note with links to the source.

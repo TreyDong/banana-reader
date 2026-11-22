@@ -79,7 +79,7 @@ export function contextFor(passages: Passage[], anchor: Anchor | undefined, text
   return context;
 }
 export function blockedPath(path: string): boolean {
-  return path.split('/').some(p => ['日记', '60_工作库', '20_投资库', 'A1_交易数据'].includes(p));
+  return path.replace(/\\/g,'/').split('/').some(p => ['..', '日记', '60_工作库', '20_投资库', 'A1_交易数据'].includes(p));
 }
 export function exportReading(path: string, data: Reading, vault: string): string {
   const source = `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(path)}`;
